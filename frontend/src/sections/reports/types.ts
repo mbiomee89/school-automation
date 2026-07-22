@@ -40,13 +40,66 @@ export interface DailyAbsenceReportDetail {
   date: string
   schoolName: string
   academicYear: string
+  generatedAt?: string
   rows: DailyAbsenceRow[]
+}
+
+export interface LateArrivalsReportDetail {
+  date: string
+  schoolName: string
+  academicYear: string
+  generatedAt?: string
+  rows: Array<{
+    studentId: string
+    studentName: string
+    className: string
+    time: string
+    reason: string | null
+  }>
+  count: number
+}
+
+export interface HomeworkLogReportDetail {
+  date: string
+  schoolName: string
+  academicYear: string
+  generatedAt?: string
+  rows: Array<{
+    id: number
+    className: string
+    subjectName: string
+    teacherName: string
+    description: string
+    dueDate: string | null
+  }>
+  count: number
+}
+
+export interface WeeklyPlanReportDetail {
+  date: string
+  weekStart: string
+  schoolName: string
+  academicYear: string
+  generatedAt?: string
+  rows: Array<{
+    id: number
+    className: string
+    subjectName: string
+    teacherName: string
+    weekStart: string
+    topicsSummary: string
+    objectives: string | null
+    notes: string | null
+  }>
+  count: number
 }
 
 export interface ReportsProps {
   reports: ReportSummary[]
-  /** Sample daily-absence detail data used for the one built-out detailed/printable view. */
   dailyAbsenceDetail?: DailyAbsenceReportDetail | null
+  lateArrivalsDetail?: LateArrivalsReportDetail | null
+  homeworkLogDetail?: HomeworkLogReportDetail | null
+  weeklyPlanDetail?: WeeklyPlanReportDetail | null
   /** Currently opened report, for controlled preview. */
   activeReport?: ReportType | null
   /** Open a report's detail/printable view */

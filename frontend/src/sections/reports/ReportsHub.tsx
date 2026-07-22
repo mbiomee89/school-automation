@@ -11,9 +11,12 @@ import {
 } from 'lucide-react'
 import type {
   DailyAbsenceReportDetail,
+  HomeworkLogReportDetail,
+  LateArrivalsReportDetail,
   ReportsProps,
   ReportSummary,
   ReportType,
+  WeeklyPlanReportDetail,
 } from './types'
 import { cn } from '../../shared/utils'
 
@@ -33,14 +36,32 @@ const STATUS_AR: Record<'ABSENT' | 'EXCUSED', string> = {
 const fontSerif = { fontFamily: '"Amiri", "Times New Roman", serif' } as const
 const fontMono = { fontFamily: '"IBM Plex Mono", ui-monospace, monospace' } as const
 
-function formatGeneratedAt(iso: string | null) {
+const DATE_FILTER_TYPES: ReportType[] = [
+  'DAILY_ABSENCE',
+  'LATE_ARRIVALS',
+  'HOMEWORK_LOG',
+  'WEEKLY_PLAN',
+]
+
+function formatGeneratedAt(iso: string | null | undefined) {
   if (!iso) return 'لم يُولَّد بعد'
   return `آخر توليد: ${new Date(iso).toLocaleString('ar-SA')}`
+}
+
+function formatTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return iso
+  }
 }
 
 export function ReportsHub({
   reports,
   dailyAbsenceDetail,
+  lateArrivalsDetail,
+  homeworkLogDetail,
+  weeklyPlanDetail,
   activeReport: controlledActiveReport,
   onSelectReport,
   onCloseReport,
@@ -50,7 +71,9 @@ export function ReportsHub({
   const [activeReport, setActiveReport] = useState<ReportType | null>(
     controlledActiveReport ?? null
   )
-  const [dateFilter, setDateFilter] = useState(dailyAbsenceDetail?.date ?? '')
+  const [dateFilter, setDateFilter] = useState(
+    dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
+  )
 
   const currentActive = controlledActiveReport ?? activeReport
   const activeSummary = reports.find((r) => r.type === currentActive) ?? null
@@ -177,15 +200,15 @@ export function ReportsHub({
                 <LayoutGrid className="size-4" strokeWidth={1.5} />
                 كل التقارير
               </button>
-              {currentActive === 'DAILY_ABSENCE' && dailyAbsenceDetail && (
+              {DATE_FILTER_TYPES.includes(currentActive) && (
                 <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400">
-                  <span>التاريخ</span>
+                  <span>{currentActive === 'WEEKLY_PLAN' ? 'يوم من الأسبوع' : 'التاريخ'}</span>
                   <input
                     type="date"
                     value={dateFilter}
                     onChange={(e) => {
                       setDateFilter(e.target.value)
-                      onFilterByDate?.('DAILY_ABSENCE', e.target.value)
+                      onFilterByDate?.(currentActive, e.target.value)
                     }}
                     className="rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm dark:border-stone-600 dark:bg-stone-950"
                     style={fontMono}
@@ -196,6 +219,17 @@ export function ReportsHub({
 
             {currentActive === 'DAILY_ABSENCE' && dailyAbsenceDetail ? (
               <DailyAbsenceDetailView detail={dailyAbsenceDetail} />
+            ) : currentActive === 'LATE_ARRIVALS' && lateArrivalsDetail ? (
+              <LateArrivalsDetailView detail={lateArrivalsDetail} />
+            ) : currentActive === 'HOMEWORK_LOG' && homeworkLogDetail ? (
+              <HomeworkLogDetailView detail={homeworkLogDetail} />
+            ) : currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail ? (
+              <WeeklyPlanDetailView detail={weeklyPlanDetail} />
+            ) : currentActive === 'STUDENT_HISTORY' ? (
+              <ReportSummarySheet
+                report={activeSummary}
+                note="تقرير سجل الطالب سيُضاف لاحقاً — اختر تقريراً آخر حالياً."
+              />
             ) : (
               <ReportSummarySheet report={activeSummary} />
             )}
@@ -209,18 +243,13 @@ export function ReportsHub({
 function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }) {
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-stone-100 pb-4 dark:border-stone-800">
-        <div>
-          <h2 className="text-lg font-bold">{detail.schoolName}</h2>
-          <p className="text-sm text-stone-500 dark:text-stone-400">
-            تقرير الغياب اليومي · العام الدراسي {detail.academicYear}
-          </p>
-        </div>
-        <p className="text-sm text-stone-500" style={fontMono}>
-          {detail.date}
-        </p>
-      </div>
-
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        subtitle="تقرير الغياب اليومي"
+        dateLabel={detail.date}
+        generatedAt={detail.generatedAt}
+      />
       <div className="hidden overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800 md:block">
         <table className="w-full text-start text-sm">
           <thead className="bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
@@ -232,10 +261,7 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
           </thead>
           <tbody>
             {detail.rows.map((row) => (
-              <tr
-                key={row.studentId}
-                className="border-t border-stone-100 dark:border-stone-800"
-              >
+              <tr key={row.studentId} className="border-t border-stone-100 dark:border-stone-800">
                 <td className="px-3 py-2 font-semibold">{row.studentName}</td>
                 <td className="px-3 py-2">{row.className}</td>
                 <td className="px-3 py-2">
@@ -258,7 +284,6 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
           <p className="p-6 text-center text-sm text-stone-500">لا يوجد غياب مسجل لهذا اليوم.</p>
         )}
       </div>
-
       <div className="space-y-2 md:hidden">
         {detail.rows.map((row) => (
           <div
@@ -289,7 +314,149 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
   )
 }
 
-function ReportSummarySheet({ report }: { report: ReportSummary }) {
+function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        subtitle="تقرير التأخر"
+        dateLabel={detail.date}
+        generatedAt={detail.generatedAt}
+      />
+      <SimpleTable
+        headers={['الطالب', 'الفصل', 'الوقت', 'السبب']}
+        empty="لا يوجد تأخر مسجل لهذا اليوم."
+        rows={detail.rows.map((r) => [
+          r.studentName,
+          r.className,
+          formatTime(r.time),
+          r.reason || '—',
+        ])}
+      />
+    </div>
+  )
+}
+
+function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        subtitle="سجل الواجبات"
+        dateLabel={detail.date}
+        generatedAt={detail.generatedAt}
+      />
+      <SimpleTable
+        headers={['الفصل', 'المادة', 'المعلم', 'الوصف', 'الاستحقاق']}
+        empty="لا توجد واجبات مسجّلة لهذا اليوم."
+        rows={detail.rows.map((r) => [
+          r.className,
+          r.subjectName,
+          r.teacherName,
+          r.description,
+          r.dueDate || '—',
+        ])}
+      />
+    </div>
+  )
+}
+
+function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
+  return (
+    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        subtitle={`الخطة الأسبوعية · بداية الأسبوع ${detail.weekStart}`}
+        dateLabel={detail.date}
+        generatedAt={detail.generatedAt}
+      />
+      <SimpleTable
+        headers={['الفصل', 'المادة', 'المعلم', 'المواضيع']}
+        empty="لا توجد خطط أسبوعية لهذا الأسبوع."
+        rows={detail.rows.map((r) => [
+          r.className,
+          r.subjectName,
+          r.teacherName,
+          r.topicsSummary,
+        ])}
+      />
+    </div>
+  )
+}
+
+function ReportHeader({
+  schoolName,
+  academicYear,
+  subtitle,
+  dateLabel,
+  generatedAt,
+}: {
+  schoolName: string
+  academicYear: string
+  subtitle: string
+  dateLabel: string
+  generatedAt?: string
+}) {
+  return (
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-stone-100 pb-4 dark:border-stone-800">
+      <div>
+        <h2 className="text-lg font-bold">{schoolName}</h2>
+        <p className="text-sm text-stone-500 dark:text-stone-400">
+          {subtitle} · العام الدراسي {academicYear}
+        </p>
+        <p className="mt-1 text-xs text-stone-400">{formatGeneratedAt(generatedAt)}</p>
+      </div>
+      <p className="text-sm text-stone-500" style={fontMono}>
+        {dateLabel}
+      </p>
+    </div>
+  )
+}
+
+function SimpleTable({
+  headers,
+  rows,
+  empty,
+}: {
+  headers: string[]
+  rows: string[][]
+  empty: string
+}) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-start text-sm">
+          <thead className="bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+            <tr>
+              {headers.map((h) => (
+                <th key={h} className="px-3 py-2 font-medium">
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((cols, i) => (
+              <tr key={i} className="border-t border-stone-100 dark:border-stone-800">
+                {cols.map((c, j) => (
+                  <td key={j} className={cn('px-3 py-2', j === 0 && 'font-semibold')}>
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && <p className="p-6 text-center text-sm text-stone-500">{empty}</p>}
+    </div>
+  )
+}
+
+function ReportSummarySheet({ report, note }: { report: ReportSummary; note?: string }) {
   const Icon = ICON_MAP[report.iconHint]
   return (
     <div className="rounded-lg border border-stone-200 bg-white p-6 dark:border-stone-800 dark:bg-stone-900">
@@ -317,9 +484,11 @@ function ReportSummarySheet({ report }: { report: ReportSummary }) {
       <p className="mt-4 text-xs text-stone-400 dark:text-stone-500">
         {formatGeneratedAt(report.lastGeneratedAt)}
       </p>
-      <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-3 text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-400">
-        التفاصيل الكاملة لهذا التقرير تُعرض من هذه الصفحة عند ربطها بمصدر البيانات الفعلي.
-      </p>
+      {note && (
+        <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-3 text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-400">
+          {note}
+        </p>
+      )}
     </div>
   )
 }

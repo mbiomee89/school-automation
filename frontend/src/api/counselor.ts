@@ -4,7 +4,13 @@ import type {
   AbsenceReasonStatus,
   DateRangeFilter,
 } from '../sections/counselor-review/types'
-import type { DailyAbsenceReportDetail, ReportSummary } from '../sections/reports/types'
+import type {
+  DailyAbsenceReportDetail,
+  HomeworkLogReportDetail,
+  LateArrivalsReportDetail,
+  ReportSummary,
+  WeeklyPlanReportDetail,
+} from '../sections/reports/types'
 
 export async function listAbsenceReasons(params?: {
   status?: AbsenceReasonStatus
@@ -43,6 +49,18 @@ export async function getReportsSummary(date: string) {
 
 export async function getDailyAbsenceReport(date: string): Promise<DailyAbsenceReportDetail> {
   return apiRequest(`/reports/daily-absence?date=${encodeURIComponent(date)}`)
+}
+
+export async function getLateArrivalsReport(date: string): Promise<LateArrivalsReportDetail> {
+  return apiRequest(`/reports/late-arrivals?date=${encodeURIComponent(date)}`)
+}
+
+export async function getHomeworkLogReport(date: string): Promise<HomeworkLogReportDetail> {
+  return apiRequest(`/reports/homework-log?date=${encodeURIComponent(date)}`)
+}
+
+export async function getWeeklyPlanReport(date: string): Promise<WeeklyPlanReportDetail> {
+  return apiRequest(`/reports/weekly-plan?date=${encodeURIComponent(date)}`)
 }
 
 export type { DateRangeFilter }

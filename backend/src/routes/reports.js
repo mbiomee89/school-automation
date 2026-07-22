@@ -48,6 +48,7 @@ router.get(
       date: date.toISOString().slice(0, 10),
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      generatedAt: new Date().toISOString(),
       rows: rows.map((r) => ({
         studentId: r.studentId,
         studentName: r.student.nameAr,
@@ -76,16 +77,114 @@ router.get(
       orderBy: { time: 'asc' },
     });
 
+    const dateStr = date.toISOString().slice(0, 10);
     res.json({
-      date: date.toISOString().slice(0, 10),
+      date: dateStr,
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      generatedAt: new Date().toISOString(),
       rows: rows.map((r) => ({
         studentId: r.studentId,
         studentName: r.student.nameAr,
         className: r.class.name,
         time: r.time.toISOString(),
         reason: r.reason,
+      })),
+      count: rows.length,
+    });
+  })
+);
+
+/** GET /reports/homework-log?date=YYYY-MM-DD */
+router.get(
+  '/homework-log',
+  validateQuery(dateQuery),
+  asyncHandler(async (req, res) => {
+    const date = toUtcMidnight(req.query.date);
+    const header = await schoolHeader();
+
+    const rows = await prisma.homework.findMany({
+      where: { date },
+      include: {
+        class: { select: { name: true } },
+        subject: { select: { nameAr: true, nameEn: true } },
+        teacher: { select: { name: true } },
+      },
+      orderBy: [{ classId: 'asc' }, { subjectId: 'asc' }],
+    });
+
+    const dateStr = date.toISOString().slice(0, 10);
+    res.json({
+      date: dateStr,
+      schoolName: header.schoolName,
+      academicYear: header.academicYear,
+      generatedAt: new Date().toISOString(),
+      rows: rows.map((r) => ({
+        id: r.id,
+        className: r.class.name,
+        subjectName: r.subject.nameAr,
+        teacherName: r.teacher.name,
+        description: r.description,
+        dueDate: r.dueDate ? toUtcMidnight(r.dueDate).toISOString().slice(0, 10) : null,
+      })),
+      count: rows.length,
+    });
+  })
+);
+
+function summarizeWeeklyTopics(topics) {
+  try {
+    const parsed = JSON.parse(topics);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const bits = [];
+      for (const [day, lesson] of Object.entries(parsed)) {
+        if (!lesson || typeof lesson !== 'object') continue;
+        const t = typeof lesson.topics === 'string' ? lesson.topics.trim() : '';
+        if (t) bits.push(`${day}: ${t}`);
+      }
+      if (bits.length) return bits.join(' · ');
+    }
+  } catch {
+    /* plain string */
+  }
+  return String(topics || '').trim() || '—';
+}
+
+/** GET /reports/weekly-plan?date=YYYY-MM-DD — plans for the week containing date */
+router.get(
+  '/weekly-plan',
+  validateQuery(dateQuery),
+  asyncHandler(async (req, res) => {
+    const date = toUtcMidnight(req.query.date);
+    const weekStart = weekStartSaturdayUtc(date);
+    const header = await schoolHeader();
+
+    const rows = await prisma.weeklyPlan.findMany({
+      where: { weekStart },
+      include: {
+        class: { select: { name: true } },
+        subject: { select: { nameAr: true } },
+        teacher: { select: { name: true } },
+      },
+      orderBy: [{ classId: 'asc' }, { subjectId: 'asc' }],
+    });
+
+    const weekStartStr = weekStart.toISOString().slice(0, 10);
+    res.json({
+      date: date.toISOString().slice(0, 10),
+      weekStart: weekStartStr,
+      schoolName: header.schoolName,
+      academicYear: header.academicYear,
+      generatedAt: new Date().toISOString(),
+      rows: rows.map((r) => ({
+        id: r.id,
+        className: r.class.name,
+        subjectName: r.subject.nameAr,
+        teacherName: r.teacher.name,
+        weekStart: weekStartStr,
+        topicsSummary: summarizeWeeklyTopics(r.topics),
+        objectives: r.objectives,
+        notes: r.notes,
       })),
       count: rows.length,
     });
@@ -122,7 +221,7 @@ router.get(
           iconHint: 'CALENDAR_OFF',
           context: dateStr,
           count: absenceCount,
-          lastGeneratedAt: null,
+          lastGeneratedAt: new Date().toISOString(),
         },
         {
           type: 'LATE_ARRIVALS',
@@ -131,7 +230,7 @@ router.get(
           iconHint: 'CLOCK',
           context: dateStr,
           count: lateCount,
-          lastGeneratedAt: null,
+          lastGeneratedAt: new Date().toISOString(),
         },
         {
           type: 'HOMEWORK_LOG',
@@ -140,16 +239,16 @@ router.get(
           iconHint: 'BOOK_OPEN',
           context: dateStr,
           count: homeworkCount,
-          lastGeneratedAt: null,
+          lastGeneratedAt: new Date().toISOString(),
         },
         {
           type: 'WEEKLY_PLAN',
           title: 'الخطة الأسبوعية',
           description: 'خطط المواد للأسبوع الحالي',
           iconHint: 'CALENDAR_RANGE',
-          context: dateStr,
+          context: weekStart.toISOString().slice(0, 10),
           count: weeklyPlanCount,
-          lastGeneratedAt: null,
+          lastGeneratedAt: new Date().toISOString(),
         },
         {
           type: 'STUDENT_HISTORY',
