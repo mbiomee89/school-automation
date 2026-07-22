@@ -8,6 +8,7 @@ import {
   XCircle,
   ArrowRight,
   Download,
+  Eye,
   X,
 } from 'lucide-react'
 import type {
@@ -38,11 +39,20 @@ function statusBadgeClass(status: AbsenceReasonStatus) {
 }
 
 function isImageAttachment(url: string) {
-  return /\.(png|jpe?g|gif|webp)$/i.test(url)
+  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url)
+}
+
+function isPdfAttachment(url: string) {
+  return /\.pdf(\?|$)/i.test(url)
 }
 
 function fileNameOf(url: string) {
-  return url.split('/').pop() ?? url
+  try {
+    const path = url.split('?')[0] ?? url
+    return decodeURIComponent(path.split('/').pop() || 'attachment')
+  } catch {
+    return 'attachment'
+  }
 }
 
 export function CounselorReview({
@@ -222,36 +232,42 @@ export function CounselorReview({
                 <h3 className="mb-2 text-sm font-bold text-stone-700 dark:text-stone-300">
                   المرفقات
                 </h3>
-                <div className="flex flex-wrap gap-2">
+                <ul className="space-y-2">
                   {selectedItem.attachments.map((url) => (
-                    <div
+                    <li
                       key={url}
-                      className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-stone-50 dark:border-stone-700 dark:bg-stone-800"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800"
                     >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setLightboxUrl(url)
-                          onViewAttachment?.(url)
-                        }}
-                        className="inline-flex items-center gap-2 rounded-s-md px-3 py-2 text-xs text-stone-700 hover:bg-lime-50 dark:text-stone-200 dark:hover:bg-lime-950/30"
-                      >
-                        <Paperclip className="size-3.5" strokeWidth={1.5} />
-                        {fileNameOf(url)}
-                      </button>
-                      <a
-                        href={url}
-                        download={fileNameOf(url)}
-                        onClick={() => onDownloadAttachment?.(url)}
-                        aria-label={`تنزيل ${fileNameOf(url)}`}
-                        title="تنزيل المرفق"
-                        className="inline-flex items-center rounded-e-md border-s border-stone-200 px-2 py-2 text-stone-500 hover:bg-lime-50 hover:text-lime-700 dark:border-stone-700 dark:text-stone-400 dark:hover:bg-lime-950/30"
-                      >
-                        <Download className="size-3.5" strokeWidth={1.5} />
-                      </a>
-                    </div>
+                      <div className="flex min-w-0 items-center gap-2 text-xs text-stone-700 dark:text-stone-200">
+                        <Paperclip className="size-3.5 shrink-0" strokeWidth={1.5} />
+                        <span className="truncate" style={fontMono}>
+                          {fileNameOf(url)}
+                        </span>
+                      </div>
+                      <div className="flex shrink-0 gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setLightboxUrl(url)
+                            onViewAttachment?.(url)
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-lime-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-lime-950/30"
+                        >
+                          <Eye className="size-3.5" strokeWidth={1.5} />
+                          عرض
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onDownloadAttachment?.(url)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-lime-500 px-2.5 py-1.5 text-xs font-semibold text-stone-950 hover:bg-lime-400"
+                        >
+                          <Download className="size-3.5" strokeWidth={1.5} />
+                          تنزيل
+                        </button>
+                      </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
               </div>
             )}
 
@@ -566,23 +582,40 @@ export function CounselorReview({
                 alt="مرفق العذر"
                 className="max-h-[60vh] w-full rounded-md border border-stone-200 object-contain dark:border-stone-700"
               />
+            ) : isPdfAttachment(lightboxUrl) ? (
+              <iframe
+                title={fileNameOf(lightboxUrl)}
+                src={lightboxUrl}
+                className="h-[60vh] w-full rounded-md border border-stone-200 bg-white dark:border-stone-700"
+              />
             ) : (
               <div className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-stone-300 bg-stone-50 p-8 text-stone-500 dark:border-stone-700 dark:bg-stone-900">
                 <Paperclip className="size-8" strokeWidth={1.5} />
                 <span className="text-sm" style={fontMono}>
                   {fileNameOf(lightboxUrl)}
                 </span>
+                <p className="text-xs">معاينة هذا النوع غير متاحة — استخدم التنزيل</p>
               </div>
             )}
-            <a
-              href={lightboxUrl}
-              download={fileNameOf(lightboxUrl)}
-              onClick={() => onDownloadAttachment?.(lightboxUrl)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-lime-400 print:hidden"
-            >
-              <Download className="size-4" strokeWidth={1.5} />
-              تنزيل المرفق
-            </a>
+            <div className="flex w-full gap-2 print:hidden">
+              <a
+                href={lightboxUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+              >
+                <Eye className="size-4" strokeWidth={1.5} />
+                فتح في تبويب جديد
+              </a>
+              <button
+                type="button"
+                onClick={() => onDownloadAttachment?.(lightboxUrl)}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-lime-400"
+              >
+                <Download className="size-4" strokeWidth={1.5} />
+                تنزيل المرفق
+              </button>
+            </div>
           </div>
         )}
       </Modal>

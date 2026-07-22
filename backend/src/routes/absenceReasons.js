@@ -11,6 +11,7 @@ import {
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
 import { toUtcMidnight } from '../utils/dates.js';
+import { uploadPathToUrl } from '../middleware/upload.js';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ const reviewSchema = z.object({
 });
 
 function serialize(row) {
+  const attachmentUrl = uploadPathToUrl(row.absenceAttachmentUrl);
   return {
     id: row.id,
     studentId: row.studentId,
@@ -36,7 +38,7 @@ function serialize(row) {
     className: row.class.name,
     absenceDate: toUtcMidnight(row.date).toISOString().slice(0, 10),
     reasonText: row.absenceReason ?? '',
-    attachments: row.absenceAttachmentUrl ? [row.absenceAttachmentUrl] : [],
+    attachments: attachmentUrl ? [attachmentUrl] : [],
     status: row.reasonStatus,
     submittedAt: row.reasonSubmittedAt?.toISOString() ?? row.createdAt.toISOString(),
     reviewedAt: row.reasonReviewedAt?.toISOString() ?? null,

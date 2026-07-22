@@ -18,6 +18,33 @@ const TAB_STATUS = {
   rejected: 'REJECTED',
 } as const
 
+function fileNameFromUrl(url: string) {
+  try {
+    const path = url.split('?')[0] ?? url
+    return decodeURIComponent(path.split('/').pop() || 'attachment')
+  } catch {
+    return 'attachment'
+  }
+}
+
+/** Force a real file download (HTML download= often just opens the file in-tab). */
+async function downloadAttachmentFile(url: string) {
+  const res = await fetch(url, { credentials: 'same-origin' })
+  if (!res.ok) throw new Error(`تعذّر تنزيل المرفق (${res.status})`)
+  const blob = await res.blob()
+  const objectUrl = URL.createObjectURL(blob)
+  try {
+    const a = document.createElement('a')
+    a.href = objectUrl
+    a.download = fileNameFromUrl(url)
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
 export function CounselorReviewPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<CounselorTab>('pending')
@@ -106,14 +133,14 @@ export function CounselorReviewPage() {
           window.alert(err instanceof ApiError ? err.message : 'فشل الرفض')
         }
       }}
-      onViewAttachment={(url) => window.open(url, '_blank', 'noopener,noreferrer')}
-      onDownloadAttachment={(url) => {
-        const a = document.createElement('a')
-        a.href = url
-        a.download = ''
-        a.target = '_blank'
-        a.rel = 'noopener noreferrer'
-        a.click()
+      // Lightbox is handled inside CounselorReview; no second window needed.
+      onViewAttachment={() => {}}
+      onDownloadAttachment={async (url) => {
+        try {
+          await downloadAttachmentFile(url)
+        } catch (err) {
+          window.alert(err instanceof Error ? err.message : 'فشل تنزيل المرفق')
+        }
       }}
       onPrint={() => window.print()}
       onOpenReportsHub={() => navigate('/reports')}
