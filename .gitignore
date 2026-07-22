@@ -19,5 +19,7 @@ product-plan.zip
 files.zip
 *.exe
 *.zip
+tmp-*.xlsx
+tmp-*.xls
 
 backend/_tmp_test.mjs

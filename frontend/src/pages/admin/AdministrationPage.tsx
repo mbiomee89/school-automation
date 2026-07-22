@@ -10,6 +10,7 @@ import {
   deleteSubject,
   getSchoolSettings,
   importNoorFile,
+  importNoorTeachersFile,
   listAssignments,
   listClasses,
   listEnrollments,
@@ -74,6 +75,7 @@ export function AdministrationPage() {
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([])
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([])
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
+  const [teacherImportResult, setTeacherImportResult] = useState<ImportResult | null>(null)
 
   const loadAll = useCallback(async () => {
     setError(null)
@@ -302,6 +304,7 @@ export function AdministrationPage() {
           alertError(err, 'فشل حذف التوزيع')
         }
       }}
+      teacherImportResult={teacherImportResult}
       onImportStudents={async (file) => {
         try {
           const result = await importNoorFile(file)
@@ -310,7 +313,16 @@ export function AdministrationPage() {
           setClasses(await listClasses())
           setImportBatches(await listImportBatches())
         } catch (err) {
-          alertError(err, 'فشل الاستيراد')
+          alertError(err, 'فشل استيراد الطلاب')
+        }
+      }}
+      onImportTeachers={async (file) => {
+        try {
+          const result = await importNoorTeachersFile(file)
+          setTeacherImportResult(result)
+          setStaff(await listUsers())
+        } catch (err) {
+          alertError(err, 'فشل استيراد المعلمين')
         }
       }}
       onPrint={(view) => {

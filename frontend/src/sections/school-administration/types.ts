@@ -128,6 +128,8 @@ export interface ImportResult {
   /** Existing classes reused during Noor import. */
   classesReused?: number
   academicYear?: string
+  /** Shared initial password for newly created teacher accounts (Noor teacher import). */
+  defaultPassword?: string | null
 }
 
 export interface NotificationLogItem {
@@ -245,8 +247,12 @@ export interface SchoolAdministrationProps {
   onAddAssignment?: (assignment: AssignmentInput) => void
   /** Remove a teacher assignment */
   onRemoveAssignment?: (assignmentId: number) => void
-  /** Upload Noor/spreadsheet file — classes are created automatically from the file */
+  /** Upload Noor StudentGuidance spreadsheet — classes are created automatically from the file */
   onImportStudents?: (file: File) => void | Promise<void>
+  /** Upload Noor GetSchoolTeachersDataReport — creates/updates TEACHER staff accounts */
+  onImportTeachers?: (file: File) => void | Promise<void>
+  /** Last teachers-import result (separate from student importResult) */
+  teacherImportResult?: ImportResult | null
   /** Filter notification log */
   onFilterNotifications?: (filters: {
     status?: NotificationStatus | 'ALL'

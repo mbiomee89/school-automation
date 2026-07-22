@@ -7,10 +7,15 @@ import { requireStaff, requireRole } from '../middleware/auth.js';
 import { hashPassword } from '../services/auth.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { tryNormalizePhone } from '../utils/phone.js';
+import { uploadNoorSpreadsheet } from '../middleware/upload.js';
+import { parseNoorTeachersSpreadsheet } from '../services/noorTeacherImport.js';
 
 const router = Router();
 
 router.use(requireStaff, requireRole('ADMIN'));
+
+/** Default password for newly imported Noor teachers (admin should ask them to change it). */
+const NOOR_TEACHER_DEFAULT_PASSWORD = 'Password123!';
 
 const createUserSchema = z.object({
   name: z.string().min(1),
@@ -49,6 +54,93 @@ router.get(
       orderBy: { name: 'asc' },
     });
     res.json({ users });
+  })
+);
+
+/**
+ * POST /users/import-noor
+ * Upload GetSchoolTeachersDataReport (.xlsx) — upserts TEACHER users from
+ * name + email + mobile only. New accounts get a shared default password.
+ */
+router.post(
+  '/import-noor',
+  (req, res, next) => uploadNoorSpreadsheet(req, res, next),
+  asyncHandler(async (req, res) => {
+    if (!req.file?.buffer) throw badRequest('لم يتم رفع ملف');
+
+    const parsed = parseNoorTeachersSpreadsheet(req.file.buffer);
+    if (parsed.rows.length === 0 && parsed.errors.length > 0) {
+      return res.status(400).json({
+        error: parsed.errors[0]?.error || 'فشل قراءة الملف',
+        errors: parsed.errors,
+      });
+    }
+
+    const errors = [...parsed.errors];
+    const fileName = req.file.originalname || 'noor-teachers.xlsx';
+    let created = 0;
+    let updated = 0;
+    let reactivated = 0;
+    const passwordHash = await hashPassword(NOOR_TEACHER_DEFAULT_PASSWORD);
+
+    for (const row of parsed.rows) {
+      try {
+        const existing = await prisma.user.findUnique({ where: { email: row.email } });
+
+        if (!existing) {
+          await prisma.user.create({
+            data: {
+              name: row.name,
+              email: row.email,
+              phone: row.phone,
+              passwordHash,
+              role: 'TEACHER',
+              langPref: 'AR',
+            },
+          });
+          created += 1;
+          continue;
+        }
+
+        if (existing.role !== 'TEACHER') {
+          errors.push({
+            index: row.index,
+            id: row.nationalId || row.email,
+            error: `البريد مستخدم لدور ${existing.role} — تم التجاوز`,
+          });
+          continue;
+        }
+
+        const data = {
+          name: row.name,
+          phone: row.phone,
+        };
+        if (!existing.isActive) {
+          data.isActive = true;
+          reactivated += 1;
+        } else {
+          updated += 1;
+        }
+
+        await prisma.user.update({ where: { id: existing.id }, data });
+      } catch (e) {
+        errors.push({
+          index: row.index,
+          id: row.nationalId || row.email,
+          error: e.message || 'فشل حفظ المعلم',
+        });
+      }
+    }
+
+    res.status(201).json({
+      fileName,
+      created,
+      updated,
+      reactivated,
+      skipped: errors.length,
+      defaultPassword: created > 0 ? NOOR_TEACHER_DEFAULT_PASSWORD : null,
+      errors,
+    });
   })
 );
 

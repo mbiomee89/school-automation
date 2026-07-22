@@ -158,6 +158,8 @@ export function AdminDashboard({
   onAddAssignment,
   onRemoveAssignment,
   onImportStudents,
+  onImportTeachers,
+  teacherImportResult = null,
   onFilterNotifications,
   onPrint,
   onSaveSchoolSettings,
@@ -194,6 +196,7 @@ export function AdminDashboard({
 
   const [yearFilter, setYearFilter] = useState(academicYearFilter ?? overviewStats.academicYear)
   const [importBusy, setImportBusy] = useState(false)
+  const [teacherImportBusy, setTeacherImportBusy] = useState(false)
   const [notifStatus, setNotifStatus] = useState<NotificationStatus | 'ALL'>('ALL')
   const [notifEvent, setNotifEvent] = useState<NotificationEventType | 'ALL'>('ALL')
 
@@ -1018,13 +1021,13 @@ export function AdminDashboard({
           <div className="space-y-6">
             <div className="rounded-lg border-2 border-dashed border-slate-300 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
               <Upload className="mx-auto size-8 text-blue-600" strokeWidth={1.5} />
-              <p className="mt-3 font-semibold">رفع ملف من نظام نور</p>
+              <p className="mt-3 font-semibold">استيراد الطلاب من نور</p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                 ملف StudentGuidance / إرشاد الطلاب (.xlsx) — يُنشئ الفصول تلقائيًا من عمودي
                 «رقم الصف» و«الفصل» ويعين الطلاب عليها
               </p>
               <p className="mx-auto mt-2 max-w-md text-xs text-slate-400 dark:text-slate-500">
-                الأعمدة المتوقعة: رقم الطالب · اسم الطالب · الجوال · رقم الصف · الفصل · العام الدراسي:{' '}
+                الأعمدة: رقم الطالب · اسم الطالب · الجوال · رقم الصف · الفصل · العام:{' '}
                 {overviewStats.academicYear}
               </p>
 
@@ -1034,7 +1037,7 @@ export function AdminDashboard({
                   importBusy && 'cursor-not-allowed opacity-50'
                 )}
               >
-                {importBusy ? 'جارٍ الاستيراد…' : 'اختيار ملف نور'}
+                {importBusy ? 'جارٍ الاستيراد…' : 'اختيار ملف الطلاب'}
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
@@ -1057,7 +1060,7 @@ export function AdminDashboard({
 
             {importResult && (
               <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                <h3 className="font-bold">آخر عملية استيراد: {importResult.fileName}</h3>
+                <h3 className="font-bold">آخر استيراد طلاب: {importResult.fileName}</h3>
                 {importResult.academicYear && (
                   <p className="mt-1 text-xs text-slate-500">
                     العام الدراسي: {importResult.academicYear}
@@ -1098,8 +1101,89 @@ export function AdminDashboard({
               </div>
             )}
 
+            <div className="rounded-lg border-2 border-dashed border-slate-300 bg-white p-8 text-center dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+              <Upload className="mx-auto size-8 text-emerald-600" strokeWidth={1.5} />
+              <p className="mt-3 font-semibold">استيراد المعلمين من نور</p>
+              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+                ملف GetSchoolTeachersDataReport (.xlsx) — يُنشئ حسابات معلّمين من الاسم والبريد
+                والجوال فقط
+              </p>
+              <p className="mx-auto mt-2 max-w-md text-xs text-slate-400 dark:text-slate-500">
+                لا يُستورد عنوان السكن أو بيانات الأسرة. الحسابات الجديدة تستخدم كلمة المرور
+                الافتراضية المعروضة بعد الاستيراد.
+              </p>
+
+              <label
+                className={cn(
+                  'mt-5 inline-flex cursor-pointer items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700',
+                  teacherImportBusy && 'cursor-not-allowed opacity-50'
+                )}
+              >
+                {teacherImportBusy ? 'جارٍ الاستيراد…' : 'اختيار ملف المعلمين'}
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  className="hidden"
+                  disabled={teacherImportBusy}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!file || !onImportTeachers) return
+                    setTeacherImportBusy(true)
+                    try {
+                      await onImportTeachers(file)
+                    } finally {
+                      setTeacherImportBusy(false)
+                    }
+                  }}
+                />
+              </label>
+            </div>
+
+            {teacherImportResult && (
+              <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <h3 className="font-bold">آخر استيراد معلمين: {teacherImportResult.fileName}</h3>
+                {teacherImportResult.defaultPassword && (
+                  <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
+                    كلمة المرور للحسابات الجديدة:{' '}
+                    <span className="font-mono font-bold">{teacherImportResult.defaultPassword}</span>
+                  </p>
+                )}
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {[
+                    ['أُضيف معلمون', teacherImportResult.created],
+                    ['حُدّث', teacherImportResult.updated],
+                    ['أُعيد تفعيله', teacherImportResult.reactivated],
+                    ['تم تجاوزه', teacherImportResult.skipped],
+                  ].map(([label, value]) => (
+                    <div key={label as string} className="rounded bg-slate-100 p-3 dark:bg-slate-900">
+                      <div className="text-xs text-slate-500">{label}</div>
+                      <div className="text-xl font-bold" style={fontMono}>
+                        {value as number}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {teacherImportResult.errors.length > 0 && (
+                  <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+                    {teacherImportResult.errors.map((err) => (
+                      <li
+                        key={`t-${err.index}-${err.id}`}
+                        className="flex gap-2 rounded border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200"
+                      >
+                        <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+                        <span>
+                          السطر {err.index + 1} ({err.id}): {err.error}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             <div>
-              <h3 className="mb-2 font-bold">عمليات الاستيراد السابقة</h3>
+              <h3 className="mb-2 font-bold">عمليات استيراد الطلاب السابقة</h3>
               <ul className="space-y-2">
                 {importBatches.map((b) => (
                   <li

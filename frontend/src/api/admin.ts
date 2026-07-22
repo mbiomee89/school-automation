@@ -396,6 +396,32 @@ export async function importNoorFile(file: File): Promise<ImportResult> {
   }
 }
 
+export async function importNoorTeachersFile(file: File): Promise<ImportResult> {
+  const form = new FormData()
+  form.append('file', file)
+  const data = await apiRequest<{
+    fileName: string
+    created: number
+    updated: number
+    reactivated: number
+    skipped: number
+    defaultPassword?: string | null
+    errors: ImportResult['errors']
+  }>('/users/import-noor', {
+    method: 'POST',
+    body: form,
+  })
+  return {
+    fileName: data.fileName || file.name,
+    created: data.created,
+    updated: data.updated,
+    reactivated: data.reactivated,
+    skipped: data.skipped,
+    defaultPassword: data.defaultPassword ?? null,
+    errors: data.errors ?? [],
+  }
+}
+
 export async function importStudents(
   classId: number,
   fileName: string,
