@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+﻿import { useState, type ReactNode } from 'react'
 import {
   Printer,
   CalendarOff,
@@ -351,50 +351,271 @@ function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }
 }
 
 function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) {
+  const classes =
+    detail.classes && detail.classes.length > 0
+      ? detail.classes
+      : groupFlatByClass(detail.rows)
+
+  if (classes.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+        لا توجد واجبات مسجّلة لهذا اليوم.
+      </p>
+    )
+  }
+
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
-      <ReportHeader
-        schoolName={detail.schoolName}
-        academicYear={detail.academicYear}
-        subtitle="سجل الواجبات"
-        dateLabel={detail.date}
-        generatedAt={detail.generatedAt}
-      />
-      <SimpleTable
-        headers={['الفصل', 'المادة', 'المعلم', 'الوصف', 'الاستحقاق']}
-        empty="لا توجد واجبات مسجّلة لهذا اليوم."
-        rows={detail.rows.map((r) => [
-          r.className,
-          r.subjectName,
-          r.teacherName,
-          r.description,
-          r.dueDate || '—',
-        ])}
-      />
+    <div className="space-y-8">
+      {classes.map((cls) => (
+        <FormalClassSheet
+          key={cls.classId ?? cls.className}
+          schoolName={detail.schoolName}
+          academicYear={detail.academicYear}
+          principalName={detail.principalName}
+          metaLines={[`تاريخ الواجبات: ${detail.date}`]}
+          title={`سجل الواجبات — ${cls.className}`}
+        >
+          <FormalTable
+            headers={['المادة', 'المعلم', 'الوصف', 'الاستحقاق']}
+            colWidths={['18%', '16%', '48%', '18%']}
+            empty="لا توجد واجبات لهذا الفصل."
+            rows={cls.rows.map((r) => [
+              r.subjectName,
+              r.teacherName,
+              r.description,
+              r.dueDate || '—',
+            ])}
+          />
+        </FormalClassSheet>
+      ))}
     </div>
   )
 }
 
 function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
+  const classes =
+    detail.classes && detail.classes.length > 0
+      ? detail.classes
+      : groupFlatByClass(detail.rows)
+  const weekEnd = detail.weekEnd ?? detail.weekStart
+
+  if (classes.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+        لا توجد خطط أسبوعية لهذا الأسبوع.
+      </p>
+    )
+  }
+
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
-      <ReportHeader
-        schoolName={detail.schoolName}
-        academicYear={detail.academicYear}
-        subtitle={`الخطة الأسبوعية · بداية الأسبوع ${detail.weekStart}`}
-        dateLabel={detail.date}
-        generatedAt={detail.generatedAt}
-      />
-      <SimpleTable
-        headers={['الفصل', 'المادة', 'المعلم', 'المواضيع']}
-        empty="لا توجد خطط أسبوعية لهذا الأسبوع."
-        rows={detail.rows.map((r) => [
-          r.className,
-          r.subjectName,
-          r.teacherName,
-          r.topicsSummary,
-        ])}
-      />
+    <div className="space-y-8">
+      {classes.map((cls) => (
+        <FormalClassSheet
+          key={cls.classId ?? cls.className}
+          schoolName={detail.schoolName}
+          academicYear={detail.academicYear}
+          principalName={detail.principalName}
+          metaLines={[
+            `العام الدراسي ${detail.academicYear}`,
+            `من ${detail.weekStart} إلى ${weekEnd}`,
+          ]}
+          title={`الخطة الدراسية الأسبوعية — ${cls.className}`}
+        >
+          <WeeklyPlanClassTable rows={cls.rows} />
+        </FormalClassSheet>
+      ))}
+    </div>
+  )
+}
+
+function groupFlatByClass<T extends { classId?: number | null; className: string }>(
+  rows: T[]
+): Array<{ classId: number | null; className: string; rows: T[] }> {
+  const map = new Map<string, { classId: number | null; className: string; rows: T[] }>()
+  for (const row of rows) {
+    const key = String(row.classId ?? row.className)
+    if (!map.has(key)) {
+      map.set(key, {
+        classId: row.classId ?? null,
+        className: row.className,
+        rows: [],
+      })
+    }
+    map.get(key)!.rows.push(row)
+  }
+  return [...map.values()]
+}
+
+const PARENT_NOTE =
+  'عزيزي ولي الأمر: أنت شريك في نجاح العملية التعليمية وتحقيق الانضباط المدرسي، فكن عوناً لنا.'
+
+function FormalClassSheet({
+  schoolName,
+  academicYear,
+  principalName,
+  metaLines,
+  title,
+  children,
+}: {
+  schoolName: string
+  academicYear: string
+  principalName?: string | null
+  metaLines: string[]
+  title: string
+  children: ReactNode
+}) {
+  return (
+    <section
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:break-after-page print:shadow-none dark:border-slate-700 dark:bg-stone-900 dark:text-stone-50"
+      style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 dark:border-slate-800">
+        <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p>الإدارة العامة للتعليم</p>
+          <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">مدرسة {schoolName}</p>
+          {academicYear ? (
+            <p className="mt-1 text-xs text-slate-500">العام الدراسي {academicYear}</p>
+          ) : null}
+        </div>
+        <div className="min-w-[12rem] rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm">
+          {metaLines.map((line) => (
+            <p key={line} className="leading-6">
+              {line}
+            </p>
+          ))}
+        </div>
+      </div>
+
+      <div className="bg-[#1e3a5f] px-4 py-3 text-center text-base font-bold text-white sm:text-lg">
+        {title}
+      </div>
+
+      <div className="p-4 sm:p-5">{children}</div>
+
+      <div className="flex flex-wrap items-stretch gap-3 border-t border-slate-100 px-4 py-4 sm:px-6 dark:border-slate-800">
+        <p className="text-sm font-bold text-teal-700 dark:text-teal-300">ملاحظات:</p>
+        <div className="min-w-[14rem] flex-1 rounded-xl border-2 border-teal-500/70 px-4 py-3 text-sm leading-7 text-slate-700 dark:text-slate-200">
+          {PARENT_NOTE}
+        </div>
+        <div className="flex min-w-[10rem] flex-col justify-center rounded-xl border-2 border-teal-500/70 px-4 py-3 text-center text-sm">
+          <p className="font-bold text-slate-800 dark:text-slate-100">قائد المدرسة</p>
+          <p className="mt-2 text-slate-600 dark:text-slate-300">
+            {principalName?.trim() || 'اسم القائد'}
+          </p>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FormalTable({
+  headers,
+  rows,
+  empty,
+  colWidths,
+}: {
+  headers: string[]
+  rows: string[][]
+  empty: string
+  colWidths?: string[]
+}) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-teal-600/40">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[36rem] border-collapse text-sm">
+          <thead>
+            <tr className="bg-teal-600 text-white">
+              {headers.map((h, i) => (
+                <th
+                  key={h}
+                  className="border border-teal-700 px-2 py-2.5 font-bold"
+                  style={colWidths?.[i] ? { width: colWidths[i] } : undefined}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((cols, i) => (
+              <tr key={i} className="bg-white dark:bg-stone-950">
+                {cols.map((c, j) => (
+                  <td
+                    key={j}
+                    className="border border-slate-200 px-2 py-2 align-top text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                  >
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && <p className="p-6 text-center text-sm text-stone-500">{empty}</p>}
+    </div>
+  )
+}
+
+function WeeklyPlanClassTable({
+  rows,
+}: {
+  rows: WeeklyPlanReportDetail['rows']
+}) {
+  // Merge consecutive same-day cells (no حصة column — يوم | مادة | موضوع | ملاحظات/واجب)
+  const spans: number[] = []
+  for (let i = 0; i < rows.length; i++) {
+    if (i > 0 && rows[i].dayKey === rows[i - 1].dayKey) {
+      spans[i] = 0
+      continue
+    }
+    let span = 1
+    while (i + span < rows.length && rows[i + span].dayKey === rows[i].dayKey) span++
+    spans[i] = span
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-teal-600/40">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] border-collapse text-sm">
+          <thead>
+            <tr className="bg-teal-600 text-white">
+              <th className="w-[12%] border border-teal-700 px-2 py-2.5 font-bold">اليوم</th>
+              <th className="w-[18%] border border-teal-700 px-2 py-2.5 font-bold">المادة</th>
+              <th className="w-[30%] border border-teal-700 px-2 py-2.5 font-bold">موضوع الدرس</th>
+              <th className="w-[40%] border border-teal-700 px-2 py-2.5 font-bold">
+                ملاحظات / الواجب
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r, i) => (
+              <tr key={`${r.planId}-${r.dayKey}-${r.subjectName}-${i}`} className="bg-white dark:bg-stone-950">
+                {spans[i] > 0 && (
+                  <td
+                    rowSpan={spans[i]}
+                    className="border border-slate-200 px-2 py-2 text-center font-bold align-middle text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                  >
+                    {r.dayLabel}
+                  </td>
+                )}
+                <td className="border border-slate-200 px-2 py-2 align-top text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                  {r.subjectName}
+                </td>
+                <td className="border border-slate-200 px-2 py-2 align-top text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                  {r.lessonTopic}
+                </td>
+                <td className="border border-slate-200 px-2 py-2 align-top text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                  {r.notes || '—'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && (
+        <p className="p-6 text-center text-sm text-stone-500">لا توجد دروس مسجّلة لهذا الفصل.</p>
+      )}
     </div>
   )
 }

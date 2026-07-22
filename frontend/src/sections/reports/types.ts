@@ -63,33 +63,50 @@ export interface HomeworkLogReportDetail {
   date: string
   schoolName: string
   academicYear: string
+  principalName?: string | null
   generatedAt?: string
   rows: Array<{
     id: number
+    classId: number
     className: string
     subjectName: string
     teacherName: string
     description: string
     dueDate: string | null
   }>
+  classes?: Array<{
+    classId: number | null
+    className: string
+    rows: HomeworkLogReportDetail['rows']
+  }>
   count: number
+}
+
+export interface WeeklyPlanLessonRow {
+  planId: number
+  classId: number
+  className: string
+  dayKey: string
+  dayLabel: string
+  subjectName: string
+  teacherName: string
+  lessonTopic: string
+  notes: string | null
 }
 
 export interface WeeklyPlanReportDetail {
   date: string
   weekStart: string
+  weekEnd?: string
   schoolName: string
   academicYear: string
+  principalName?: string | null
   generatedAt?: string
-  rows: Array<{
-    id: number
+  rows: WeeklyPlanLessonRow[]
+  classes?: Array<{
+    classId: number | null
     className: string
-    subjectName: string
-    teacherName: string
-    weekStart: string
-    topicsSummary: string
-    objectives: string | null
-    notes: string | null
+    rows: WeeklyPlanLessonRow[]
   }>
   count: number
 }
