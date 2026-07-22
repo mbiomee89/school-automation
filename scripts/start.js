@@ -57,6 +57,9 @@ function run(command, args) {
 
 describeDatabaseUrl(process.env.DATABASE_URL);
 
+console.log('[start] dedupe teacher assignments…');
+run('node', ['scripts/dedupe-teacher-assignments.js']);
+
 console.log('[start] prisma db push…');
 run('npx', ['prisma', 'db', 'push', '--accept-data-loss', '--schema=prisma/schema.prisma']);
 

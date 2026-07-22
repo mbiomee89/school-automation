@@ -373,6 +373,17 @@ export function AdminDashboard({
     return `${classId}:${subjectId}`
   }
 
+  const assignmentOwnerByPair = useMemo(() => {
+    const map = new Map<string, { teacherId: number; teacherName: string }>()
+    for (const a of assignments) {
+      map.set(pairKey(a.classId, a.subjectId), {
+        teacherId: a.teacherId,
+        teacherName: a.teacherName,
+      })
+    }
+    return map
+  }, [assignments])
+
   function loadChecksForTeacher(teacherId: number) {
     const next = new Set<string>()
     for (const a of assignments) {
@@ -1962,7 +1973,7 @@ export function AdminDashboard({
         open={showAssignmentModal}
         onClose={() => setShowAssignmentModal(false)}
         title="توزيع معلم على فصول ومواد"
-        description="اختر المعلم ثم علّم الخلايا (فصل × مادة). الحفظ يحدّث كل التوزيع دفعة واحدة."
+        description="كل فصل×مادة لمعلم واحد فقط. الخلية المسندة لمعلم آخر تظهر اسمه — تحديدها يعيد التعيين عند الحفظ."
         maxWidthClassName="max-w-5xl"
       >
         <form
@@ -2017,16 +2028,44 @@ export function AdminDashboard({
                         {c.name}
                       </td>
                       {subjects.map((s) => {
-                        const checked = assignmentChecks.has(pairKey(c.id, s.id))
+                        const key = pairKey(c.id, s.id)
+                        const checked = assignmentChecks.has(key)
+                        const owner = assignmentOwnerByPair.get(key)
+                        const ownedByOther =
+                          !!owner && owner.teacherId !== assignmentTeacherId && !checked
+                        const willReassign =
+                          checked && !!owner && owner.teacherId !== assignmentTeacherId
                         return (
-                          <td key={s.id} className="px-2 py-2 text-center">
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleAssignmentCell(c.id, s.id)}
-                              className="size-4 accent-blue-600"
-                              aria-label={`${c.name} — ${s.nameAr}`}
-                            />
+                          <td
+                            key={s.id}
+                            className={cn(
+                              'px-2 py-2 text-center align-middle',
+                              ownedByOther && 'bg-amber-50 dark:bg-amber-950/30',
+                              willReassign && 'bg-sky-50 dark:bg-sky-950/30'
+                            )}
+                          >
+                            <label className="inline-flex flex-col items-center gap-0.5">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleAssignmentCell(c.id, s.id)}
+                                className="size-4 accent-blue-600"
+                                aria-label={`${c.name} — ${s.nameAr}`}
+                              />
+                              {ownedByOther && (
+                                <span
+                                  className="max-w-[5.5rem] truncate text-[10px] leading-tight text-amber-800 dark:text-amber-200"
+                                  title={`مسندة إلى ${owner.teacherName}`}
+                                >
+                                  {owner.teacherName}
+                                </span>
+                              )}
+                              {willReassign && (
+                                <span className="text-[10px] leading-tight text-sky-700 dark:text-sky-300">
+                                  إعادة تعيين
+                                </span>
+                              )}
+                            </label>
                           </td>
                         )
                       })}
@@ -2038,8 +2077,8 @@ export function AdminDashboard({
           </div>
 
           <p className="text-xs text-slate-500">
-            المحدّد: {assignmentChecks.size} · إلغاء التحديد يحذف التوزيع عند الحفظ (لفصول العام
-            الحالي فقط).
+            المحدّد: {assignmentChecks.size} · الخلية الصفراء = معلم آخر · تحديدها ثم الحفظ ينقل
+            المادة لهذا المعلم. إلغاء التحديد يحذف توزيع هذا المعلم فقط.
           </p>
 
           <div className="flex gap-2 pt-1">

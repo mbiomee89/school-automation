@@ -186,7 +186,7 @@ model TeacherAssignment {
   subjectId Int
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
 
-  @@unique([teacherId, classId, subjectId])
+  @@unique([classId, subjectId]) // one teacher only per class+subject
   @@index([teacherId, classId]) // assignment-guard lookups (class-level for attendance/late)
 }
 

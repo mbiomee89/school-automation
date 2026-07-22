@@ -40,6 +40,10 @@ const assignmentInclude = {
   subject: true,
 };
 
+function pairKey(classId, subjectId) {
+  return `${classId}:${subjectId}`;
+}
+
 router.get(
   '/',
   validateQuery(listQuery),
@@ -69,17 +73,30 @@ router.post(
   asyncHandler(async (req, res) => {
     const { teacherId, classId, subjectId } = req.body;
 
-    const [teacher, cls, subject] = await Promise.all([
+    const [teacher, cls, subject, taken] = await Promise.all([
       prisma.user.findUnique({ where: { id: teacherId } }),
       prisma.class.findUnique({ where: { id: classId } }),
       prisma.subject.findUnique({ where: { id: subjectId } }),
+      prisma.teacherAssignment.findUnique({
+        where: { classId_subjectId: { classId, subjectId } },
+        include: { teacher: { select: { id: true, name: true } }, subject: true, class: true },
+      }),
     ]);
 
     if (!teacher || teacher.role !== 'TEACHER' || !teacher.isActive) {
-      throw badRequest('teacherId must be an active TEACHER user');
+      throw badRequest('يجب أن يكون المعلم حساب معلّم نشط');
     }
-    if (!cls) throw badRequest('classId not found');
-    if (!subject) throw badRequest('subjectId not found');
+    if (!cls) throw badRequest('الفصل غير موجود');
+    if (!subject) throw badRequest('المادة غير موجودة');
+
+    if (taken) {
+      if (taken.teacherId === teacherId) {
+        return res.status(200).json({ assignment: { ...taken, teacher, class: cls, subject } });
+      }
+      throw badRequest(
+        `المادة «${taken.subject.nameAr}» للفصل «${taken.class.name}» مسندة حالياً إلى ${taken.teacher.name}. أزلها من ذلك المعلم أولاً أو استخدم شبكة التوزيع لإعادة التعيين.`
+      );
+    }
 
     const assignment = await prisma.teacherAssignment.create({
       data: { teacherId, classId, subjectId },
@@ -91,8 +108,8 @@ router.post(
 
 /**
  * POST /teacher-assignments/sync
- * Replace a teacher's assignments for the given classIds with `items`
- * (create missing pairs, delete unchecked pairs in scope).
+ * Replace a teacher's assignments for the given classIds with `items`.
+ * Checking a cell owned by another teacher reassigns it to this teacher.
  */
 router.post(
   '/sync',
@@ -103,7 +120,7 @@ router.post(
 
     const teacher = await prisma.user.findUnique({ where: { id: teacherId } });
     if (!teacher || teacher.role !== 'TEACHER' || !teacher.isActive) {
-      throw badRequest('teacherId must be an active TEACHER user');
+      throw badRequest('يجب أن يكون المعلم حساب معلّم نشط');
     }
 
     const classIdSet = new Set(classIds);
@@ -130,21 +147,26 @@ router.post(
       }
     }
 
-    const pairKey = (classId, subjectId) => `${classId}:${subjectId}`;
     const desired = new Map();
     for (const item of items) {
       desired.set(pairKey(item.classId, item.subjectId), item);
     }
 
-    const existing = await prisma.teacherAssignment.findMany({
+    const existingForTeacher = await prisma.teacherAssignment.findMany({
       where: { teacherId, classId: { in: classIds } },
     });
-    const existingByKey = new Map(existing.map((a) => [pairKey(a.classId, a.subjectId), a]));
+    const mineByKey = new Map(
+      existingForTeacher.map((a) => [pairKey(a.classId, a.subjectId), a])
+    );
 
     const toCreate = [...desired.values()].filter(
-      (item) => !existingByKey.has(pairKey(item.classId, item.subjectId))
+      (item) => !mineByKey.has(pairKey(item.classId, item.subjectId))
     );
-    const toDelete = existing.filter((a) => !desired.has(pairKey(a.classId, a.subjectId)));
+    const toDelete = existingForTeacher.filter(
+      (a) => !desired.has(pairKey(a.classId, a.subjectId))
+    );
+
+    let reassigned = 0;
 
     await prisma.$transaction(async (tx) => {
       if (toDelete.length) {
@@ -152,7 +174,18 @@ router.post(
           where: { id: { in: toDelete.map((a) => a.id) } },
         });
       }
+
       for (const item of toCreate) {
+        const taken = await tx.teacherAssignment.findUnique({
+          where: {
+            classId_subjectId: { classId: item.classId, subjectId: item.subjectId },
+          },
+        });
+        if (taken) {
+          if (taken.teacherId === teacherId) continue;
+          await tx.teacherAssignment.delete({ where: { id: taken.id } });
+          reassigned += 1;
+        }
         await tx.teacherAssignment.create({
           data: { teacherId, classId: item.classId, subjectId: item.subjectId },
         });
@@ -166,7 +199,8 @@ router.post(
     });
 
     res.json({
-      created: toCreate.length,
+      created: toCreate.length - reassigned,
+      reassigned,
       removed: toDelete.length,
       assignments,
     });
@@ -179,7 +213,7 @@ router.delete(
   validateParams(idParam),
   asyncHandler(async (req, res) => {
     const existing = await prisma.teacherAssignment.findUnique({ where: { id: req.params.id } });
-    if (!existing) throw notFound('Assignment not found');
+    if (!existing) throw notFound('التوزيع غير موجود');
     await prisma.teacherAssignment.delete({ where: { id: req.params.id } });
     res.status(204).send();
   })
