@@ -37,6 +37,19 @@ function cellStr(row, key) {
   return String(v).trim();
 }
 
+/** Excel often stores IDs as numbers → "1160286453.0" or scientific notation. */
+function normalizeStudentId(raw) {
+  let s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/e/i.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n)) s = String(Math.round(n));
+  } else if (/^\d+\.0+$/.test(s)) {
+    s = s.replace(/\.0+$/, '');
+  }
+  return s;
+}
+
 /**
  * Parse a Noor StudentGuidance workbook buffer into normalized row objects.
  * Expected Arabic headers: الجوال, الفصل, رقم الصف, اسم الطالب, رقم الطالب
@@ -84,7 +97,7 @@ export function parseNoorSpreadsheet(buffer) {
 
   for (let i = 0; i < rawRows.length; i++) {
     const raw = rawRows[i];
-    const id = cellStr(raw, map.id);
+    const id = normalizeStudentId(cellStr(raw, map.id));
     const nameAr = cellStr(raw, map.nameAr);
     const nameEn = cellStr(raw, map.nameEn) || nameAr;
     const gradeLevel = cellStr(raw, map.grade);

@@ -427,9 +427,10 @@ router.post(
     const errors = [...parsed.errors];
     const fileName = req.file.originalname || 'noor-import.xlsx';
 
-    const result = await prisma.$transaction(
+    // Create import batch + ensure classes (short transaction)
+    const { batch, classByKey, classesCreated, classesReused } = await prisma.$transaction(
       async (tx) => {
-        const batch = await tx.studentImportBatch.create({
+        const batchRow = await tx.studentImportBatch.create({
           data: {
             importedBy: req.user.id,
             fileName,
@@ -437,7 +438,6 @@ router.post(
           },
         });
 
-        // Ensure a Class row for every grade+section in the file
         const classKey = (grade, section) => `${grade}||${section}`;
         const uniqueClasses = new Map();
         for (const row of parsed.rows) {
@@ -447,9 +447,9 @@ router.post(
           });
         }
 
-        const classByKey = new Map();
-        let classesCreated = 0;
-        let classesReused = 0;
+        const byKey = new Map();
+        let createdCount = 0;
+        let reusedCount = 0;
 
         for (const { gradeLevel, section } of uniqueClasses.values()) {
           const existing = await tx.class.findUnique({
@@ -463,8 +463,8 @@ router.post(
           });
 
           if (existing) {
-            classByKey.set(classKey(gradeLevel, section), existing);
-            classesReused += 1;
+            byKey.set(classKey(gradeLevel, section), existing);
+            reusedCount += 1;
             continue;
           }
 
@@ -476,111 +476,130 @@ router.post(
               academicYear,
             },
           });
-          classByKey.set(classKey(gradeLevel, section), createdClass);
-          classesCreated += 1;
-        }
-
-        let created = 0;
-        let updated = 0;
-        let reactivated = 0;
-
-        for (const row of parsed.rows) {
-          const cls = classByKey.get(classKey(row.gradeLevel, row.section));
-          if (!cls) {
-            errors.push({ index: row.index, id: row.id, error: 'Class resolution failed' });
-            continue;
-          }
-
-          const existing = await tx.student.findUnique({ where: { id: row.id } });
-
-          if (!existing) {
-            await tx.student.create({
-              data: {
-                id: row.id,
-                nameAr: row.nameAr,
-                nameEn: row.nameEn,
-                classId: cls.id,
-                parentPhone: row.parentPhone,
-                importBatchId: batch.id,
-              },
-            });
-            await tx.classEnrollment.create({
-              data: {
-                studentId: row.id,
-                classId: cls.id,
-                academicYear: cls.academicYear,
-                changedBy: req.user.id,
-              },
-            });
-            created += 1;
-            continue;
-          }
-
-          const data = {
-            nameAr: row.nameAr,
-            nameEn: row.nameEn,
-            parentPhone: row.parentPhone,
-            importBatchId: batch.id,
-          };
-
-          if (!existing.isActive) {
-            data.isActive = true;
-            data.deletedAt = null;
-            reactivated += 1;
-          } else {
-            updated += 1;
-          }
-
-          if (existing.classId !== cls.id) {
-            const open = await tx.classEnrollment.findMany({
-              where: { studentId: row.id, endDate: null },
-            });
-            const now = new Date();
-            for (const enr of open) {
-              await tx.classEnrollment.update({
-                where: { id: enr.id },
-                data: { endDate: now },
-              });
-            }
-            await tx.classEnrollment.create({
-              data: {
-                studentId: row.id,
-                classId: cls.id,
-                academicYear: cls.academicYear,
-                startDate: now,
-                changedBy: req.user.id,
-              },
-            });
-            data.classId = cls.id;
-          }
-
-          await tx.student.update({ where: { id: row.id }, data });
+          byKey.set(classKey(gradeLevel, section), createdClass);
+          createdCount += 1;
         }
 
         return {
-          batch,
-          created,
-          updated,
-          reactivated,
-          classesCreated,
-          classesReused,
-          academicYear,
+          batch: batchRow,
+          classByKey: byKey,
+          classesCreated: createdCount,
+          classesReused: reusedCount,
         };
       },
-      { timeout: 120_000 }
+      { timeout: 60_000 }
     );
+
+    // Upsert students in small batches — one giant interactive transaction
+    // often times out / drops on free Render Postgres with 300+ rows.
+    const classKey = (grade, section) => `${grade}||${section}`;
+    let created = 0;
+    let updated = 0;
+    let reactivated = 0;
+    const BATCH = 40;
+
+    for (let offset = 0; offset < parsed.rows.length; offset += BATCH) {
+      const slice = parsed.rows.slice(offset, offset + BATCH);
+      const counts = await prisma.$transaction(
+        async (tx) => {
+          let c = 0;
+          let u = 0;
+          let r = 0;
+
+          for (const row of slice) {
+            const cls = classByKey.get(classKey(row.gradeLevel, row.section));
+            if (!cls) {
+              errors.push({ index: row.index, id: row.id, error: 'Class resolution failed' });
+              continue;
+            }
+
+            const existing = await tx.student.findUnique({ where: { id: row.id } });
+
+            if (!existing) {
+              await tx.student.create({
+                data: {
+                  id: row.id,
+                  nameAr: row.nameAr,
+                  nameEn: row.nameEn,
+                  classId: cls.id,
+                  parentPhone: row.parentPhone,
+                  importBatchId: batch.id,
+                },
+              });
+              await tx.classEnrollment.create({
+                data: {
+                  studentId: row.id,
+                  classId: cls.id,
+                  academicYear: cls.academicYear,
+                  changedBy: req.user.id,
+                },
+              });
+              c += 1;
+              continue;
+            }
+
+            const data = {
+              nameAr: row.nameAr,
+              nameEn: row.nameEn,
+              parentPhone: row.parentPhone,
+              importBatchId: batch.id,
+            };
+
+            if (!existing.isActive) {
+              data.isActive = true;
+              data.deletedAt = null;
+              r += 1;
+            } else {
+              u += 1;
+            }
+
+            if (existing.classId !== cls.id) {
+              const open = await tx.classEnrollment.findMany({
+                where: { studentId: row.id, endDate: null },
+              });
+              const now = new Date();
+              for (const enr of open) {
+                await tx.classEnrollment.update({
+                  where: { id: enr.id },
+                  data: { endDate: now },
+                });
+              }
+              await tx.classEnrollment.create({
+                data: {
+                  studentId: row.id,
+                  classId: cls.id,
+                  academicYear: cls.academicYear,
+                  startDate: now,
+                  changedBy: req.user.id,
+                },
+              });
+              data.classId = cls.id;
+            }
+
+            await tx.student.update({ where: { id: row.id }, data });
+          }
+
+          return { c, u, r };
+        },
+        { timeout: 60_000 }
+      );
+
+      created += counts.c;
+      updated += counts.u;
+      reactivated += counts.r;
+    }
 
     res.status(201).json({
       fileName,
-      academicYear: result.academicYear,
-      created: result.created,
-      updated: result.updated,
-      reactivated: result.reactivated,
+      academicYear,
+      created,
+      updated,
+      reactivated,
       skipped: errors.length,
-      classesCreated: result.classesCreated,
-      classesReused: result.classesReused,
+      classesCreated,
+      classesReused,
       errors,
-      batch: result.batch,
+      batch,
     });
   })
 );

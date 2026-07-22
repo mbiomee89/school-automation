@@ -79,7 +79,10 @@ export function errorHandler(err, _req, res, _next) {
   }
 
   console.error('[error]', err);
-  return res.status(500).json({
-    error: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
-  });
+  // Surface the real message so testers on Render can see why an import/API call failed.
+  const message =
+    typeof err?.message === 'string' && err.message.trim()
+      ? err.message
+      : 'Internal server error';
+  return res.status(500).json({ error: message });
 }
