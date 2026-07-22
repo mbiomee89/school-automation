@@ -9,6 +9,7 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { tryNormalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { parseNoorTeachersSpreadsheet } from '../services/noorTeacherImport.js';
+import { resetDataKeepAdmin } from '../services/resetData.js';
 
 const router = Router();
 
@@ -234,6 +235,20 @@ router.patch(
       select: staffSelect,
     });
     res.json({ user });
+  })
+);
+
+const resetSchema = z.object({
+  confirm: z.literal('DELETE_ALL_EXCEPT_ADMIN'),
+});
+
+/** POST /users/reset-data — wipe all operational data; keep ADMIN accounts */
+router.post(
+  '/reset-data',
+  validateBody(resetSchema),
+  asyncHandler(async (_req, res) => {
+    const summary = await resetDataKeepAdmin(prisma);
+    res.json({ ok: true, summary });
   })
 );
 
