@@ -1,0 +1,13 @@
+/* Design Tokens for School Automation Platform */
+
+:root {
+  /* Colors — Tailwind palette names */
+  --color-primary: blue;
+  --color-secondary: slate;
+  --color-neutral: slate;
+
+  /* Typography */
+  --font-heading: 'Cairo', sans-serif;
+  --font-body: 'Cairo', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}

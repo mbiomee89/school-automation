@@ -1,0 +1,63 @@
+@import 'tailwindcss';
+@import './design-tokens.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --font-heading: 'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', Arial, sans-serif;
+  --font-body: 'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', Arial, sans-serif;
+  --font-sans: 'Cairo', 'IBM Plex Sans Arabic', 'Noto Sans Arabic', Arial, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * Dark-mode form fields: slate-950 fills on slate-950 pages made typed text
+ * invisible (black-on-black / native controls). Keep fields a step lighter
+ * than the page with light text. !important beats leftover utility classes.
+ */
+.dark {
+  color-scheme: dark;
+}
+
+.dark input:not([type='checkbox']):not([type='radio']):not([type='file']):not([type='hidden']):not([type='range']):not([type='color']):not([type='submit']):not([type='button']):not([type='reset']):not([type='image']),
+.dark textarea,
+.dark select {
+  background-color: rgb(30 41 59) !important; /* slate-800 */
+  color: rgb(241 245 249) !important; /* slate-100 */
+  border-color: rgb(71 85 105) !important; /* slate-600 */
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: rgb(148 163 184) !important; /* slate-400 */
+  opacity: 1;
+}
+
+.dark select option {
+  background-color: rgb(30 41 59);
+  color: rgb(241 245 249);
+}
+
+/* Chrome/Safari autofill paints an opaque yellow/black that hides text */
+.dark input:-webkit-autofill,
+.dark input:-webkit-autofill:hover,
+.dark input:-webkit-autofill:focus,
+.dark textarea:-webkit-autofill,
+.dark select:-webkit-autofill {
+  -webkit-text-fill-color: rgb(241 245 249) !important;
+  box-shadow: 0 0 0 1000px rgb(30 41 59) inset !important;
+  transition: background-color 99999s ease-out;
+}

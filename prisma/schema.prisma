@@ -1,0 +1,404 @@
+// School Automation Platform — Database Schema
+// Provider: SQLite (lightweight, file-based, zero server admin needed)
+// To upgrade later to PostgreSQL: change provider = "postgresql" and set DATABASE_URL
+//
+// INVARIANTS enforced in application code (SQLite cannot express these):
+// 1. Date-only fields (Attendance.date, Notification.forDate, WeeklyPlan.weekStart)
+//    MUST be stored as UTC midnight. Otherwise @@unique constraints fail to dedupe.
+// 2. ClassEnrollment: at most one row per student with endDate = null.
+//    Promote/move MUST run inside prisma.$transaction.
+// 3. ClassEnrollment.academicYear MUST always equal Class.academicYear of classId.
+// 4. reasonReviewedBy MUST be a User with role = COUNSELOR (check in service layer).
+// 5. Never hard-delete User or Student — set isActive=false (and deletedAt for students).
+// 6. WhatsApp sends only when Student.waOptedIn = true AND Student.isActive = true.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Core identity & structure ----------
+
+enum Role {
+  ADMIN      // principal / admin staff
+  TEACHER
+  COUNSELOR  // reviews and approves/rejects parent-submitted absence reasons; not tied to specific classes like a teacher
+}
+
+enum Language {
+  AR
+  EN
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  name         String
+  email        String   @unique
+  phone        String?
+  passwordHash String
+  role         Role
+  langPref     Language @default(AR)
+  isActive     Boolean  @default(true) // deactivate instead of delete — historical records reference staff
+  createdAt    DateTime @default(now())
+
+  assignments    TeacherAssignment[]
+  attendance     Attendance[]          @relation("AttendanceRecordedBy")
+  homework       Homework[]            @relation("HomeworkCreatedBy")
+  lateReports    LateReport[]          @relation("LateReportRecordedBy")
+  weeklyPlans    WeeklyPlan[]          @relation("WeeklyPlanCreatedBy")
+  importBatches  StudentImportBatch[]  @relation("ImportedBy")
+  classChanges   ClassEnrollment[]     @relation("ClassEnrollmentChangedBy")
+  reasonsReviewed Attendance[]         @relation("AbsenceReasonReviewedBy")
+}
+
+model Class {
+  id           Int      @id @default(autoincrement())
+  name         String   // e.g. "Grade 5 - B" — display label; uniqueness is on gradeLevel+section+year
+  gradeLevel   String
+  section      String?
+  academicYear String   // e.g. "2026-2027" — prevents next year's "Grade 5-B" from
+                         // being the same row (and mixing history) with this year's
+
+  students    Student[]
+  assignments TeacherAssignment[]
+  attendance  Attendance[]
+  homework    Homework[]
+  lateReports LateReport[]
+  weeklyPlans WeeklyPlan[]
+  enrollments ClassEnrollment[]
+
+  @@unique([gradeLevel, section, academicYear])
+}
+
+model Subject {
+  id      Int    @id @default(autoincrement())
+  nameAr  String
+  nameEn  String
+
+  assignments TeacherAssignment[]
+  homework    Homework[]
+  weeklyPlans WeeklyPlan[]
+}
+
+// A bulk upload of students from a Noor/Madrasati export (or any spreadsheet).
+// Every imported student links back to the batch that brought them in, so you
+// can always answer "which upload caused this" if data looks wrong.
+model StudentImportBatch {
+  id         Int      @id @default(autoincrement())
+  importedBy Int
+  importer   User     @relation("ImportedBy", fields: [importedBy], references: [id])
+  fileName   String?
+  rowCount   Int      @default(0)
+  importedAt DateTime @default(now())
+
+  students Student[]
+}
+
+model Student {
+  id            String   @id // Real national ID / Iqama number — this IS the student's identifier,
+                              // not an internal auto-number. String type because ID numbers can have
+                              // leading zeros and should never be treated as arithmetic.
+  nameAr        String
+  nameEn        String
+  // Nullable: null means "no current class" — either never assigned (e.g. created
+  // without a class) or removed from a class via unassign / remove-all-students,
+  // pending re-assignment. Kept in sync with the latest open ClassEnrollment when
+  // a class IS assigned; when null there is deliberately no open ClassEnrollment.
+  // Daily-workflow writes (Attendance/LateReport) require a non-null classId that
+  // matches the submission's classId, so unassigned students are naturally excluded
+  // from daily records until re-assigned to a class.
+  classId       Int?
+  class         Class?   @relation(fields: [classId], references: [id], onDelete: Restrict)
+  parentPhone   String   // single WhatsApp contact number, E.164 format e.g. +9665XXXXXXXX
+  parentEmail   String?
+  waOptedIn     Boolean  @default(false) // parent WhatsApp consent — required before sending
+
+  // Soft delete: "removing" a student NEVER issues a real SQL delete. Admin
+  // action sets isActive=false and deletedAt=now(). The row — and every
+  // Attendance/Homework/LateReport/Notification linked to it — stays in the
+  // database permanently. Active rosters simply filter where isActive=true.
+  isActive      Boolean  @default(true)
+  deletedAt     DateTime?
+
+  // Traceability: null = entered manually one at a time; set = came from a
+  // bulk Noor/spreadsheet import, and which batch.
+  importBatchId Int?
+  importBatch   StudentImportBatch? @relation(fields: [importBatchId], references: [id])
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  attendance    Attendance[]
+  lateReports   LateReport[]
+  notifications Notification[]
+  enrollments   ClassEnrollment[]
+
+  @@index([classId])
+  @@index([isActive])
+  @@index([parentPhone]) // parent OTP login + "students for this phone" lookups
+}
+
+// Tracks every class a student has ever been assigned to, with start/end dates.
+// Admin "moves" a student (e.g. promoting 5-B to 6-B for the new academic
+// year) by closing the current enrollment (endDate = now) and opening a new
+// one — Student.classId is updated to match, but the history is preserved
+// forever so you can answer "what class was this student in during 2025-2026".
+//
+// IMPORTANT: nothing at the database level stops a student from ending up
+// with two rows where endDate is null (two "open" enrollments at once) —
+// SQLite/Prisma can't express a partial unique index for that here. The
+// promote operation (close old + open new + update Student.classId) MUST
+// run inside a single database transaction (e.g. `prisma.$transaction`) so
+// it can never partially apply.
+//
+// academicYear must be copied from the target Class.academicYear at write time
+// — do not accept a free-form year from the client that could disagree with classId.
+model ClassEnrollment {
+  id           Int       @id @default(autoincrement())
+  studentId    String
+  student      Student   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId      Int
+  class        Class     @relation(fields: [classId], references: [id], onDelete: Restrict)
+  academicYear String
+  startDate    DateTime  @default(now())
+  endDate      DateTime? // null = this is the student's current, active class
+  changedBy    Int?      // admin who made the change (null for the initial enrollment on creation)
+  changer      User?     @relation("ClassEnrollmentChangedBy", fields: [changedBy], references: [id])
+
+  @@index([studentId])
+  @@index([classId])
+  @@index([studentId, endDate]) // find open enrollment quickly
+}
+
+// Which teacher teaches which subject to which class — drives permissions
+model TeacherAssignment {
+  id        Int     @id @default(autoincrement())
+  teacherId Int
+  teacher   User    @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classId   Int
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId Int
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, classId, subjectId])
+  @@index([teacherId, classId]) // assignment-guard lookups (class-level for attendance/late)
+}
+
+// ---------- Daily workflow tables ----------
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  EXCUSED
+}
+
+enum AbsenceReasonStatus {
+  NONE            // no reason submitted (default)
+  PENDING_REVIEW  // parent submitted a reason, awaiting counselor decision
+  APPROVED        // reviewed and accepted — service MAY then set status = EXCUSED
+  REJECTED        // reviewed and declined
+}
+
+model Attendance {
+  id         Int              @id @default(autoincrement())
+  studentId  String
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId    Int
+  class      Class            @relation(fields: [classId], references: [id], onDelete: Restrict)
+  date       DateTime         // MUST be date-only (UTC midnight). Never store wall-clock time here.
+  // Required (not optional): SQLite UNIQUE treats each NULL as distinct, so a nullable
+  // period would allow duplicate rows for the same student/day. Use a concrete value
+  // always — e.g. "1", "2", or "DAY" for whole-day marks.
+  period     String
+  status     AttendanceStatus
+  recordedBy Int
+  recorder   User             @relation("AttendanceRecordedBy", fields: [recordedBy], references: [id])
+  createdAt  DateTime         @default(now())
+
+  // Parent-submitted reason for the absence (via the parent app). Submitting
+  // a reason does NOT automatically change status to EXCUSED — it starts a
+  // review workflow. Approval/rejection is done by the school counselor
+  // (User.role = COUNSELOR), not the class teacher, so this is intentionally
+  // a plain User relation rather than scoped through TeacherAssignment.
+  absenceReason        String?
+  absenceAttachmentUrl String?              // e.g. a photo of a medical note
+  reasonSubmittedAt    DateTime?
+  reasonStatus         AbsenceReasonStatus  @default(NONE)
+  reasonReviewedBy     Int?                 // must be a User with role = COUNSELOR (enforced at the application layer)
+  reasonReviewer       User?                @relation("AbsenceReasonReviewedBy", fields: [reasonReviewedBy], references: [id])
+  reasonReviewedAt     DateTime?
+
+  notifications Notification[]
+
+  // Prevents a teacher accidentally submitting the same student's attendance twice
+  // for the same day/period. IMPORTANT: `date` must be normalized to midnight
+  // (strip the time component) when saving, or this constraint won't catch duplicates.
+  @@unique([studentId, date, period])
+  @@index([classId, date])
+  @@index([reasonStatus])
+  @@index([studentId, date])
+}
+
+model Homework {
+  id          Int      @id @default(autoincrement())
+  classId     Int
+  class       Class    @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subjectId   Int
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  teacherId   Int
+  teacher     User     @relation("HomeworkCreatedBy", fields: [teacherId], references: [id], onDelete: Restrict)
+  date        DateTime // date-only (UTC midnight) — digest job groups by this
+  description String
+  dueDate     DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([classId, date])
+}
+
+model LateReport {
+  id         Int      @id @default(autoincrement())
+  studentId  String
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId    Int
+  class      Class    @relation(fields: [classId], references: [id], onDelete: Restrict)
+  // Calendar day of the late arrival (UTC midnight). Separate from `time` so we can
+  // enforce one late report per student per day and still keep the exact arrival time.
+  date       DateTime
+  time       DateTime @default(now())
+  reason     String?
+  recordedBy Int
+  recorder   User     @relation("LateReportRecordedBy", fields: [recordedBy], references: [id], onDelete: Restrict)
+
+  notifications Notification[]
+
+  @@unique([studentId, date]) // one late mark per student per day — blocks double-submit
+  @@index([studentId, time])
+  @@index([classId, date])
+}
+
+model WeeklyPlan {
+  id         Int      @id @default(autoincrement())
+  classId    Int
+  class      Class    @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subjectId  Int
+  subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  teacherId  Int
+  teacher    User     @relation("WeeklyPlanCreatedBy", fields: [teacherId], references: [id], onDelete: Restrict)
+  weekStart  DateTime // always a Saturday at UTC midnight — the digest send date / forDate key
+  topics     String
+  objectives String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([classId, subjectId, weekStart])
+  @@index([classId, weekStart])
+}
+
+// ---------- WhatsApp notification log ----------
+
+enum NotificationEvent {
+  ABSENCE          // instant
+  LATE             // instant
+  HOMEWORK_DIGEST  // daily batch
+  WEEKLY_PLAN      // every Saturday batch
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Notification {
+  id              Int                @id @default(autoincrement())
+  eventType       NotificationEvent
+  studentId       String?            // null only if you ever add school-wide blasts; digests/instant always set this
+  student         Student?           @relation(fields: [studentId], references: [id])
+  parentPhone     String
+  templateName    String             // Meta-approved WhatsApp template used
+  status          NotificationStatus @default(QUEUED)
+
+  // WhatsApp Cloud API wamid — required to match delivery webhooks to this row.
+  // Set when the provider accepts the send; webhook updates status by this id.
+  providerMessageId String?          @unique
+
+  // Instant events link to the exact record that triggered them.
+  // Unique constraints below stop the same absence/late event from ever
+  // generating two WhatsApp sends (e.g. a retried request, a double-click).
+  attendanceId    Int?               @unique
+  attendance      Attendance?        @relation(fields: [attendanceId], references: [id])
+  lateReportId    Int?               @unique
+  lateReport      LateReport?        @relation(fields: [lateReportId], references: [id])
+
+  // Batched events (HOMEWORK_DIGEST, WEEKLY_PLAN) aren't tied to one record —
+  // forDate identifies which day/week the digest covers, so a re-run of the
+  // cron job for a date that's already been sent can be detected and skipped.
+  // HOMEWORK_DIGEST: that calendar day (UTC midnight).
+  // WEEKLY_PLAN: the week's Saturday weekStart (UTC midnight).
+  // Instant events (ABSENCE/LATE): leave forDate null — dedup is via attendanceId/lateReportId.
+  forDate         DateTime?
+
+  sentAt          DateTime?
+  createdAt       DateTime           @default(now())
+  errorMessage    String?
+
+  // Dedup for digests only. Instant rows use attendanceId/lateReportId uniques instead.
+  // SQLite allows multiple NULLs in a UNIQUE column, so ABSENCE/LATE rows with
+  // forDate=null do not collide with each other under this constraint.
+  @@unique([studentId, eventType, forDate])
+  @@index([status])
+  @@index([eventType, createdAt])
+  @@index([parentPhone, createdAt])
+}
+
+// Singleton school profile stamped on printed report headers (roster, attendance,
+// etc.). The application always upserts against a fixed id (id = 1), so there is
+// exactly one row — never create a second row or accept a client-supplied id.
+model SchoolSettings {
+  id            Int      @id @default(autoincrement())
+  name          String
+  // Relative path under /uploads (e.g. "logos/abc123.png") — never a
+  // client-supplied absolute path. Null means no logo has been uploaded yet.
+  logoPath      String?
+  academicYear  String
+  principalName String?
+  address       String?
+  updatedAt     DateTime @updatedAt
+}
+
+// ---------- Parent app access ----------
+
+// Parents authenticate with phone + password. The phone must match one or more
+// active Student.parentPhone values. Account is created once (self-register or
+// seeded); thereafter they log in with the same credentials.
+model ParentAccount {
+  id           Int      @id @default(autoincrement())
+  phone        String   @unique // E.164, matches Student.parentPhone
+  passwordHash String
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Legacy OTP table kept for optional future WhatsApp OTP recovery flows.
+// Primary parent login is ParentAccount (phone + password).
+model ParentOtp {
+  id        Int      @id @default(autoincrement())
+  phone     String   // matched against Student.parentPhone
+  code      String   // hashed OTP, never stored in plaintext
+  expiresAt DateTime
+  verified  Boolean  @default(false)
+  attempts  Int      @default(0) // increment on each failed verify; lock after max (e.g. 5)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@index([phone, createdAt])
+}

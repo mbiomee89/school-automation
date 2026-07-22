@@ -1,0 +1,23 @@
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.db
+*.db-journal
+backend/uploads/*
+!backend/uploads/.gitkeep
+.DS_Store
+Thumbs.db
+*.log
+.prisma/
+
+# Local design / archives (not needed on Render)
+my-project-design/
+product-plan/
+product-plan.zip
+files.zip
+*.exe
+*.zip
+
+backend/_tmp_test.mjs

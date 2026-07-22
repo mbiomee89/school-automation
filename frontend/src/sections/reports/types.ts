@@ -1,0 +1,62 @@
+/**
+ * Types and props for the shared Reports section screen designs.
+ * Reachable from the app shell's "التقارير" nav item by ADMIN and COUNSELOR roles.
+ */
+
+export type ReportType =
+  | 'DAILY_ABSENCE'
+  | 'LATE_ARRIVALS'
+  | 'HOMEWORK_LOG'
+  | 'WEEKLY_PLAN'
+  | 'STUDENT_HISTORY'
+
+/** Maps to a lucide-react icon chosen in the component layer. */
+export type ReportIconHint = 'CALENDAR_OFF' | 'CLOCK' | 'BOOK_OPEN' | 'CALENDAR_RANGE' | 'HISTORY'
+
+export interface ReportSummary {
+  type: ReportType
+  title: string
+  description: string
+  iconHint: ReportIconHint
+  /** Human-readable date/week scope shown on the card, e.g. a specific day or a week range. */
+  context: string
+  /** Row count for this report if known ahead of generation; null when it depends on a per-student selection (e.g. student history). */
+  count: number | null
+  /** ISO timestamp of the last time this report was generated/viewed; null if never. */
+  lastGeneratedAt: string | null
+}
+
+export type AbsenceRowStatus = 'ABSENT' | 'EXCUSED'
+
+export interface DailyAbsenceRow {
+  studentId: string
+  studentName: string
+  className: string
+  date: string
+  status: AbsenceRowStatus
+}
+
+export interface DailyAbsenceReportDetail {
+  date: string
+  schoolName: string
+  academicYear: string
+  rows: DailyAbsenceRow[]
+}
+
+export interface ReportsProps {
+  reports: ReportSummary[]
+  /** Sample daily-absence detail data used for the one built-out detailed/printable view. */
+  dailyAbsenceDetail?: DailyAbsenceReportDetail | null
+  /** Currently opened report, for controlled preview. */
+  activeReport?: ReportType | null
+  /** Open a report's detail/printable view */
+  onSelectReport?: (type: ReportType) => void
+  /** Close the currently opened report and return to the hub grid */
+  onCloseReport?: () => void
+  /** Trigger browser print for a report (opens/keeps the printable view, then the browser print dialog) */
+  onPrint?: (type: ReportType) => void
+  /** Change the date scope for date-based reports (daily absence, late arrivals) */
+  onFilterByDate?: (type: ReportType, date: string) => void
+  /** Change the week scope for week-based reports (homework log, weekly plan) */
+  onFilterByWeek?: (type: ReportType, weekStart: string) => void
+}

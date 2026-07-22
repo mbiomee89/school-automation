@@ -1,0 +1,37 @@
+{
+  "name": "school-automation",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "School Automation Platform — React + Express + Prisma/SQLite",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema=prisma/schema.prisma",
+    "db:push": "prisma db push --schema=prisma/schema.prisma",
+    "db:seed": "node prisma/seed.js",
+    "db:studio": "prisma studio --schema=prisma/schema.prisma",
+    "backend": "npm run start -w school-automation-backend",
+    "backend:dev": "npm run dev -w school-automation-backend",
+    "frontend": "npm run dev -w frontend",
+    "frontend:build": "npm run build -w frontend",
+    "render:build": "bash scripts/render-build.sh"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.9.0",
+    "bcryptjs": "^3.0.2"
+  },
+  "devDependencies": {
+    "prisma": "^6.9.0"
+  },
+  "prisma": {
+    "schema": "prisma/schema.prisma",
+    "seed": "node prisma/seed.js"
+  }
+}
