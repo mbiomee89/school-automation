@@ -9,7 +9,7 @@ import {
   idParam,
 } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
-import { conflict, notFound } from '../utils/errors.js';
+import { badRequest, conflict, notFound } from '../utils/errors.js';
 import { toUtcMidnight } from '../utils/dates.js';
 
 const router = Router();
@@ -41,7 +41,7 @@ function serialize(row) {
     submittedAt: row.reasonSubmittedAt?.toISOString() ?? row.createdAt.toISOString(),
     reviewedAt: row.reasonReviewedAt?.toISOString() ?? null,
     reviewerName: row.reasonReviewer?.name ?? null,
-    counselorNote: null,
+    counselorNote: row.counselorNote ?? null,
   };
 }
 
@@ -80,10 +80,7 @@ router.get(
       orderBy: [{ reasonSubmittedAt: 'desc' }, { date: 'desc' }],
     });
 
-    // Filter out NONE accidentally if status not set tightly
-    const items = rows
-      .filter((r) => r.reasonStatus !== 'NONE')
-      .map(serialize);
+    const items = rows.filter((r) => r.reasonStatus !== 'NONE').map(serialize);
 
     res.json({ items });
   })
@@ -103,12 +100,19 @@ router.patch(
         reasonReviewer: { select: { id: true, name: true } },
       },
     });
-    if (!existing) throw notFound('Absence reason not found');
+    if (!existing) throw notFound('طلب العذر غير موجود');
     if (existing.reasonStatus !== 'PENDING_REVIEW') {
-      throw conflict('This reason has already been reviewed');
+      throw conflict('تمت مراجعة هذا العذر مسبقاً');
     }
 
     const decision = req.body.decision;
+    const note =
+      typeof req.body.note === 'string' && req.body.note.trim() ? req.body.note.trim() : null;
+
+    if (decision === 'REJECTED' && !note) {
+      throw badRequest('سبب الرفض مطلوب');
+    }
+
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
@@ -118,7 +122,7 @@ router.patch(
           reasonStatus: decision,
           reasonReviewedBy: req.user.id,
           reasonReviewedAt: now,
-          // Product rule: approval excuses the absence
+          counselorNote: decision === 'REJECTED' ? note : null,
           ...(decision === 'APPROVED' ? { status: 'EXCUSED' } : {}),
         },
         include: {

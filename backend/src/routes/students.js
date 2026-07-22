@@ -9,7 +9,7 @@ import {
   studentIdParam,
 } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
-import { badRequest, notFound } from '../utils/errors.js';
+import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { normalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.js';
@@ -17,6 +17,43 @@ import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.j
 const router = Router();
 
 router.use(requireStaff);
+
+async function teacherAssignedClassIds(teacherId) {
+  const rows = await prisma.teacherAssignment.findMany({
+    where: { teacherId },
+    select: { classId: true },
+  });
+  return [...new Set(rows.map((r) => r.classId))];
+}
+
+/** Teachers only see students in their assigned classes; admin/counselor see all. */
+async function applyStaffStudentScope(user, where) {
+  if (user.role === 'ADMIN' || user.role === 'COUNSELOR') return where;
+  if (user.role !== 'TEACHER') throw forbidden('غير مصرح');
+
+  const classIds = await teacherAssignedClassIds(user.id);
+
+  // Teachers cannot browse school-wide unassigned students.
+  if (Object.prototype.hasOwnProperty.call(where, 'classId') && where.classId === null) {
+    return { ...where, classId: { in: [] } };
+  }
+  if (typeof where.classId === 'number') {
+    if (!classIds.includes(where.classId)) {
+      return { ...where, classId: { in: [] } };
+    }
+    return where;
+  }
+  return { ...where, classId: { in: classIds } };
+}
+
+async function assertStaffCanViewStudent(user, student) {
+  if (user.role === 'ADMIN' || user.role === 'COUNSELOR') return;
+  if (user.role !== 'TEACHER') throw forbidden('غير مصرح');
+  const classIds = await teacherAssignedClassIds(user.id);
+  if (student.classId == null || !classIds.includes(student.classId)) {
+    throw notFound('الطالب غير موجود');
+  }
+}
 
 const studentSelect = {
   id: true,
@@ -107,8 +144,10 @@ router.get(
       ];
     }
 
+    const scoped = await applyStaffStudentScope(req.user, where);
+
     const students = await prisma.student.findMany({
-      where,
+      where: scoped,
       select: studentSelect,
       orderBy: { nameAr: 'asc' },
     });
@@ -139,7 +178,8 @@ router.get(
       where: { id: req.params.id },
       select: studentSelect,
     });
-    if (!student) throw notFound('Student not found');
+    if (!student) throw notFound('الطالب غير موجود');
+    await assertStaffCanViewStudent(req.user, student);
     res.json({ student });
   })
 );
@@ -149,7 +189,8 @@ router.get(
   validateParams(studentIdParam),
   asyncHandler(async (req, res) => {
     const student = await prisma.student.findUnique({ where: { id: req.params.id } });
-    if (!student) throw notFound('Student not found');
+    if (!student) throw notFound('الطالب غير موجود');
+    await assertStaffCanViewStudent(req.user, student);
 
     const enrollments = await prisma.classEnrollment.findMany({
       where: { studentId: req.params.id },

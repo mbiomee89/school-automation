@@ -53,24 +53,24 @@ export async function loginParent(rawPhone, password) {
   try {
     phone = normalizePhone(rawPhone);
   } catch {
-    throw unauthorized('Invalid phone or password');
+    throw unauthorized('رقم الجوال أو كلمة المرور غير صحيحة');
   }
 
   if (!password || typeof password !== 'string') {
-    throw unauthorized('Invalid phone or password');
+    throw unauthorized('رقم الجوال أو كلمة المرور غير صحيحة');
   }
 
   const account = await prisma.parentAccount.findUnique({ where: { phone } });
   if (!account || !account.isActive) {
-    throw unauthorized('Invalid phone or password');
+    throw unauthorized('رقم الجوال أو كلمة المرور غير صحيحة');
   }
 
   const ok = await verifyPassword(password, account.passwordHash);
-  if (!ok) throw unauthorized('Invalid phone or password');
+  if (!ok) throw unauthorized('رقم الجوال أو كلمة المرور غير صحيحة');
 
   const students = await listActiveStudentsForPhone(phone);
   if (students.length === 0) {
-    throw unauthorized('Invalid phone or password');
+    throw unauthorized('رقم الجوال أو كلمة المرور غير صحيحة');
   }
 
   const token = signParentToken(phone);
@@ -97,12 +97,13 @@ export async function registerParent(rawPhone, password) {
     where: { parentPhone: phone, isActive: true },
   });
   if (activeCount === 0) {
-    throw badRequest('This phone is not linked to any student at the school');
+    // Same generic message as login — avoid phone enumeration.
+    throw badRequest('تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً');
   }
 
   const existing = await prisma.parentAccount.findUnique({ where: { phone } });
   if (existing) {
-    throw conflict('An account already exists for this phone — please log in');
+    throw conflict('تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً');
   }
 
   const passwordHash = await hashPassword(password);

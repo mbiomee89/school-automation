@@ -4,7 +4,7 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateQuery } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
-import { toUtcMidnight } from '../utils/dates.js';
+import { toUtcMidnight, weekStartSaturdayUtc } from '../utils/dates.js';
 
 const router = Router();
 
@@ -99,6 +99,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const date = toUtcMidnight(req.query.date);
     const dateStr = date.toISOString().slice(0, 10);
+    const weekStart = weekStartSaturdayUtc(date);
 
     const [absenceCount, lateCount, homeworkCount, weeklyPlanCount] = await Promise.all([
       prisma.attendance.count({
@@ -107,12 +108,7 @@ router.get(
       prisma.lateReport.count({ where: { date } }),
       prisma.homework.count({ where: { date } }),
       prisma.weeklyPlan.count({
-        where: {
-          weekStart: {
-            // plans whose week contains this date: weekStart is Saturday on/before date
-            lte: date,
-          },
-        },
+        where: { weekStart },
       }),
     ]);
 

@@ -158,6 +158,7 @@ export function TeacherDailyPage() {
           setAttendanceSavedAt(result.savedAt)
         } catch (err) {
           alertError(err, 'فشل حفظ الحضور')
+          throw err
         }
       }}
       onAddLateReport={async (entry) => {

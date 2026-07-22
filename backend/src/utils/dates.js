@@ -43,6 +43,17 @@ export function isSaturdayUtc(date) {
   return d.getUTCDay() === 6;
 }
 
+/**
+ * Saturday on or before `input` (UTC date-only).
+ * Matches frontend weekStartSaturday() / WeeklyPlan.weekStart convention.
+ */
+export function weekStartSaturdayUtc(input) {
+  const d = toUtcMidnight(input);
+  const day = d.getUTCDay(); // 0 Sun … 6 Sat
+  const diff = day === 6 ? 0 : day + 1;
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - diff));
+}
+
 export function todayUtcMidnight() {
   return toUtcMidnight(new Date());
 }

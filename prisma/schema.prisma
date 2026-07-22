@@ -233,6 +233,8 @@ model Attendance {
   reasonReviewedBy     Int?                 // must be a User with role = COUNSELOR (enforced at the application layer)
   reasonReviewer       User?                @relation("AbsenceReasonReviewedBy", fields: [reasonReviewedBy], references: [id])
   reasonReviewedAt     DateTime?
+  /// Optional note left by the counselor when rejecting a parent excuse.
+  counselorNote        String?
 
   notifications Notification[]
 

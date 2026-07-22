@@ -393,7 +393,10 @@ export function AdminDashboard({
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
-    setLogoPreview(URL.createObjectURL(file))
+    setLogoPreview((prev) => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
+      return URL.createObjectURL(file)
+    })
     onUploadSchoolLogo?.(file)
   }
 

@@ -20,12 +20,13 @@ function isImageFile(file: File) {
 
 /**
  * Two-path evidence upload for an absence excuse: live camera capture or a
- * file/photo picker, plus an optional note and a preview before sending.
+ * file/photo picker, plus a required reason note and a preview before sending.
  */
 export function ExcuseUploadModal({ open, attendanceDate, submitting, onClose, onSubmit }: ExcuseUploadModalProps) {
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [reasonText, setReasonText] = useState('')
+  const [formError, setFormError] = useState<string | null>(null)
 
   // Clear the form the moment the modal closes — adjusted during render (per
   // https://react.dev/learn/you-might-not-need-an-effect) rather than in an
@@ -37,6 +38,7 @@ export function ExcuseUploadModal({ open, attendanceDate, submitting, onClose, o
       setFile(null)
       setPreviewUrl(null)
       setReasonText('')
+      setFormError(null)
     }
   }
 
@@ -61,8 +63,18 @@ export function ExcuseUploadModal({ open, attendanceDate, submitting, onClose, o
   }
 
   function handleSubmit() {
-    if (!file || submitting) return
-    onSubmit({ reasonText: reasonText.trim(), file })
+    if (submitting) return
+    const reason = reasonText.trim()
+    if (!reason) {
+      setFormError('نص سبب الغياب مطلوب')
+      return
+    }
+    if (!file) {
+      setFormError('يرجى إرفاق صورة أو ملف للعذر')
+      return
+    }
+    setFormError(null)
+    onSubmit({ reasonText: reason, file })
   }
 
   return (
@@ -134,21 +146,31 @@ export function ExcuseUploadModal({ open, attendanceDate, submitting, onClose, o
         )}
 
         <label className="block text-sm">
-          <span className="text-slate-600 dark:text-slate-400">سبب الغياب (اختياري)</span>
+          <span className="text-slate-600 dark:text-slate-400">سبب الغياب</span>
           <textarea
             value={reasonText}
-            onChange={(e) => setReasonText(e.target.value)}
+            onChange={(e) => {
+              setReasonText(e.target.value)
+              if (formError) setFormError(null)
+            }}
             rows={3}
+            required
             placeholder="مثال: زيارة طبية، وسيتم إرفاق التقرير…"
             className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
           />
         </label>
 
+        {formError && (
+          <p className="text-sm text-red-600 dark:text-red-400" role="alert">
+            {formError}
+          </p>
+        )}
+
         <div className="flex gap-2 pt-1">
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={!file || submitting}
+            disabled={submitting}
             className={buttonVariants({ variant: 'primary', className: 'flex-1' })}
           >
             {submitting && <span className={SPINNER_CLASS} aria-hidden="true" />}

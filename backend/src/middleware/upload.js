@@ -21,7 +21,7 @@ fs.mkdirSync(ATTACHMENT_DIR, { recursive: true });
 const ALLOWED_LOGO_MIME = new Map([
   ['image/png', '.png'],
   ['image/jpeg', '.jpg'],
-  ['image/svg+xml', '.svg'],
+  // SVG omitted — can embed scripts and is an XSS risk when served same-origin.
 ]);
 const MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 

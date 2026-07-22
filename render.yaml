@@ -21,8 +21,8 @@ services:
     runtime: node
     plan: free
     region: oregon
-    # NODE_ENV=production would skip frontend devDependencies (tsc/vite/types).
-    buildCommand: npm install --include=dev && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npx prisma generate && npm run build -w frontend
+    # Keep in sync with scripts/render-build.sh (single source of build steps).
+    buildCommand: chmod +x scripts/render-build.sh && ./scripts/render-build.sh
     startCommand: node scripts/start.js
     healthCheckPath: /health
     envVars:

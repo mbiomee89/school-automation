@@ -90,7 +90,7 @@ export interface TeacherDailyWorkflowProps {
   /** Switch the active class+subject assignment */
   onSelectAssignment?: (assignmentId: number) => void
   /** Save (or re-save) today's full attendance list in one action */
-  onSaveAttendance?: (marks: AttendanceMark[]) => void
+  onSaveAttendance?: (marks: AttendanceMark[]) => void | Promise<void>
   /** Log a new late arrival for a roster student */
   onAddLateReport?: (entry: { studentId: string; time: string; reason?: string | null }) => void
   /** Edit an existing late report logged today */

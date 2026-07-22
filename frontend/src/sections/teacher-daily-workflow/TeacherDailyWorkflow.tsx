@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useMemo, useState } from 'react'
 import {
   ClipboardCheck,
   AlarmClock,
@@ -86,7 +86,6 @@ export function TeacherDailyWorkflow({
   )
   const [savingAttendance, setSavingAttendance] = useState(false)
   const [justSavedAt, setJustSavedAt] = useState<string | null>(null)
-  const attendanceSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   if (syncedAssignmentId !== activeAssignmentId) {
     setSyncedAssignmentId(activeAssignmentId)
@@ -105,12 +104,6 @@ export function TeacherDailyWorkflow({
   }
   const planForViewedWeek = viewedWeekStart === currentWeekStart ? weeklyPlan : null
 
-  useEffect(() => {
-    return () => {
-      if (attendanceSaveTimeout.current) clearTimeout(attendanceSaveTimeout.current)
-    }
-  }, [])
-
   function switchTab(next: TeacherTab) {
     setTab(next)
     onTabChange?.(next)
@@ -128,16 +121,22 @@ export function TeacherDailyWorkflow({
 
   function handleSaveAttendance() {
     if (savingAttendance) return
-    setSavingAttendance(true)
-    const marks: AttendanceMark[] = roster.map((student) => ({
-      studentId: student.id,
-      status: draftMarks[student.id] ?? 'PRESENT',
-    }))
-    onSaveAttendance?.(marks)
-    attendanceSaveTimeout.current = setTimeout(() => {
-      setSavingAttendance(false)
-      setJustSavedAt(new Date().toISOString())
-    }, 600)
+    void (async () => {
+      setSavingAttendance(true)
+      setJustSavedAt(null)
+      const marks: AttendanceMark[] = roster.map((student) => ({
+        studentId: student.id,
+        status: draftMarks[student.id] ?? 'PRESENT',
+      }))
+      try {
+        await onSaveAttendance?.(marks)
+        setJustSavedAt(new Date().toISOString())
+      } catch {
+        // Caller surfaces the error (alert); do not show a false success.
+      } finally {
+        setSavingAttendance(false)
+      }
+    })()
   }
 
   const effectiveSavedAt = justSavedAt ?? attendanceSavedAt

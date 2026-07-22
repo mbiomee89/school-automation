@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build for Render (no DB access during build — see startCommand in render.yaml).
+# Build for Render (no DB access during build — see scripts/start.js).
+# Invoked by render.yaml buildCommand — keep these in sync.
 set -euo pipefail
 
 echo "==> Switching Prisma provider to PostgreSQL for this build"

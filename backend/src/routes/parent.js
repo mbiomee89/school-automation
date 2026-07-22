@@ -308,7 +308,7 @@ router.get(
         status: a.reasonStatus,
         submittedAt: a.reasonSubmittedAt?.toISOString() ?? a.createdAt.toISOString(),
         reviewedAt: a.reasonReviewedAt?.toISOString() ?? null,
-        counselorNote: null,
+        counselorNote: a.counselorNote ?? null,
       })),
     });
   })
@@ -348,7 +348,7 @@ router.post(
           ? req.body.reasonText.trim()
           : '';
 
-    if (!reason) throw badRequest('Reason text is required');
+    if (!reason) throw badRequest('نص سبب الغياب مطلوب');
 
     let attachmentRelative = null;
     if (req.file) {
@@ -368,6 +368,7 @@ router.post(
         reasonStatus: 'PENDING_REVIEW',
         reasonReviewedBy: null,
         reasonReviewedAt: null,
+        counselorNote: null,
       },
     });
 
