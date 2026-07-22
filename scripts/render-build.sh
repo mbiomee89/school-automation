@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build for Render: Postgres schema + Prisma client + frontend + seed demo users.
+# Build for Render (no DB access during build — see startCommand in render.yaml).
 set -euo pipefail
 
 echo "==> Switching Prisma provider to PostgreSQL for this build"
@@ -8,12 +8,8 @@ sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
 echo "==> Installing dependencies"
 npm install
 
-echo "==> Generating Prisma client + pushing schema"
+echo "==> Generating Prisma client"
 npx prisma generate --schema=prisma/schema.prisma
-npx prisma db push --schema=prisma/schema.prisma --accept-data-loss
-
-echo "==> Seeding demo accounts (idempotent upserts)"
-node prisma/seed.js
 
 echo "==> Building frontend"
 npm run build -w frontend

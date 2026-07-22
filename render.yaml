@@ -18,8 +18,10 @@ services:
     runtime: node
     plan: free
     region: frankfurt
-    buildCommand: npm install && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npx prisma generate && npx prisma db push --accept-data-loss && node prisma/seed.js && npm run build -w frontend
-    startCommand: node backend/src/server.js
+    # Build has no private-network DB access — only generate client + frontend here.
+    # db push/seed run at start (when DATABASE_URL/internal host is reachable).
+    buildCommand: npm install && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npx prisma generate && npm run build -w frontend
+    startCommand: npx prisma db push --accept-data-loss && node prisma/seed.js && node backend/src/server.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
