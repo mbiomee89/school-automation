@@ -360,7 +360,7 @@ export function AdminDashboard({
     setShowStaffModal(true)
   }
 
-  function submitStaffForm() {
+  async function submitStaffForm() {
     if (!staffForm.name.trim() || !staffForm.email.trim()) {
       setStaffFormError('الاسم والبريد مطلوبان.')
       return
@@ -371,14 +371,18 @@ export function AdminDashboard({
       return
     }
     setStaffFormError(null)
-    onCreateStaff?.({
-      ...staffForm,
-      name: staffForm.name.trim(),
-      email: staffForm.email.trim(),
-      password,
-      phone: staffForm.phone?.trim() || null,
-    })
-    setShowStaffModal(false)
+    try {
+      await onCreateStaff?.({
+        ...staffForm,
+        name: staffForm.name.trim(),
+        email: staffForm.email.trim(),
+        password,
+        phone: staffForm.phone?.trim() || null,
+      })
+      setShowStaffModal(false)
+    } catch {
+      setStaffFormError('تعذّر حفظ الموظف — راجع البيانات أو جرّب بريداً آخر.')
+    }
   }
 
   function pairKey(classId: number, subjectId: number) {
@@ -1909,7 +1913,8 @@ export function AdminDashboard({
         open={showStaffModal}
         onClose={() => setShowStaffModal(false)}
         title="إضافة موظف جديد"
-        description="حدّد الدور (معلم / مرشد / إدارة) وكلمة مرور الدخول"
+        description="المعلم أو المرشد أو الإدارة — كلمة المرور مطلوبة لتسجيل الدخول"
+        maxWidthClassName="max-w-lg"
       >
         <form
           className="space-y-3"
@@ -1919,7 +1924,7 @@ export function AdminDashboard({
           }}
         >
           <label className="block text-sm">
-            <span className="text-slate-600 dark:text-slate-400">الاسم الكامل</span>
+            <span className="font-medium text-slate-700 dark:text-slate-300">الاسم الكامل</span>
             <input
               required
               value={staffForm.name}
@@ -1928,7 +1933,7 @@ export function AdminDashboard({
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600 dark:text-slate-400">البريد الإلكتروني</span>
+            <span className="font-medium text-slate-700 dark:text-slate-300">البريد الإلكتروني</span>
             <input
               required
               type="email"
@@ -1939,21 +1944,47 @@ export function AdminDashboard({
             />
           </label>
           <label className="block text-sm">
-            <span className="text-slate-600 dark:text-slate-400">كلمة المرور</span>
-            <input
-              required
-              type="text"
-              minLength={8}
-              value={staffForm.password ?? ''}
-              onChange={(e) => setStaffForm((s) => ({ ...s, password: e.target.value }))}
+            <span className="font-medium text-slate-700 dark:text-slate-300">الدور</span>
+            <select
+              value={staffForm.role}
+              onChange={(e) => setStaffForm((s) => ({ ...s, role: e.target.value as StaffRole }))}
               className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              dir="ltr"
-              autoComplete="new-password"
-            />
-            <span className="mt-1 block text-xs text-slate-400">8 أحرف على الأقل</span>
+            >
+              {(['TEACHER', 'COUNSELOR', 'ADMIN'] as StaffRole[]).map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_AR[r]}
+                </option>
+              ))}
+            </select>
           </label>
+          <div className="rounded-lg border-2 border-blue-200 bg-blue-50/80 p-3 dark:border-blue-800 dark:bg-blue-950/40">
+            <label className="block text-sm">
+              <span className="font-bold text-blue-900 dark:text-blue-100">
+                كلمة المرور <span className="text-red-600">*</span>
+              </span>
+              <input
+                required
+                type="text"
+                minLength={8}
+                value={staffForm.password ?? ''}
+                onChange={(e) => {
+                  setStaffFormError(null)
+                  setStaffForm((s) => ({ ...s, password: e.target.value }))
+                }}
+                className="mt-1 w-full rounded-md border border-blue-300 bg-white px-3 py-2.5 text-sm font-medium dark:border-blue-700 dark:bg-slate-900 dark:text-slate-100"
+                dir="ltr"
+                autoComplete="new-password"
+                placeholder="Password123!"
+              />
+              <span className="mt-1 block text-xs text-blue-800/80 dark:text-blue-200/80">
+                مطلوبة — 8 أحرف على الأقل (الافتراضي: Password123!)
+              </span>
+            </label>
+          </div>
           <label className="block text-sm">
-            <span className="text-slate-600 dark:text-slate-400">جوال الموظف (اختياري)</span>
+            <span className="font-medium text-slate-700 dark:text-slate-300">
+              جوال الموظف (اختياري)
+            </span>
             <input
               value={staffForm.phone ?? ''}
               onChange={(e) => setStaffForm((s) => ({ ...s, phone: e.target.value }))}
@@ -1962,20 +1993,6 @@ export function AdminDashboard({
               placeholder="+9665…"
               dir="ltr"
             />
-          </label>
-          <label className="block text-sm">
-            <span className="text-slate-600 dark:text-slate-400">الدور</span>
-            <select
-              value={staffForm.role}
-              onChange={(e) => setStaffForm((s) => ({ ...s, role: e.target.value as StaffRole }))}
-              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {(['ADMIN', 'TEACHER', 'COUNSELOR'] as StaffRole[]).map((r) => (
-                <option key={r} value={r}>
-                  {ROLE_AR[r]}
-                </option>
-              ))}
-            </select>
           </label>
           {staffFormError && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">

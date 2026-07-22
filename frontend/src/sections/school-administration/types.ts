@@ -244,8 +244,8 @@ export interface SchoolAdministrationProps {
   onSaveSubject?: (subject: SubjectInput & { id?: number }) => void
   /** Permanently delete a subject (backend blocks this if the subject has homework or weekly plans; any teacher assignments using the subject are removed automatically) */
   onRemoveSubject?: (subjectId: number) => void
-  /** Create staff account */
-  onCreateStaff?: (staff: StaffInput) => void
+  /** Create staff account — return a Promise so the modal can wait before closing */
+  onCreateStaff?: (staff: StaffInput) => void | Promise<void>
   /** Update staff fields / role */
   onUpdateStaff?: (staffId: number, patch: Partial<StaffInput>) => void
   /** Deactivate staff account */

@@ -271,6 +271,7 @@ export function AdministrationPage() {
           setStaff(await listUsers())
         } catch (err) {
           alertError(err, 'فشل إنشاء حساب الموظف')
+          throw err
         }
       }}
       onDeactivateStaff={async (staffId) => {
