@@ -16,6 +16,7 @@ import type {
   ReportsProps,
   ReportSummary,
   ReportType,
+  StudentHistoryReportDetail,
   WeeklyPlanReportDetail,
 } from './types'
 import { cn } from '../../shared/utils'
@@ -28,7 +29,8 @@ const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   HISTORY: History,
 }
 
-const STATUS_AR: Record<'ABSENT' | 'EXCUSED', string> = {
+const STATUS_AR: Record<'PRESENT' | 'ABSENT' | 'EXCUSED', string> = {
+  PRESENT: 'حاضر',
   ABSENT: 'غائب',
   EXCUSED: 'غياب بعذر',
 }
@@ -62,11 +64,17 @@ export function ReportsHub({
   lateArrivalsDetail,
   homeworkLogDetail,
   weeklyPlanDetail,
+  studentHistoryDetail,
+  studentSearchResults = [],
+  studentSearchQuery = '',
+  studentSearchLoading = false,
   activeReport: controlledActiveReport,
   onSelectReport,
   onCloseReport,
   onPrint,
   onFilterByDate,
+  onSearchStudent,
+  onSelectStudent,
 }: ReportsProps) {
   const [activeReport, setActiveReport] = useState<ReportType | null>(
     controlledActiveReport ?? null
@@ -226,9 +234,13 @@ export function ReportsHub({
             ) : currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail ? (
               <WeeklyPlanDetailView detail={weeklyPlanDetail} />
             ) : currentActive === 'STUDENT_HISTORY' ? (
-              <ReportSummarySheet
-                report={activeSummary}
-                note="تقرير سجل الطالب سيُضاف لاحقاً — اختر تقريراً آخر حالياً."
+              <StudentHistoryDetailView
+                detail={studentHistoryDetail}
+                searchQuery={studentSearchQuery}
+                searchResults={studentSearchResults}
+                searchLoading={studentSearchLoading}
+                onSearchStudent={onSearchStudent}
+                onSelectStudent={onSelectStudent}
               />
             ) : (
               <ReportSummarySheet report={activeSummary} />
@@ -383,6 +395,139 @@ function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
           r.topicsSummary,
         ])}
       />
+    </div>
+  )
+}
+
+function StudentHistoryDetailView({
+  detail,
+  searchQuery,
+  searchResults,
+  searchLoading,
+  onSearchStudent,
+  onSelectStudent,
+}: {
+  detail: StudentHistoryReportDetail | null | undefined
+  searchQuery: string
+  searchResults: Array<{ id: string; nameAr: string; className: string | null }>
+  searchLoading: boolean
+  onSearchStudent?: (query: string) => void
+  onSelectStudent?: (studentId: string) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 print:hidden dark:border-stone-800 dark:bg-stone-900">
+        <label className="block text-sm font-medium text-stone-700 dark:text-stone-200">
+          ابحث عن طالب (الاسم أو رقم الهوية)
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => onSearchStudent?.(e.target.value)}
+            placeholder="اكتب للبحث…"
+            className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-950"
+          />
+        </label>
+        {searchLoading && (
+          <p className="mt-2 text-xs text-stone-400">جارٍ البحث…</p>
+        )}
+        {!searchLoading && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
+          <p className="mt-2 text-xs text-stone-400">لا نتائج مطابقة.</p>
+        )}
+        {searchResults.length > 0 && (
+          <ul className="mt-3 max-h-48 overflow-y-auto rounded-md border border-stone-200 dark:border-stone-700">
+            {searchResults.map((s) => (
+              <li key={s.id} className="border-b border-stone-100 last:border-0 dark:border-stone-800">
+                <button
+                  type="button"
+                  onClick={() => onSelectStudent?.(s.id)}
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-stone-50 dark:hover:bg-stone-800"
+                >
+                  <span className="font-semibold">{s.nameAr}</span>
+                  <span className="text-xs text-stone-500" style={fontMono}>
+                    {s.className ?? 'بدون فصل'} · {s.id}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {!detail ? (
+        <ReportSummarySheet
+          report={{
+            type: 'STUDENT_HISTORY',
+            title: 'سجل طالب',
+            description: 'تاريخ الحضور والتأخر والفصول لطالب واحد',
+            iconHint: 'HISTORY',
+            context: 'اختر طالبًا من البحث أعلاه',
+            count: null,
+            lastGeneratedAt: null,
+          }}
+        />
+      ) : (
+        <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+          <ReportHeader
+            schoolName={detail.schoolName}
+            academicYear={detail.academicYear}
+            subtitle={`سجل الطالب · ${detail.student.nameAr}`}
+            dateLabel={detail.student.id}
+            generatedAt={detail.generatedAt}
+          />
+          <dl className="mb-6 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
+              <dt className="text-xs text-stone-500">الفصل الحالي</dt>
+              <dd className="mt-1 font-medium">{detail.student.currentClassName ?? '—'}</dd>
+            </div>
+            <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
+              <dt className="text-xs text-stone-500">جوال ولي الأمر</dt>
+              <dd className="mt-1 font-medium" style={fontMono}>
+                {detail.student.parentPhone}
+              </dd>
+            </div>
+            <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
+              <dt className="text-xs text-stone-500">الحالة</dt>
+              <dd className="mt-1 font-medium">{detail.student.isActive ? 'نشط' : 'موقوف'}</dd>
+            </div>
+          </dl>
+
+          <h3 className="mb-2 text-sm font-bold">سجل الالتحاق بالفصول</h3>
+          <SimpleTable
+            headers={['الفصل', 'العام', 'من', 'إلى']}
+            empty="لا يوجد سجل التحاق."
+            rows={detail.enrollments.map((e) => [
+              e.className + (e.isCurrent ? ' (حالي)' : ''),
+              e.academicYear,
+              e.startDate,
+              e.endDate ?? '—',
+            ])}
+          />
+
+          <h3 className="mb-2 mt-6 text-sm font-bold">الحضور والغياب</h3>
+          <SimpleTable
+            headers={['التاريخ', 'الفصل', 'الحالة', 'العذر']}
+            empty="لا يوجد سجل حضور."
+            rows={detail.attendance.map((a) => [
+              a.date,
+              a.className,
+              STATUS_AR[a.status] ?? a.status,
+              a.absenceReason || '—',
+            ])}
+          />
+
+          <h3 className="mb-2 mt-6 text-sm font-bold">التأخر</h3>
+          <SimpleTable
+            headers={['التاريخ', 'الفصل', 'الوقت', 'السبب']}
+            empty="لا يوجد سجل تأخر."
+            rows={detail.lateArrivals.map((l) => [
+              l.date,
+              l.className,
+              formatTime(l.time),
+              l.reason || '—',
+            ])}
+          />
+        </div>
+      )}
     </div>
   )
 }

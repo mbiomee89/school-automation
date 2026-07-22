@@ -94,12 +94,62 @@ export interface WeeklyPlanReportDetail {
   count: number
 }
 
+export interface StudentHistoryReportDetail {
+  schoolName: string
+  academicYear: string
+  generatedAt?: string
+  student: {
+    id: string
+    nameAr: string
+    nameEn: string
+    parentPhone: string
+    isActive: boolean
+    currentClassName: string | null
+    currentAcademicYear: string | null
+  }
+  attendance: Array<{
+    id: number
+    date: string
+    period: string
+    status: 'PRESENT' | 'ABSENT' | 'EXCUSED'
+    className: string
+    reasonStatus: string
+    absenceReason: string | null
+  }>
+  lateArrivals: Array<{
+    id: number
+    date: string
+    time: string
+    className: string
+    reason: string | null
+  }>
+  enrollments: Array<{
+    id: number
+    className: string
+    academicYear: string
+    startDate: string
+    endDate: string | null
+    isCurrent: boolean
+  }>
+  count: number
+}
+
+export interface StudentSearchOption {
+  id: string
+  nameAr: string
+  className: string | null
+}
+
 export interface ReportsProps {
   reports: ReportSummary[]
   dailyAbsenceDetail?: DailyAbsenceReportDetail | null
   lateArrivalsDetail?: LateArrivalsReportDetail | null
   homeworkLogDetail?: HomeworkLogReportDetail | null
   weeklyPlanDetail?: WeeklyPlanReportDetail | null
+  studentHistoryDetail?: StudentHistoryReportDetail | null
+  studentSearchResults?: StudentSearchOption[]
+  studentSearchQuery?: string
+  studentSearchLoading?: boolean
   /** Currently opened report, for controlled preview. */
   activeReport?: ReportType | null
   /** Open a report's detail/printable view */
@@ -112,4 +162,8 @@ export interface ReportsProps {
   onFilterByDate?: (type: ReportType, date: string) => void
   /** Change the week scope for week-based reports (homework log, weekly plan) */
   onFilterByWeek?: (type: ReportType, weekStart: string) => void
+  /** Search students for the student-history report */
+  onSearchStudent?: (query: string) => void
+  /** Load student history for a selected student id */
+  onSelectStudent?: (studentId: string) => void
 }

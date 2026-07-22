@@ -9,6 +9,7 @@ import type {
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
   ReportSummary,
+  StudentHistoryReportDetail,
   WeeklyPlanReportDetail,
 } from '../sections/reports/types'
 
@@ -61,6 +62,22 @@ export async function getHomeworkLogReport(date: string): Promise<HomeworkLogRep
 
 export async function getWeeklyPlanReport(date: string): Promise<WeeklyPlanReportDetail> {
   return apiRequest(`/reports/weekly-plan?date=${encodeURIComponent(date)}`)
+}
+
+export async function getStudentHistoryReport(studentId: string): Promise<StudentHistoryReportDetail> {
+  return apiRequest(`/reports/student-history?studentId=${encodeURIComponent(studentId)}`)
+}
+
+export async function searchStudentsForReport(q: string) {
+  const search = new URLSearchParams({ q, active: 'true' })
+  const data = await apiRequest<{
+    students: Array<{ id: string; nameAr: string; class: { name: string } | null }>
+  }>(`/students?${search}`)
+  return data.students.map((s) => ({
+    id: s.id,
+    nameAr: s.nameAr,
+    className: s.class?.name ?? null,
+  }))
 }
 
 export type { DateRangeFilter }

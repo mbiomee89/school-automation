@@ -4,6 +4,7 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateQuery } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
+import { notFound } from '../utils/errors.js';
 import { toUtcMidnight, weekStartSaturdayUtc } from '../utils/dates.js';
 
 const router = Router();
@@ -187,6 +188,115 @@ router.get(
         notes: r.notes,
       })),
       count: rows.length,
+    });
+  })
+);
+
+const studentHistoryQuery = z.object({
+  studentId: z.string().min(1),
+  from: z.string().optional(),
+  to: z.string().optional(),
+});
+
+/** GET /reports/student-history?studentId= — attendance, late, enrollments */
+router.get(
+  '/student-history',
+  validateQuery(studentHistoryQuery),
+  asyncHandler(async (req, res) => {
+    const studentId = req.query.studentId.trim();
+    const header = await schoolHeader();
+
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        nameAr: true,
+        nameEn: true,
+        parentPhone: true,
+        isActive: true,
+        class: { select: { name: true, academicYear: true } },
+      },
+    });
+    if (!student) throw notFound('الطالب غير موجود');
+
+    const attendanceWhere = { studentId };
+    if (req.query.from || req.query.to) {
+      attendanceWhere.date = {};
+      if (req.query.from) attendanceWhere.date.gte = toUtcMidnight(req.query.from);
+      if (req.query.to) attendanceWhere.date.lte = toUtcMidnight(req.query.to);
+    }
+
+    const lateWhere = { studentId };
+    if (req.query.from || req.query.to) {
+      lateWhere.date = {};
+      if (req.query.from) lateWhere.date.gte = toUtcMidnight(req.query.from);
+      if (req.query.to) lateWhere.date.lte = toUtcMidnight(req.query.to);
+    }
+
+    const [attendance, lateReports, enrollments] = await Promise.all([
+      prisma.attendance.findMany({
+        where: attendanceWhere,
+        include: { class: { select: { name: true } } },
+        orderBy: [{ date: 'desc' }, { period: 'asc' }],
+        take: 200,
+      }),
+      prisma.lateReport.findMany({
+        where: lateWhere,
+        include: { class: { select: { name: true } } },
+        orderBy: { date: 'desc' },
+        take: 100,
+      }),
+      prisma.classEnrollment.findMany({
+        where: { studentId },
+        include: { class: { select: { name: true } } },
+        orderBy: { startDate: 'desc' },
+      }),
+    ]);
+
+    const attendanceRows = attendance.map((a) => ({
+      id: a.id,
+      date: toUtcMidnight(a.date).toISOString().slice(0, 10),
+      period: a.period,
+      status: a.status,
+      className: a.class.name,
+      reasonStatus: a.reasonStatus,
+      absenceReason: a.absenceReason,
+    }));
+
+    const lateRows = lateReports.map((l) => ({
+      id: l.id,
+      date: toUtcMidnight(l.date).toISOString().slice(0, 10),
+      time: l.time.toISOString(),
+      className: l.class.name,
+      reason: l.reason,
+    }));
+
+    const enrollmentRows = enrollments.map((e) => ({
+      id: e.id,
+      className: e.class.name,
+      academicYear: e.academicYear,
+      startDate: toUtcMidnight(e.startDate).toISOString().slice(0, 10),
+      endDate: e.endDate ? toUtcMidnight(e.endDate).toISOString().slice(0, 10) : null,
+      isCurrent: e.endDate == null,
+    }));
+
+    res.json({
+      schoolName: header.schoolName,
+      academicYear: header.academicYear,
+      generatedAt: new Date().toISOString(),
+      student: {
+        id: student.id,
+        nameAr: student.nameAr,
+        nameEn: student.nameEn,
+        parentPhone: student.parentPhone,
+        isActive: student.isActive,
+        currentClassName: student.class?.name ?? null,
+        currentAcademicYear: student.class?.academicYear ?? null,
+      },
+      attendance: attendanceRows,
+      lateArrivals: lateRows,
+      enrollments: enrollmentRows,
+      count: attendanceRows.length + lateRows.length + enrollmentRows.length,
     });
   })
 );
