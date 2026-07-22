@@ -5,11 +5,14 @@
 # - Web service sleeps after ~15 min idle (first request ~30–60s)
 # - Free Postgres expires after 30 days
 # - Uploaded files are ephemeral (lost on redeploy)
+#
+# IMPORTANT: web service + Postgres must be in the SAME region or the
+# internal DATABASE_URL host (dpg-…-a) is unreachable (Prisma P1001).
 
 databases:
   - name: school-db
     plan: free
-    region: frankfurt
+    region: oregon
     postgresMajorVersion: "16"
 
 services:
@@ -17,7 +20,7 @@ services:
     name: school-automation
     runtime: node
     plan: free
-    region: frankfurt
+    region: oregon
     # NODE_ENV=production would skip frontend devDependencies (tsc/vite/types).
     buildCommand: npm install --include=dev && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npx prisma generate && npm run build -w frontend
     startCommand: npx prisma db push --accept-data-loss && node prisma/seed.js && node backend/src/server.js
