@@ -1686,17 +1686,22 @@ export function AdminDashboard({
                   إزالة جميع الطلاب من هذا الفصل بدلاً من حذفه
                 </button>
               </>
+            ) : !deleteClassTarget.canDelete ? (
+              <p className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                لا يمكن حذف <strong>{deleteClassTarget.name}</strong> رغم عدم وجود طلاب حالياً، لأن
+                لديه سجلات تاريخية (التحاق سابق أو حضور أو واجبات أو خطط). الفصول ذات السجل تُحفظ
+                عمداً ولا تُحذف.
+              </p>
             ) : (
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 سيتم حذف <strong>{deleteClassTarget.name}</strong> نهائياً. لن يمكن التراجع عن هذا
-                الإجراء. إذا كان لهذا الفصل سجل حضور أو واجبات أو خطط أسبوعية أو التحاق سابق، سيرفض
-                النظام الحذف تلقائياً حفاظاً على السجلات التاريخية.
+                الإجراء.
               </p>
             )}
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                disabled={deleteClassTarget.studentCount > 0}
+                disabled={!deleteClassTarget.canDelete}
                 className="flex-1 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => {
                   onRemoveClass?.(deleteClassTarget.id)

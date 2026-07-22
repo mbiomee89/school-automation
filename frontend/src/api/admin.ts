@@ -34,7 +34,15 @@ type ApiClass = {
   gradeLevel: string
   section: string | null
   academicYear: string
-  _count?: { students: number; assignments: number }
+  _count?: {
+    students: number
+    assignments?: number
+    attendance?: number
+    homework?: number
+    lateReports?: number
+    weeklyPlans?: number
+    enrollments?: number
+  }
 }
 
 type ApiUser = {
@@ -91,13 +99,21 @@ function mapStudent(s: ApiStudent): Student {
 }
 
 function mapClass(c: ApiClass): ClassItem {
+  const students = c._count?.students ?? 0
+  const history =
+    (c._count?.attendance ?? 0) +
+    (c._count?.homework ?? 0) +
+    (c._count?.lateReports ?? 0) +
+    (c._count?.weeklyPlans ?? 0) +
+    (c._count?.enrollments ?? 0)
   return {
     id: c.id,
     name: c.name,
     gradeLevel: c.gradeLevel,
     section: c.section,
     academicYear: c.academicYear,
-    studentCount: c._count?.students ?? 0,
+    studentCount: students,
+    canDelete: students === 0 && history === 0,
   }
 }
 

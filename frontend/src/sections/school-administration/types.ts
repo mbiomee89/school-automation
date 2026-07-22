@@ -55,6 +55,8 @@ export interface ClassItem {
   section: string | null
   academicYear: string
   studentCount: number
+  /** False when the class has current students or any historical records (cannot delete). */
+  canDelete: boolean
 }
 
 export interface Subject {

@@ -32,7 +32,17 @@ router.get(
       where,
       orderBy: [{ academicYear: 'desc' }, { gradeLevel: 'asc' }, { section: 'asc' }],
       include: {
-        _count: { select: { students: true, assignments: true } },
+        _count: {
+          select: {
+            students: true,
+            assignments: true,
+            attendance: true,
+            homework: true,
+            lateReports: true,
+            weeklyPlans: true,
+            enrollments: true,
+          },
+        },
       },
     });
     res.json({ classes });
@@ -118,23 +128,19 @@ router.delete(
         },
       },
     });
-    if (!counts) throw notFound('Class not found');
+    if (!counts) throw notFound('الفصل غير موجود');
 
-    const total =
-      counts._count.students +
-      counts._count.attendance +
-      counts._count.homework +
-      counts._count.lateReports +
-      counts._count.weeklyPlans +
-      counts._count.enrollments;
+    const blockers = [];
+    if (counts._count.students > 0) blockers.push(`${counts._count.students} طالباً ملتحقاً حالياً`);
+    if (counts._count.enrollments > 0) blockers.push(`${counts._count.enrollments} سجل التحاق سابق`);
+    if (counts._count.attendance > 0) blockers.push(`${counts._count.attendance} سجل حضور`);
+    if (counts._count.homework > 0) blockers.push(`${counts._count.homework} واجب`);
+    if (counts._count.lateReports > 0) blockers.push(`${counts._count.lateReports} تأخر`);
+    if (counts._count.weeklyPlans > 0) blockers.push(`${counts._count.weeklyPlans} خطة أسبوعية`);
 
-    if (total > 0) {
-      // Note: counts._count.students reflects Student.classId references — even
-      // after POST /:id/remove-all-students clears them, historical attendance/
-      // homework/lateReports/weeklyPlans/enrollments still block deletion by design
-      // (classes are meant to be superseded by next year's row, not deleted).
+    if (blockers.length > 0) {
       throw conflict(
-        'Class has students or records and cannot be deleted. Use POST /classes/:id/remove-all-students to unassign students first — historical records still block deletion by design.'
+        `لا يمكن حذف هذا الفصل لوجود سجلات مرتبطة به: ${blockers.join('، ')}. إن وُجد طلاب حالياً فأزلهم أولاً من الفصل. السجلات التاريخية تُحفظ عمداً ولا يُحذف الفصل.`
       );
     }
 
