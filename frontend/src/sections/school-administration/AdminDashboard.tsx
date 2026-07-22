@@ -85,7 +85,7 @@ const EMPTY_SUBJECT_FORM: SubjectInput = { nameAr: '', nameEn: '' }
 const EMPTY_STAFF_FORM: StaffInput = {
   name: '',
   email: '',
-  password: '',
+  password: 'Password123!',
   role: 'TEACHER',
   langPref: 'AR',
   phone: '',
@@ -190,6 +190,7 @@ export function AdminDashboard({
 
   const [staffForm, setStaffForm] = useState<StaffInput>(EMPTY_STAFF_FORM)
   const [showStaffModal, setShowStaffModal] = useState(false)
+  const [staffFormError, setStaffFormError] = useState<string | null>(null)
 
   const [showAssignmentModal, setShowAssignmentModal] = useState(false)
   const [assignmentTeacherId, setAssignmentTeacherId] = useState<number>(0)
@@ -354,16 +355,27 @@ export function AdminDashboard({
   }
 
   function openAddStaff() {
-    setStaffForm(EMPTY_STAFF_FORM)
+    setStaffFormError(null)
+    setStaffForm({ ...EMPTY_STAFF_FORM })
     setShowStaffModal(true)
   }
 
   function submitStaffForm() {
-    if (!staffForm.name.trim() || !staffForm.email.trim()) return
+    if (!staffForm.name.trim() || !staffForm.email.trim()) {
+      setStaffFormError('الاسم والبريد مطلوبان.')
+      return
+    }
+    const password = staffForm.password?.trim() ?? ''
+    if (password.length < 8) {
+      setStaffFormError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
+      return
+    }
+    setStaffFormError(null)
     onCreateStaff?.({
       ...staffForm,
       name: staffForm.name.trim(),
       email: staffForm.email.trim(),
+      password,
       phone: staffForm.phone?.trim() || null,
     })
     setShowStaffModal(false)
@@ -1897,7 +1909,7 @@ export function AdminDashboard({
         open={showStaffModal}
         onClose={() => setShowStaffModal(false)}
         title="إضافة موظف جديد"
-        description="سيتم إرسال بيانات الدخول للموظف بعد الإنشاء"
+        description="حدّد الدور (معلم / مرشد / إدارة) وكلمة مرور الدخول"
       >
         <form
           className="space-y-3"
@@ -1927,6 +1939,20 @@ export function AdminDashboard({
             />
           </label>
           <label className="block text-sm">
+            <span className="text-slate-600 dark:text-slate-400">كلمة المرور</span>
+            <input
+              required
+              type="text"
+              minLength={8}
+              value={staffForm.password ?? ''}
+              onChange={(e) => setStaffForm((s) => ({ ...s, password: e.target.value }))}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              dir="ltr"
+              autoComplete="new-password"
+            />
+            <span className="mt-1 block text-xs text-slate-400">8 أحرف على الأقل</span>
+          </label>
+          <label className="block text-sm">
             <span className="text-slate-600 dark:text-slate-400">جوال الموظف (اختياري)</span>
             <input
               value={staffForm.phone ?? ''}
@@ -1951,6 +1977,11 @@ export function AdminDashboard({
               ))}
             </select>
           </label>
+          {staffFormError && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/40 dark:text-red-300">
+              {staffFormError}
+            </p>
+          )}
           <div className="flex gap-2 pt-2">
             <button
               type="submit"

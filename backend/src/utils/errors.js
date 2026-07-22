@@ -36,8 +36,12 @@ export function conflict(message, details) {
  */
 export function errorHandler(err, _req, res, _next) {
   if (err instanceof ZodError) {
+    const fieldErrors = err.flatten().fieldErrors;
+    const first = Object.entries(fieldErrors)
+      .map(([field, msgs]) => `${field}: ${(msgs || []).join(', ')}`)
+      .find(Boolean);
     return res.status(400).json({
-      error: 'Validation failed',
+      error: first ? `بيانات غير صالحة — ${first}` : 'بيانات غير صالحة',
       details: err.flatten(),
     });
   }

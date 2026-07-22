@@ -205,12 +205,13 @@ export async function listUsers() {
 }
 
 export async function createUser(input: StaffInput) {
+  const password = input.password?.trim() || 'Password123!'
   const data = await apiRequest<{ user: ApiUser }>('/users', {
     method: 'POST',
     body: {
       name: input.name,
       email: input.email,
-      password: input.password,
+      password,
       role: input.role,
       langPref: input.langPref ?? 'AR',
       phone: input.phone || null,
