@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import {
   Printer,
   Search,
@@ -19,6 +19,7 @@ import type {
 } from './types'
 import { cn } from '../../shared/utils'
 import { Modal } from '../../shared/Modal'
+import { SPINNER_CLASS } from '../../shared/buttonVariants'
 
 const TABS: { id: CounselorTab; label: string; status: AbsenceReasonStatus }[] = [
   { id: 'pending', label: 'قيد المراجعة', status: 'PENDING_REVIEW' },
@@ -38,21 +39,19 @@ function statusBadgeClass(status: AbsenceReasonStatus) {
   return styles[status]
 }
 
-function isImageAttachment(url: string) {
-  return /\.(png|jpe?g|gif|webp)(\?|$)/i.test(url)
+function isImageMime(mime: string) {
+  return mime.startsWith('image/')
 }
 
-function isPdfAttachment(url: string) {
-  return /\.pdf(\?|$)/i.test(url)
+function isPdfMime(mime: string) {
+  return mime === 'application/pdf' || mime.includes('pdf')
 }
 
-function fileNameOf(url: string) {
-  try {
-    const path = url.split('?')[0] ?? url
-    return decodeURIComponent(path.split('/').pop() || 'attachment')
-  } catch {
-    return 'attachment'
-  }
+type LightboxState = {
+  objectUrl: string
+  mime: string
+  fileName: string
+  apiPath: string
 }
 
 export function CounselorReview({
@@ -62,7 +61,7 @@ export function CounselorReview({
   onSearchStudents,
   onFilterDateRange,
   onSelectItem,
-  onViewAttachment,
+  onResolveAttachment,
   onDownloadAttachment,
   onApprove,
   onReject,
@@ -74,9 +73,32 @@ export function CounselorReview({
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null)
+  const [attachmentBusy, setAttachmentBusy] = useState<string | null>(null)
   const [rejectTarget, setRejectTarget] = useState<AbsenceReasonItem | null>(null)
   const [rejectNote, setRejectNote] = useState('')
+
+  useEffect(() => {
+    return () => {
+      if (lightbox?.objectUrl.startsWith('blob:')) URL.revokeObjectURL(lightbox.objectUrl)
+    }
+  }, [lightbox])
+
+  async function openAttachment(apiPath: string) {
+    if (!onResolveAttachment) return
+    setAttachmentBusy(apiPath)
+    try {
+      const resolved = await onResolveAttachment(apiPath)
+      setLightbox((prev) => {
+        if (prev?.objectUrl.startsWith('blob:')) URL.revokeObjectURL(prev.objectUrl)
+        return { ...resolved, apiPath }
+      })
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'تعذّر عرض المرفق')
+    } finally {
+      setAttachmentBusy(null)
+    }
+  }
 
   const currentTab = controlledTab ?? tab
   const currentStatus = TABS.find((t) => t.id === currentTab)?.status ?? 'PENDING_REVIEW'
@@ -240,26 +262,27 @@ export function CounselorReview({
                     >
                       <div className="flex min-w-0 items-center gap-2 text-xs text-stone-700 dark:text-stone-200">
                         <Paperclip className="size-3.5 shrink-0" strokeWidth={1.5} />
-                        <span className="truncate" style={fontMono}>
-                          {fileNameOf(url)}
-                        </span>
+                        <span className="truncate">مرفق العذر</span>
                       </div>
                       <div className="flex shrink-0 gap-1.5">
                         <button
                           type="button"
-                          onClick={() => {
-                            setLightboxUrl(url)
-                            onViewAttachment?.(url)
-                          }}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-lime-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-lime-950/30"
+                          disabled={attachmentBusy === url}
+                          onClick={() => void openAttachment(url)}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-lime-50 disabled:opacity-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-lime-950/30"
                         >
-                          <Eye className="size-3.5" strokeWidth={1.5} />
+                          {attachmentBusy === url ? (
+                            <span className={SPINNER_CLASS} aria-hidden="true" />
+                          ) : (
+                            <Eye className="size-3.5" strokeWidth={1.5} />
+                          )}
                           عرض
                         </button>
                         <button
                           type="button"
-                          onClick={() => onDownloadAttachment?.(url)}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-lime-500 px-2.5 py-1.5 text-xs font-semibold text-stone-950 hover:bg-lime-400"
+                          disabled={attachmentBusy === url}
+                          onClick={() => void onDownloadAttachment?.(url)}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-lime-500 px-2.5 py-1.5 text-xs font-semibold text-stone-950 hover:bg-lime-400 disabled:opacity-50"
                         >
                           <Download className="size-3.5" strokeWidth={1.5} />
                           تنزيل
@@ -569,37 +592,42 @@ export function CounselorReview({
       </Modal>
 
       <Modal
-        open={!!lightboxUrl}
-        onClose={() => setLightboxUrl(null)}
+        open={!!lightbox}
+        onClose={() => {
+          setLightbox((prev) => {
+            if (prev?.objectUrl.startsWith('blob:')) URL.revokeObjectURL(prev.objectUrl)
+            return null
+          })
+        }}
         title="المرفق"
         maxWidthClassName="max-w-lg"
       >
-        {lightboxUrl && (
+        {lightbox && (
           <div className="flex flex-col items-center gap-3">
-            {isImageAttachment(lightboxUrl) ? (
+            {isImageMime(lightbox.mime) ? (
               <img
-                src={lightboxUrl}
+                src={lightbox.objectUrl}
                 alt="مرفق العذر"
                 className="max-h-[60vh] w-full rounded-md border border-stone-200 object-contain dark:border-stone-700"
               />
-            ) : isPdfAttachment(lightboxUrl) ? (
+            ) : isPdfMime(lightbox.mime) ? (
               <iframe
-                title={fileNameOf(lightboxUrl)}
-                src={lightboxUrl}
+                title={lightbox.fileName}
+                src={lightbox.objectUrl}
                 className="h-[60vh] w-full rounded-md border border-stone-200 bg-white dark:border-stone-700"
               />
             ) : (
               <div className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-stone-300 bg-stone-50 p-8 text-stone-500 dark:border-stone-700 dark:bg-stone-900">
                 <Paperclip className="size-8" strokeWidth={1.5} />
                 <span className="text-sm" style={fontMono}>
-                  {fileNameOf(lightboxUrl)}
+                  {lightbox.fileName}
                 </span>
                 <p className="text-xs">معاينة هذا النوع غير متاحة — استخدم التنزيل</p>
               </div>
             )}
             <div className="flex w-full gap-2 print:hidden">
               <a
-                href={lightboxUrl}
+                href={lightbox.objectUrl}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
@@ -609,7 +637,7 @@ export function CounselorReview({
               </a>
               <button
                 type="button"
-                onClick={() => onDownloadAttachment?.(lightboxUrl)}
+                onClick={() => void onDownloadAttachment?.(lightbox.apiPath)}
                 className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-lime-400"
               >
                 <Download className="size-4" strokeWidth={1.5} />

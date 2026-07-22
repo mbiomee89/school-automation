@@ -227,7 +227,10 @@ model Attendance {
   // (User.role = COUNSELOR), not the class teacher, so this is intentionally
   // a plain User relation rather than scoped through TeacherAssignment.
   absenceReason        String?
-  absenceAttachmentUrl String?              // e.g. a photo of a medical note
+  absenceAttachmentUrl String?              // relative path under uploads (legacy / local disk)
+  /// Binary copy so attachments survive Render redeploys (ephemeral disk).
+  absenceAttachmentData Bytes?
+  absenceAttachmentMime String?
   reasonSubmittedAt    DateTime?
   reasonStatus         AbsenceReasonStatus  @default(NONE)
   reasonReviewedBy     Int?                 // must be a User with role = COUNSELOR (enforced at the application layer)

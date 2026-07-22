@@ -11,7 +11,11 @@ import {
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
 import { toUtcMidnight } from '../utils/dates.js';
-import { uploadPathToUrl } from '../middleware/upload.js';
+import {
+  counselorAttachmentApiPath,
+  hasExcuseAttachment,
+  sendExcuseAttachment,
+} from '../services/excuseAttachment.js';
 
 const router = Router();
 
@@ -30,7 +34,6 @@ const reviewSchema = z.object({
 });
 
 function serialize(row) {
-  const attachmentUrl = uploadPathToUrl(row.absenceAttachmentUrl);
   return {
     id: row.id,
     studentId: row.studentId,
@@ -38,7 +41,7 @@ function serialize(row) {
     className: row.class.name,
     absenceDate: toUtcMidnight(row.date).toISOString().slice(0, 10),
     reasonText: row.absenceReason ?? '',
-    attachments: attachmentUrl ? [attachmentUrl] : [],
+    attachments: hasExcuseAttachment(row) ? [counselorAttachmentApiPath(row.id)] : [],
     status: row.reasonStatus,
     submittedAt: row.reasonSubmittedAt?.toISOString() ?? row.createdAt.toISOString(),
     reviewedAt: row.reasonReviewedAt?.toISOString() ?? null,
@@ -85,6 +88,27 @@ router.get(
     const items = rows.filter((r) => r.reasonStatus !== 'NONE').map(serialize);
 
     res.json({ items });
+  })
+);
+
+/**
+ * GET /absence-reasons/:id/attachment?download=1
+ * Streams the excuse file from DB (or disk fallback).
+ */
+router.get(
+  '/:id/attachment',
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const attendance = await prisma.attendance.findUnique({ where: { id: req.params.id } });
+    if (!attendance) throw notFound('طلب العذر غير موجود');
+    if (!hasExcuseAttachment(attendance)) throw notFound('لا يوجد مرفق لهذا العذر');
+
+    const download =
+      req.query.download === '1' ||
+      req.query.download === 'true' ||
+      req.query.download === 'yes';
+
+    sendExcuseAttachment(res, attendance, { download });
   })
 );
 

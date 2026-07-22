@@ -4,7 +4,13 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, studentIdParam, idParam } from '../middleware/validate.js';
 import { requireParent } from '../middleware/auth.js';
-import { uploadAbsenceAttachment, uploadPathToUrl, deleteUploadFile } from '../middleware/upload.js';
+import { uploadAbsenceAttachment, deleteUploadFile } from '../middleware/upload.js';
+import {
+  hasExcuseAttachment,
+  parentAttachmentApiPath,
+  sendExcuseAttachment,
+} from '../services/excuseAttachment.js';
+import fs from 'fs';
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
 import { toUtcMidnight } from '../utils/dates.js';
 
@@ -127,11 +133,11 @@ router.get(
         lateMinutes: null,
         excuseStatus: a.reasonStatus,
         excuseNote: null,
-        hasExcuseAttachment: !!a.absenceAttachmentUrl,
+        hasExcuseAttachment: hasExcuseAttachment(a),
         absenceReason: a.absenceReason,
         reasonSubmittedAt: a.reasonSubmittedAt?.toISOString() ?? null,
         reasonReviewedAt: a.reasonReviewedAt?.toISOString() ?? null,
-        attachmentUrl: uploadPathToUrl(a.absenceAttachmentUrl),
+        attachmentUrl: hasExcuseAttachment(a) ? parentAttachmentApiPath(a.id) : null,
       };
     });
 
@@ -304,13 +310,38 @@ router.get(
         id: a.id,
         attendanceDate: toUtcMidnight(a.date).toISOString().slice(0, 10),
         reasonText: a.absenceReason ?? '',
-        attachmentUrl: uploadPathToUrl(a.absenceAttachmentUrl),
+        attachmentUrl: hasExcuseAttachment(a) ? parentAttachmentApiPath(a.id) : null,
         status: a.reasonStatus,
         submittedAt: a.reasonSubmittedAt?.toISOString() ?? a.createdAt.toISOString(),
         reviewedAt: a.reasonReviewedAt?.toISOString() ?? null,
         counselorNote: a.counselorNote ?? null,
       })),
     });
+  })
+);
+
+/**
+ * GET /parent/attendance/:id/attachment?download=1
+ */
+router.get(
+  '/attendance/:id/attachment',
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const attendance = await prisma.attendance.findUnique({
+      where: { id: req.params.id },
+      include: { student: true },
+    });
+    if (!attendance) throw notFound('سجل الغياب غير موجود');
+    if (attendance.student.parentPhone !== req.parentPhone || !attendance.student.isActive) {
+      throw forbidden('غير مصرح');
+    }
+    if (!hasExcuseAttachment(attendance)) throw notFound('لا يوجد مرفق');
+
+    const download =
+      req.query.download === '1' ||
+      req.query.download === 'true' ||
+      req.query.download === 'yes';
+    sendExcuseAttachment(res, attendance, { download });
   })
 );
 
@@ -351,8 +382,12 @@ router.post(
     if (!reason) throw badRequest('نص سبب الغياب مطلوب');
 
     let attachmentRelative = null;
+    let attachmentData = null;
+    let attachmentMime = null;
     if (req.file) {
       attachmentRelative = `absence-reasons/${req.file.filename}`;
+      attachmentData = fs.readFileSync(req.file.path);
+      attachmentMime = req.file.mimetype;
     }
 
     if (attendance.absenceAttachmentUrl && attachmentRelative) {
@@ -364,6 +399,12 @@ router.post(
       data: {
         absenceReason: reason,
         absenceAttachmentUrl: attachmentRelative ?? attendance.absenceAttachmentUrl,
+        ...(attachmentData
+          ? {
+              absenceAttachmentData: attachmentData,
+              absenceAttachmentMime: attachmentMime,
+            }
+          : {}),
         reasonSubmittedAt: new Date(),
         reasonStatus: 'PENDING_REVIEW',
         reasonReviewedBy: null,
@@ -377,7 +418,7 @@ router.post(
         id: updated.id,
         attendanceDate: toUtcMidnight(updated.date).toISOString().slice(0, 10),
         reasonText: updated.absenceReason,
-        attachmentUrl: uploadPathToUrl(updated.absenceAttachmentUrl),
+        attachmentUrl: hasExcuseAttachment(updated) ? parentAttachmentApiPath(updated.id) : null,
         status: updated.reasonStatus,
         submittedAt: updated.reasonSubmittedAt.toISOString(),
         reviewedAt: null,

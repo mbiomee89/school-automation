@@ -42,10 +42,15 @@ export interface CounselorReviewProps {
   onFilterDateRange?: (range: DateRangeFilter) => void
   /** Open a single case's detail view */
   onSelectItem?: (itemId: number) => void
-  /** Open an attachment full-size in a lightbox */
-  onViewAttachment?: (url: string) => void
+  /**
+   * Resolve an attachment API path into a local object URL + mime for preview.
+   * Required when attachments are behind JWT auth (not public /uploads).
+   */
+  onResolveAttachment?: (
+    apiPath: string
+  ) => Promise<{ objectUrl: string; mime: string; fileName: string }>
   /** Download an attachment file to the counselor's device */
-  onDownloadAttachment?: (url: string) => void
+  onDownloadAttachment?: (apiPath: string) => void | Promise<void>
   /** Approve a pending item — excuses the absence */
   onApprove?: (itemId: number) => void
   /** Reject a pending item, with an optional explanatory note */

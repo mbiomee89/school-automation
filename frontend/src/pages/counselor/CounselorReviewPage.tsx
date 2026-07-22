@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import { listAbsenceReasons, reviewAbsenceReason } from '../../api/counselor'
-import { ApiError } from '../../api/client'
+import { ApiError, getToken } from '../../api/client'
 import { CounselorReview } from '../../sections/counselor-review/CounselorReview'
 import type {
   AbsenceReasonItem,
@@ -18,31 +18,30 @@ const TAB_STATUS = {
   rejected: 'REJECTED',
 } as const
 
-function fileNameFromUrl(url: string) {
-  try {
-    const path = url.split('?')[0] ?? url
-    return decodeURIComponent(path.split('/').pop() || 'attachment')
-  } catch {
-    return 'attachment'
+async function fetchAttachment(apiPath: string, download: boolean) {
+  const token = getToken()
+  const url = download
+    ? `${apiPath}${apiPath.includes('?') ? '&' : '?'}download=1`
+    : apiPath
+  const res = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  })
+  if (!res.ok) {
+    let message = `تعذّر الوصول للمرفق (${res.status})`
+    try {
+      const data = (await res.json()) as { error?: string }
+      if (data.error) message = data.error
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message)
   }
-}
-
-/** Force a real file download (HTML download= often just opens the file in-tab). */
-async function downloadAttachmentFile(url: string) {
-  const res = await fetch(url, { credentials: 'same-origin' })
-  if (!res.ok) throw new Error(`تعذّر تنزيل المرفق (${res.status})`)
+  const mime = res.headers.get('Content-Type') || 'application/octet-stream'
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const match = /filename="([^"]+)"/i.exec(disposition)
+  const fileName = match?.[1] || `attachment-${Date.now()}`
   const blob = await res.blob()
-  const objectUrl = URL.createObjectURL(blob)
-  try {
-    const a = document.createElement('a')
-    a.href = objectUrl
-    a.download = fileNameFromUrl(url)
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-  } finally {
-    URL.revokeObjectURL(objectUrl)
-  }
+  return { blob, mime, fileName }
 }
 
 export function CounselorReviewPage() {
@@ -133,11 +132,24 @@ export function CounselorReviewPage() {
           window.alert(err instanceof ApiError ? err.message : 'فشل الرفض')
         }
       }}
-      // Lightbox is handled inside CounselorReview; no second window needed.
-      onViewAttachment={() => {}}
-      onDownloadAttachment={async (url) => {
+      onResolveAttachment={async (apiPath) => {
+        const { blob, mime, fileName } = await fetchAttachment(apiPath, false)
+        return { objectUrl: URL.createObjectURL(blob), mime, fileName }
+      }}
+      onDownloadAttachment={async (apiPath) => {
         try {
-          await downloadAttachmentFile(url)
+          const { blob, fileName } = await fetchAttachment(apiPath, true)
+          const objectUrl = URL.createObjectURL(blob)
+          try {
+            const a = document.createElement('a')
+            a.href = objectUrl
+            a.download = fileName
+            document.body.appendChild(a)
+            a.click()
+            a.remove()
+          } finally {
+            URL.revokeObjectURL(objectUrl)
+          }
         } catch (err) {
           window.alert(err instanceof Error ? err.message : 'فشل تنزيل المرفق')
         }
