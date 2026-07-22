@@ -305,6 +305,26 @@ export async function addAssignment(input: AssignmentInput) {
   return mapAssignment(data.assignment)
 }
 
+export async function syncTeacherAssignments(input: {
+  teacherId: number
+  classIds: number[]
+  items: Array<{ classId: number; subjectId: number }>
+}) {
+  const data = await apiRequest<{
+    created: number
+    removed: number
+    assignments: ApiAssignment[]
+  }>('/teacher-assignments/sync', {
+    method: 'POST',
+    body: input,
+  })
+  return {
+    created: data.created,
+    removed: data.removed,
+    assignments: data.assignments.map(mapAssignment),
+  }
+}
+
 export async function removeAssignment(id: number) {
   await apiRequest(`/teacher-assignments/${id}`, { method: 'DELETE' })
 }

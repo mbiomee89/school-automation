@@ -183,6 +183,13 @@ export interface AssignmentInput {
   subjectId: number
 }
 
+/** Sync many class×subject pairs for one teacher in a single save. */
+export interface AssignmentSyncInput {
+  teacherId: number
+  classIds: number[]
+  items: Array<{ classId: number; subjectId: number }>
+}
+
 export interface SchoolAdministrationProps {
   overviewStats: OverviewStats
   /** School profile shown in the settings tab and stamped on print headers. */
@@ -247,6 +254,8 @@ export interface SchoolAdministrationProps {
   onActivateStaff?: (staffId: number) => void
   /** Assign teacher to class+subject */
   onAddAssignment?: (assignment: AssignmentInput) => void
+  /** Sync multiple class×subject pairs for one teacher (matrix editor) */
+  onSyncAssignments?: (input: AssignmentSyncInput) => void | Promise<void>
   /** Remove a teacher assignment */
   onRemoveAssignment?: (assignmentId: number) => void
   /** Upload Noor StudentGuidance spreadsheet — classes are created automatically from the file */

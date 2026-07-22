@@ -19,7 +19,7 @@ import {
 } from 'lucide-react'
 import type {
   AdminTab,
-  AssignmentInput,
+  AssignmentSyncInput,
   ClassInput,
   ClassItem,
   SchoolAdministrationProps,
@@ -155,7 +155,7 @@ export function AdminDashboard({
   onCreateStaff,
   onDeactivateStaff,
   onActivateStaff,
-  onAddAssignment,
+  onSyncAssignments,
   onRemoveAssignment,
   onImportStudents,
   onImportTeachers,
@@ -191,8 +191,11 @@ export function AdminDashboard({
   const [staffForm, setStaffForm] = useState<StaffInput>(EMPTY_STAFF_FORM)
   const [showStaffModal, setShowStaffModal] = useState(false)
 
-  const [assignmentForm, setAssignmentForm] = useState<AssignmentInput | null>(null)
   const [showAssignmentModal, setShowAssignmentModal] = useState(false)
+  const [assignmentTeacherId, setAssignmentTeacherId] = useState<number>(0)
+  /** Checked classId:subjectId keys in the matrix editor */
+  const [assignmentChecks, setAssignmentChecks] = useState<Set<string>>(() => new Set())
+  const [assignmentSaving, setAssignmentSaving] = useState(false)
 
   const [yearFilter, setYearFilter] = useState(academicYearFilter ?? overviewStats.academicYear)
   const [importBusy, setImportBusy] = useState(false)
@@ -366,20 +369,57 @@ export function AdminDashboard({
     setShowStaffModal(false)
   }
 
-  function openAddAssignment() {
-    setAssignmentForm({
-      teacherId: activeTeachers[0]?.id ?? 0,
-      classId: currentYearClasses[0]?.id ?? 0,
-      subjectId: subjects[0]?.id ?? 0,
-    })
+  function pairKey(classId: number, subjectId: number) {
+    return `${classId}:${subjectId}`
+  }
+
+  function loadChecksForTeacher(teacherId: number) {
+    const next = new Set<string>()
+    for (const a of assignments) {
+      if (a.teacherId === teacherId && currentYearClasses.some((c) => c.id === a.classId)) {
+        next.add(pairKey(a.classId, a.subjectId))
+      }
+    }
+    setAssignmentChecks(next)
+  }
+
+  function openAddAssignment(teacherId?: number) {
+    const tid = teacherId ?? activeTeachers[0]?.id ?? 0
+    setAssignmentTeacherId(tid)
+    loadChecksForTeacher(tid)
     setShowAssignmentModal(true)
   }
 
-  function submitAssignmentForm() {
-    if (!assignmentForm) return
-    onAddAssignment?.(assignmentForm)
-    setShowAssignmentModal(false)
-    setAssignmentForm(null)
+  function toggleAssignmentCell(classId: number, subjectId: number) {
+    const key = pairKey(classId, subjectId)
+    setAssignmentChecks((prev) => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
+  async function submitAssignmentForm() {
+    if (!assignmentTeacherId || currentYearClasses.length === 0) return
+    const items: AssignmentSyncInput['items'] = []
+    for (const key of assignmentChecks) {
+      const [classId, subjectId] = key.split(':').map(Number)
+      if (currentYearClasses.some((c) => c.id === classId)) {
+        items.push({ classId, subjectId })
+      }
+    }
+    setAssignmentSaving(true)
+    try {
+      await onSyncAssignments?.({
+        teacherId: assignmentTeacherId,
+        classIds: currentYearClasses.map((c) => c.id),
+        items,
+      })
+      setShowAssignmentModal(false)
+    } finally {
+      setAssignmentSaving(false)
+    }
   }
 
   function submitSettingsForm() {
@@ -977,15 +1017,18 @@ export function AdminDashboard({
 
         {currentTab === 'assignments' && (
           <div className="space-y-3">
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                عيّن للمعلم عدة فصول ومواد دفعة واحدة من شبكة التوزيع.
+              </p>
               <button
                 type="button"
-                onClick={openAddAssignment}
+                onClick={() => openAddAssignment()}
                 disabled={activeTeachers.length === 0 || subjects.length === 0 || currentYearClasses.length === 0}
                 className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="size-4" strokeWidth={2} />
-                توزيع جديد
+                توزيع معلم (متعدد)
               </button>
             </div>
             {assignments.length === 0 ? (
@@ -993,26 +1036,63 @@ export function AdminDashboard({
                 لا يوجد توزيع معلمين بعد.
               </p>
             ) : (
-              assignments.map((a) => (
-                <div
-                  key={a.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                >
-                  <div>
-                    <div className="font-semibold">{a.teacherName}</div>
-                    <div className="text-sm text-slate-500">
-                      {a.className} · {a.subjectNameAr}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="text-xs text-red-600 underline"
-                    onClick={() => onRemoveAssignment?.(a.id)}
+              (() => {
+                const byTeacher = new Map<
+                  number,
+                  { teacherId: number; teacherName: string; items: typeof assignments }
+                >()
+                for (const a of assignments) {
+                  if (!byTeacher.has(a.teacherId)) {
+                    byTeacher.set(a.teacherId, {
+                      teacherId: a.teacherId,
+                      teacherName: a.teacherName,
+                      items: [],
+                    })
+                  }
+                  byTeacher.get(a.teacherId)!.items.push(a)
+                }
+                return [...byTeacher.values()].map((group) => (
+                  <div
+                    key={group.teacherId}
+                    className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100"
                   >
-                    إزالة
-                  </button>
-                </div>
-              ))
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 dark:border-slate-700">
+                      <div>
+                        <div className="font-semibold">{group.teacherName}</div>
+                        <div className="text-xs text-slate-500">
+                          {group.items.length} توزيعًا
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+                        onClick={() => openAddAssignment(group.teacherId)}
+                      >
+                        تعديل التوزيع
+                      </button>
+                    </div>
+                    <ul className="divide-y divide-slate-100 dark:divide-slate-700">
+                      {group.items.map((a) => (
+                        <li
+                          key={a.id}
+                          className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5"
+                        >
+                          <div className="text-sm">
+                            {a.className} · {a.subjectNameAr}
+                          </div>
+                          <button
+                            type="button"
+                            className="text-xs text-red-600 underline"
+                            onClick={() => onRemoveAssignment?.(a.id)}
+                          >
+                            إزالة
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              })()
             )}
           </div>
         )}
@@ -1879,84 +1959,106 @@ export function AdminDashboard({
       </Modal>
 
       <Modal
-        open={showAssignmentModal && !!assignmentForm}
+        open={showAssignmentModal}
         onClose={() => setShowAssignmentModal(false)}
-        title="توزيع معلم جديد"
-        description="اختر المعلم، الفصل، والمادة"
+        title="توزيع معلم على فصول ومواد"
+        description="اختر المعلم ثم علّم الخلايا (فصل × مادة). الحفظ يحدّث كل التوزيع دفعة واحدة."
+        maxWidthClassName="max-w-5xl"
       >
-        {assignmentForm && (
-          <form
-            className="space-y-3"
-            onSubmit={(e) => {
-              e.preventDefault()
-              submitAssignmentForm()
-            }}
-          >
-            <label className="block text-sm">
-              <span className="text-slate-600 dark:text-slate-400">المعلم</span>
-              <select
-                value={assignmentForm.teacherId}
-                onChange={(e) =>
-                  setAssignmentForm((f) => (f ? { ...f, teacherId: Number(e.target.value) } : f))
-                }
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                {activeTeachers.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="text-slate-600 dark:text-slate-400">الفصل</span>
-              <select
-                value={assignmentForm.classId}
-                onChange={(e) =>
-                  setAssignmentForm((f) => (f ? { ...f, classId: Number(e.target.value) } : f))
-                }
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                {currentYearClasses.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm">
-              <span className="text-slate-600 dark:text-slate-400">المادة</span>
-              <select
-                value={assignmentForm.subjectId}
-                onChange={(e) =>
-                  setAssignmentForm((f) => (f ? { ...f, subjectId: Number(e.target.value) } : f))
-                }
-                className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                {subjects.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nameAr}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="flex gap-2 pt-2">
-              <button
-                type="submit"
-                className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                حفظ التوزيع
-              </button>
-              <button
-                type="button"
-                className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600"
-                onClick={() => setShowAssignmentModal(false)}
-              >
-                إلغاء
-              </button>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void submitAssignmentForm()
+          }}
+        >
+          <label className="block text-sm">
+            <span className="text-slate-600 dark:text-slate-400">المعلم</span>
+            <select
+              value={assignmentTeacherId}
+              onChange={(e) => {
+                const tid = Number(e.target.value)
+                setAssignmentTeacherId(tid)
+                loadChecksForTeacher(tid)
+              }}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+            >
+              {activeTeachers.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700">
+            <div className="max-h-[50vh] overflow-auto">
+              <table className="w-full min-w-[32rem] border-collapse text-sm">
+                <thead className="sticky top-0 z-10 bg-slate-100 dark:bg-slate-900">
+                  <tr>
+                    <th className="sticky end-0 bg-slate-100 px-3 py-2 text-start font-semibold dark:bg-slate-900">
+                      الفصل
+                    </th>
+                    {subjects.map((s) => (
+                      <th
+                        key={s.id}
+                        className="min-w-[5.5rem] px-2 py-2 text-center font-medium"
+                        title={s.nameEn}
+                      >
+                        {s.nameAr}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {currentYearClasses.map((c) => (
+                    <tr key={c.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="sticky end-0 bg-white px-3 py-2 font-medium dark:bg-slate-800">
+                        {c.name}
+                      </td>
+                      {subjects.map((s) => {
+                        const checked = assignmentChecks.has(pairKey(c.id, s.id))
+                        return (
+                          <td key={s.id} className="px-2 py-2 text-center">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleAssignmentCell(c.id, s.id)}
+                              className="size-4 accent-blue-600"
+                              aria-label={`${c.name} — ${s.nameAr}`}
+                            />
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </form>
-        )}
+          </div>
+
+          <p className="text-xs text-slate-500">
+            المحدّد: {assignmentChecks.size} · إلغاء التحديد يحذف التوزيع عند الحفظ (لفصول العام
+            الحالي فقط).
+          </p>
+
+          <div className="flex gap-2 pt-1">
+            <button
+              type="submit"
+              disabled={assignmentSaving || !assignmentTeacherId}
+              className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+            >
+              {assignmentSaving ? 'جارٍ الحفظ…' : 'حفظ التوزيع'}
+            </button>
+            <button
+              type="button"
+              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600"
+              onClick={() => setShowAssignmentModal(false)}
+            >
+              إلغاء
+            </button>
+          </div>
+        </form>
       </Modal>
 
       <Modal

@@ -25,6 +25,7 @@ import {
   saveSchoolSettings,
   saveSubject,
   softRemoveStudent,
+  syncTeacherAssignments,
   unassignStudent,
   updateStudent,
   uploadSchoolLogo,
@@ -294,6 +295,18 @@ export function AdministrationPage() {
           setAssignments(await listAssignments())
         } catch (err) {
           alertError(err, 'فشل إضافة التوزيع')
+        }
+      }}
+      onSyncAssignments={async (input) => {
+        try {
+          const result = await syncTeacherAssignments(input)
+          setAssignments(await listAssignments())
+          if (result.created || result.removed) {
+            // silent success — list refresh is enough
+          }
+        } catch (err) {
+          alertError(err, 'فشل حفظ توزيع المعلم')
+          throw err
         }
       }}
       onRemoveAssignment={async (assignmentId) => {
