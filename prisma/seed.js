@@ -84,13 +84,12 @@ async function main() {
 
   await prisma.teacherAssignment.upsert({
     where: {
-      teacherId_classId_subjectId: {
-        teacherId: teacher.id,
+      classId_subjectId: {
         classId: cls.id,
         subjectId: mathSubject.id,
       },
     },
-    update: {},
+    update: { teacherId: teacher.id },
     create: {
       teacherId: teacher.id,
       classId: cls.id,
@@ -100,13 +99,12 @@ async function main() {
 
   await prisma.teacherAssignment.upsert({
     where: {
-      teacherId_classId_subjectId: {
-        teacherId: teacher.id,
+      classId_subjectId: {
         classId: cls.id,
         subjectId: arabicSubject.id,
       },
     },
-    update: {},
+    update: { teacherId: teacher.id },
     create: {
       teacherId: teacher.id,
       classId: cls.id,
