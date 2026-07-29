@@ -26,7 +26,7 @@ export interface OverviewStats {
 }
 
 /**
- * Singleton school profile: name, logo, academic year, principal, and address.
+ * Singleton school profile: name, logo, academic year, principal, education admin, and address.
  * Stamped on every printed report header (roster, overview, and future report
  * print views). Configured from the "إعدادات المدرسة" tab.
  */
@@ -35,6 +35,8 @@ export interface SchoolSettings {
   logoUrl: string | null
   academicYear: string
   principalName: string | null
+  /** إدارة التعليم — shown on report headers */
+  educationAdminName: string | null
   address: string | null
 }
 

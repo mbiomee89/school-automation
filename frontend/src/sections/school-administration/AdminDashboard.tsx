@@ -208,6 +208,7 @@ export function AdminDashboard({
     name: schoolSettings.name,
     academicYear: schoolSettings.academicYear,
     principalName: schoolSettings.principalName ?? '',
+    educationAdminName: schoolSettings.educationAdminName ?? '',
     address: schoolSettings.address ?? '',
   })
   const [logoPreview, setLogoPreview] = useState<string | null>(schoolSettings.logoUrl)
@@ -455,6 +456,7 @@ export function AdminDashboard({
       name: settingsForm.name.trim(),
       academicYear: settingsForm.academicYear.trim(),
       principalName: settingsForm.principalName.trim() || null,
+      educationAdminName: settingsForm.educationAdminName.trim() || null,
       address: settingsForm.address.trim() || null,
     })
   }
@@ -494,6 +496,11 @@ export function AdminDashboard({
             <h1 className="text-2xl font-bold">{schoolSettings.name}</h1>
             {schoolSettings.principalName && (
               <p className="text-sm text-slate-700">مدير المدرسة: {schoolSettings.principalName}</p>
+            )}
+            {schoolSettings.educationAdminName && (
+              <p className="text-sm text-slate-700">
+                إدارة التعليم: {schoolSettings.educationAdminName}
+              </p>
             )}
             {schoolSettings.address && <p className="text-sm text-slate-700">{schoolSettings.address}</p>}
             <p className="text-sm text-slate-700">العام الدراسي {schoolSettings.academicYear}</p>
@@ -1453,6 +1460,17 @@ export function AdminDashboard({
                   className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
                   style={fontMono}
                   placeholder="2026-2027"
+                />
+              </label>
+              <label className="block text-sm">
+                <span className="text-slate-600 dark:text-slate-400">إدارة التعليم</span>
+                <input
+                  value={settingsForm.educationAdminName}
+                  onChange={(e) =>
+                    setSettingsForm((s) => ({ ...s, educationAdminName: e.target.value }))
+                  }
+                  className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  placeholder="مثال: الإدارة العامة للتعليم بمنطقة الرياض"
                 />
               </label>
               <label className="block text-sm">

@@ -6,6 +6,7 @@ import { validateQuery } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { notFound } from '../utils/errors.js';
 import { toUtcMidnight, weekStartSaturdayUtc } from '../utils/dates.js';
+import { logoPathToUrl } from '../middleware/upload.js';
 
 const router = Router();
 
@@ -23,6 +24,8 @@ async function schoolHeader() {
     schoolName: settings?.name ?? 'المدرسة',
     academicYear: settings?.academicYear ?? '',
     principalName: settings?.principalName ?? null,
+    educationAdminName: settings?.educationAdminName ?? null,
+    logoUrl: logoPathToUrl(settings?.logoPath),
   };
 }
 
@@ -121,6 +124,9 @@ router.get(
       date: date.toISOString().slice(0, 10),
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
+      principalName: header.principalName,
       generatedAt: new Date().toISOString(),
       rows: rows.map((r) => ({
         id: r.id,
@@ -157,6 +163,9 @@ router.get(
       date: dateStr,
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
+      principalName: header.principalName,
       generatedAt: new Date().toISOString(),
       rows: rows.map((r) => ({
         studentId: r.studentId,
@@ -203,6 +212,8 @@ router.get(
       date: dateStr,
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
       principalName: header.principalName,
       generatedAt: new Date().toISOString(),
       rows,
@@ -252,6 +263,8 @@ router.get(
       weekEnd: weekEndStr,
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
       principalName: header.principalName,
       generatedAt: new Date().toISOString(),
       rows,
@@ -352,6 +365,9 @@ router.get(
     res.json({
       schoolName: header.schoolName,
       academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
+      principalName: header.principalName,
       generatedAt: new Date().toISOString(),
       student: {
         id: student.id,

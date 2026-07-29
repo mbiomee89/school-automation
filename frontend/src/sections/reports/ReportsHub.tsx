@@ -326,6 +326,8 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
       <ReportHeader
         schoolName={detail.schoolName}
         academicYear={detail.academicYear}
+        educationAdminName={detail.educationAdminName}
+        logoUrl={detail.logoUrl}
         subtitle="تقرير الغياب اليومي"
         dateLabel={detail.date}
         generatedAt={detail.generatedAt}
@@ -403,6 +405,8 @@ function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }
       <ReportHeader
         schoolName={detail.schoolName}
         academicYear={detail.academicYear}
+        educationAdminName={detail.educationAdminName}
+        logoUrl={detail.logoUrl}
         subtitle="تقرير التأخر"
         dateLabel={detail.date}
         generatedAt={detail.generatedAt}
@@ -442,6 +446,8 @@ function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) 
           key={cls.classId ?? cls.className}
           schoolName={detail.schoolName}
           academicYear={detail.academicYear}
+          educationAdminName={detail.educationAdminName}
+          logoUrl={detail.logoUrl}
           principalName={detail.principalName}
           metaLines={[`تاريخ الواجبات: ${detail.date}`]}
           title={`سجل الواجبات — ${cls.className}`}
@@ -485,6 +491,8 @@ function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
           key={cls.classId ?? cls.className}
           schoolName={detail.schoolName}
           academicYear={detail.academicYear}
+          educationAdminName={detail.educationAdminName}
+          logoUrl={detail.logoUrl}
           principalName={detail.principalName}
           metaLines={[
             `العام الدراسي ${detail.academicYear}`,
@@ -523,6 +531,8 @@ const PARENT_NOTE =
 function FormalClassSheet({
   schoolName,
   academicYear,
+  educationAdminName,
+  logoUrl,
   principalName,
   metaLines,
   title,
@@ -530,30 +540,48 @@ function FormalClassSheet({
 }: {
   schoolName: string
   academicYear: string
+  educationAdminName?: string | null
+  logoUrl?: string | null
   principalName?: string | null
   metaLines: string[]
   title: string
   children: ReactNode
 }) {
+  const adminLabel = educationAdminName?.trim() || 'الإدارة العامة للتعليم'
   return (
     <section
       className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:break-after-page print:shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
       style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
     >
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 dark:border-slate-800">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-slate-100 px-4 py-4 sm:px-6 dark:border-slate-800">
         <div className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-          <p>الإدارة العامة للتعليم</p>
+          <p className="font-semibold text-slate-800 dark:text-slate-100">{adminLabel}</p>
           <p className="mt-1 font-semibold text-slate-800 dark:text-slate-100">مدرسة {schoolName}</p>
           {academicYear ? (
             <p className="mt-1 text-xs text-slate-500">العام الدراسي {academicYear}</p>
           ) : null}
         </div>
-        <div className="min-w-[12rem] rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm">
-          {metaLines.map((line) => (
-            <p key={line} className="leading-6">
-              {line}
-            </p>
-          ))}
+        <div className="flex justify-center self-center">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={schoolName}
+              className="h-20 w-20 object-contain sm:h-24 sm:w-24"
+            />
+          ) : (
+            <div className="flex h-20 w-20 items-center justify-center rounded-full border border-dashed border-slate-300 text-[10px] text-slate-400 sm:h-24 sm:w-24">
+              الشعار
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end">
+          <div className="min-w-[10rem] rounded-xl bg-emerald-600 px-4 py-3 text-center text-sm font-semibold text-white shadow-sm">
+            {metaLines.map((line) => (
+              <p key={line} className="leading-6">
+                {line}
+              </p>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -762,6 +790,8 @@ function StudentHistoryDetailView({
           <ReportHeader
             schoolName={detail.schoolName}
             academicYear={detail.academicYear}
+            educationAdminName={detail.educationAdminName}
+            logoUrl={detail.logoUrl}
             subtitle={`سجل الطالب · ${detail.student.nameAr}`}
             dateLabel={detail.student.id}
             generatedAt={detail.generatedAt}
@@ -827,28 +857,45 @@ function StudentHistoryDetailView({
 function ReportHeader({
   schoolName,
   academicYear,
+  educationAdminName,
+  logoUrl,
   subtitle,
   dateLabel,
   generatedAt,
 }: {
   schoolName: string
   academicYear: string
+  educationAdminName?: string | null
+  logoUrl?: string | null
   subtitle: string
   dateLabel: string
   generatedAt?: string
 }) {
+  const adminLabel = educationAdminName?.trim() || 'الإدارة العامة للتعليم'
   return (
-    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-4 dark:border-slate-800">
-      <div>
-        <h2 className="text-lg font-bold">{schoolName}</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">
-          {subtitle} · العام الدراسي {academicYear}
+    <div className="mb-4 border-b border-slate-100 pb-4 dark:border-slate-800">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{adminLabel}</p>
+          <h2 className="text-lg font-bold">{schoolName}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {subtitle} · العام الدراسي {academicYear}
+          </p>
+          <p className="mt-1 text-xs text-slate-400">{formatGeneratedAt(generatedAt)}</p>
+        </div>
+        <div className="flex justify-center">
+          {logoUrl ? (
+            <img
+              src={logoUrl}
+              alt={schoolName}
+              className="h-16 w-16 object-contain sm:h-20 sm:w-20"
+            />
+          ) : null}
+        </div>
+        <p className="text-end text-sm text-slate-500" style={fontMono}>
+          {dateLabel}
         </p>
-        <p className="mt-1 text-xs text-slate-400">{formatGeneratedAt(generatedAt)}</p>
       </div>
-      <p className="text-sm text-slate-500" style={fontMono}>
-        {dateLabel}
-      </p>
     </div>
   )
 }

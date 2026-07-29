@@ -36,6 +36,7 @@ async function main() {
       name: 'المدرسة',
       academicYear: YEAR,
       principalName: null,
+      educationAdminName: null,
       address: null,
     },
   });

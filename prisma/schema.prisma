@@ -377,6 +377,8 @@ model SchoolSettings {
   logoPath      String?
   academicYear  String
   principalName String?
+  /// Education administration / directorate shown on printed report headers (إدارة التعليم)
+  educationAdminName String?
   address       String?
   updatedAt     DateTime @updatedAt
 }

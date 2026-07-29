@@ -176,6 +176,7 @@ export async function getSchoolSettings() {
       logoUrl: null,
       academicYear: '2026-2027',
       principalName: null,
+      educationAdminName: null,
       address: null,
     }
   )

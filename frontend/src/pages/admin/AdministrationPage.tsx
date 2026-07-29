@@ -66,6 +66,7 @@ export function AdministrationPage() {
     logoUrl: null,
     academicYear: '2026-2027',
     principalName: null,
+    educationAdminName: null,
     address: null,
   })
   const [staff, setStaff] = useState<Staff[]>([])

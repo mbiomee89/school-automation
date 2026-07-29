@@ -18,6 +18,7 @@ const settingsSchema = z.object({
   name: z.string().min(1),
   academicYear: z.string().min(1),
   principalName: z.string().optional().nullable(),
+  educationAdminName: z.string().optional().nullable(),
   address: z.string().optional().nullable(),
 });
 
@@ -28,6 +29,7 @@ function serialize(settings) {
       logoUrl: null,
       academicYear: null,
       principalName: null,
+      educationAdminName: null,
       address: null,
     };
   }
@@ -36,6 +38,7 @@ function serialize(settings) {
     logoUrl: logoPathToUrl(settings.logoPath),
     academicYear: settings.academicYear,
     principalName: settings.principalName,
+    educationAdminName: settings.educationAdminName,
     address: settings.address,
   };
 }
@@ -58,6 +61,7 @@ router.patch(
       name: req.body.name.trim(),
       academicYear: req.body.academicYear.trim(),
       principalName: req.body.principalName?.trim() || null,
+      educationAdminName: req.body.educationAdminName?.trim() || null,
       address: req.body.address?.trim() || null,
     };
 

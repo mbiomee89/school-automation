@@ -28,6 +28,15 @@ export interface ReportSummary {
 
 export type AbsenceRowStatus = 'ABSENT' | 'EXCUSED'
 
+/** Shared school branding stamped on every report payload. */
+export interface ReportBrandFields {
+  schoolName: string
+  academicYear: string
+  educationAdminName?: string | null
+  logoUrl?: string | null
+  principalName?: string | null
+}
+
 export interface DailyAbsenceRow {
   id?: number
   studentId: string
@@ -38,18 +47,14 @@ export interface DailyAbsenceRow {
   period?: string
 }
 
-export interface DailyAbsenceReportDetail {
+export interface DailyAbsenceReportDetail extends ReportBrandFields {
   date: string
-  schoolName: string
-  academicYear: string
   generatedAt?: string
   rows: DailyAbsenceRow[]
 }
 
-export interface LateArrivalsReportDetail {
+export interface LateArrivalsReportDetail extends ReportBrandFields {
   date: string
-  schoolName: string
-  academicYear: string
   generatedAt?: string
   rows: Array<{
     studentId: string
@@ -61,11 +66,8 @@ export interface LateArrivalsReportDetail {
   count: number
 }
 
-export interface HomeworkLogReportDetail {
+export interface HomeworkLogReportDetail extends ReportBrandFields {
   date: string
-  schoolName: string
-  academicYear: string
-  principalName?: string | null
   generatedAt?: string
   rows: Array<{
     id: number
@@ -96,13 +98,10 @@ export interface WeeklyPlanLessonRow {
   notes: string | null
 }
 
-export interface WeeklyPlanReportDetail {
+export interface WeeklyPlanReportDetail extends ReportBrandFields {
   date: string
   weekStart: string
   weekEnd?: string
-  schoolName: string
-  academicYear: string
-  principalName?: string | null
   generatedAt?: string
   rows: WeeklyPlanLessonRow[]
   classes?: Array<{
@@ -113,9 +112,7 @@ export interface WeeklyPlanReportDetail {
   count: number
 }
 
-export interface StudentHistoryReportDetail {
-  schoolName: string
-  academicYear: string
+export interface StudentHistoryReportDetail extends ReportBrandFields {
   generatedAt?: string
   student: {
     id: string
