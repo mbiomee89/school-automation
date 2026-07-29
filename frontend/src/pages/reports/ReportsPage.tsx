@@ -43,10 +43,13 @@ export function ReportsPage() {
   const [studentSearchLoading, setStudentSearchLoading] = useState(false)
   const [activeReport, setActiveReport] = useState<ReportType | null>(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [fatalError, setFatalError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const searchTimer = useRef<number | null>(null)
+  const loadGen = useRef(0)
 
   const load = useCallback(async (forDate: string) => {
+    const gen = ++loadGen.current
     const [summary, absence, late, homework, weekly] = await Promise.all([
       getReportsSummary(forDate),
       getDailyAbsenceReport(forDate),
@@ -54,7 +57,21 @@ export function ReportsPage() {
       getHomeworkLogReport(forDate),
       getWeeklyPlanReport(forDate),
     ])
-    setReports(summary)
+    if (gen !== loadGen.current) return
+    setReports((prev) => {
+      const hist = prev.find((r) => r.type === 'STUDENT_HISTORY')
+      return summary.map((r) => {
+        if (r.type === 'STUDENT_HISTORY' && hist?.lastGeneratedAt) {
+          return {
+            ...r,
+            context: hist.context,
+            count: hist.count,
+            lastGeneratedAt: hist.lastGeneratedAt,
+          }
+        }
+        return r
+      })
+    })
     setDailyAbsenceDetail(absence)
     setLateArrivalsDetail(late)
     setHomeworkLogDetail(homework)
@@ -65,11 +82,15 @@ export function ReportsPage() {
     let cancelled = false
     ;(async () => {
       setLoading(true)
+      setActionError(null)
       try {
         await load(date)
+        if (!cancelled) setFatalError(null)
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'تعذّر تحميل التقارير')
+          const message = err instanceof ApiError ? err.message : 'تعذّر تحميل التقارير'
+          if (reports.length === 0) setFatalError(message)
+          else setActionError(message)
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -78,6 +99,7 @@ export function ReportsPage() {
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reload when date changes
   }, [date, load])
 
   useEffect(() => {
@@ -88,6 +110,7 @@ export function ReportsPage() {
 
   function handleSearchStudent(query: string) {
     setStudentSearchQuery(query)
+    setActionError(null)
     if (searchTimer.current != null) window.clearTimeout(searchTimer.current)
     const trimmed = query.trim()
     if (trimmed.length < 2) {
@@ -100,8 +123,9 @@ export function ReportsPage() {
       try {
         const results = await searchStudentsForReport(trimmed)
         setStudentSearchResults(results.slice(0, 20))
-      } catch {
+      } catch (err) {
         setStudentSearchResults([])
+        setActionError(err instanceof ApiError ? err.message : 'تعذّر البحث عن الطلاب')
       } finally {
         setStudentSearchLoading(false)
       }
@@ -110,6 +134,7 @@ export function ReportsPage() {
 
   async function handleSelectStudent(studentId: string) {
     setStudentSearchLoading(true)
+    setActionError(null)
     try {
       const detail = await getStudentHistoryReport(studentId)
       setStudentHistoryDetail(detail)
@@ -128,13 +153,13 @@ export function ReportsPage() {
         )
       )
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'تعذّر تحميل سجل الطالب')
+      setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل سجل الطالب')
     } finally {
       setStudentSearchLoading(false)
     }
   }
 
-  if (loading && reports.length === 0 && !error) {
+  if (loading && reports.length === 0 && !fatalError) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <span className={SPINNER_CLASS} aria-label="جارٍ التحميل" />
@@ -142,13 +167,13 @@ export function ReportsPage() {
     )
   }
 
-  if (error) {
+  if (fatalError && reports.length === 0) {
     return (
       <EmptyState
         icon={AlertTriangle}
         tone="error"
         title="تعذّر تحميل التقارير"
-        description={error}
+        description={fatalError}
         actionLabel="إعادة المحاولة"
         onAction={() => window.location.reload()}
       />
@@ -166,10 +191,14 @@ export function ReportsPage() {
       studentSearchQuery={studentSearchQuery}
       studentSearchResults={studentSearchResults}
       studentSearchLoading={studentSearchLoading}
+      reportsLoading={loading}
+      actionError={actionError}
+      onDismissActionError={() => setActionError(null)}
       activeReport={activeReport}
       onSelectReport={setActiveReport}
       onCloseReport={() => setActiveReport(null)}
-      onFilterByDate={async (_type, nextDate) => {
+      onFilterByDate={(_type, nextDate) => {
+        if (!nextDate) return
         setDate(nextDate)
       }}
       onSearchStudent={handleSearchStudent}

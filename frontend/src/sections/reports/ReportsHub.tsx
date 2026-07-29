@@ -66,6 +66,9 @@ export function ReportsHub({
   studentSearchResults = [],
   studentSearchQuery = '',
   studentSearchLoading = false,
+  reportsLoading = false,
+  actionError = null,
+  onDismissActionError,
   activeReport: controlledActiveReport,
   onSelectReport,
   onCloseReport,
@@ -82,15 +85,23 @@ export function ReportsHub({
   )
   /** When set, open that report then trigger browser print once the detail is on screen. */
   const [pendingPrint, setPendingPrint] = useState<ReportType | null>(null)
+  const [printHint, setPrintHint] = useState<string | null>(null)
 
   const currentActive = controlledActiveReport ?? activeReport
   const activeSummary = reports.find((r) => r.type === currentActive) ?? null
 
   useEffect(() => {
+    const next = dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
+    if (next) setDateFilter(next)
+  }, [dailyAbsenceDetail?.date, weeklyPlanDetail?.date])
+
+  useEffect(() => {
     if (!pendingPrint) return
     if (currentActive !== pendingPrint) return
+    if (reportsLoading) return
     if (pendingPrint === 'STUDENT_HISTORY' && !studentHistoryDetail) {
       setPendingPrint(null)
+      setPrintHint('اختر طالبًا أولًا ثم اضغط طباعة.')
       return
     }
 
@@ -98,25 +109,29 @@ export function ReportsHub({
       window.print()
       onPrint?.(pendingPrint)
       setPendingPrint(null)
-    }, 150)
+    }, 200)
 
     return () => window.clearTimeout(timer)
-  }, [pendingPrint, currentActive, studentHistoryDetail, onPrint])
+  }, [pendingPrint, currentActive, studentHistoryDetail, onPrint, reportsLoading])
 
   function openReport(type: ReportType) {
+    setPrintHint(null)
     setActiveReport(type)
     onSelectReport?.(type)
   }
 
   function closeReport() {
     setPendingPrint(null)
+    setPrintHint(null)
     setActiveReport(null)
     onCloseReport?.()
   }
 
   function printReport(type: ReportType) {
+    setPrintHint(null)
     if (type === 'STUDENT_HISTORY' && !studentHistoryDetail) {
       openReport(type)
+      setPrintHint('اختر طالبًا من البحث أدناه ثم اضغط طباعة.')
       return
     }
     setPendingPrint(type)
@@ -156,7 +171,8 @@ export function ReportsHub({
             <button
               type="button"
               onClick={() => printReport(currentActive)}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 print:hidden"
+              disabled={!!pendingPrint || reportsLoading}
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 print:hidden"
             >
               <Printer className="size-4" strokeWidth={1.5} />
               طباعة
@@ -166,6 +182,32 @@ export function ReportsHub({
       </div>
 
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
+        {(actionError || printHint) && (
+          <div
+            className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 print:hidden dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+            role="status"
+          >
+            <span>{actionError || printHint}</span>
+            <button
+              type="button"
+              className="text-xs underline"
+              onClick={() => {
+                onDismissActionError?.()
+                setPrintHint(null)
+              }}
+            >
+              إغلاق
+            </button>
+          </div>
+        )}
+
+        {reportsLoading && (
+          <div className="mb-4 flex items-center gap-2 text-sm text-slate-500 print:hidden">
+            <span className="inline-block size-4 animate-spin rounded-full border-2 border-slate-300 border-t-blue-600" />
+            جارٍ تحديث التقرير…
+          </div>
+        )}
+
         {!currentActive && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
             {reports.map((report) => {
@@ -235,11 +277,12 @@ export function ReportsHub({
                   <input
                     type="date"
                     value={dateFilter}
+                    disabled={reportsLoading}
                     onChange={(e) => {
                       setDateFilter(e.target.value)
                       onFilterByDate?.(currentActive, e.target.value)
                     }}
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
                     style={fontMono}
                   />
                 </label>
@@ -294,7 +337,10 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
           </thead>
           <tbody>
             {detail.rows.map((row) => (
-              <tr key={row.studentId} className="border-t border-slate-100 dark:border-slate-800">
+              <tr
+                key={row.id ?? `${row.studentId}-${row.period ?? ''}-${row.date}`}
+                className="border-t border-slate-100 dark:border-slate-800"
+              >
                 <td className="px-3 py-2 font-semibold">{row.studentName}</td>
                 <td className="px-3 py-2">{row.className}</td>
                 <td className="px-3 py-2">
@@ -320,7 +366,7 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
       <div className="space-y-2 md:hidden">
         {detail.rows.map((row) => (
           <div
-            key={row.studentId}
+            key={row.id ?? `${row.studentId}-${row.period ?? ''}-${row.date}`}
             className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
           >
             <div className="flex items-center justify-between gap-2">

@@ -123,11 +123,13 @@ router.get(
       academicYear: header.academicYear,
       generatedAt: new Date().toISOString(),
       rows: rows.map((r) => ({
+        id: r.id,
         studentId: r.studentId,
         studentName: r.student.nameAr,
         className: r.class.name,
         date: date.toISOString().slice(0, 10),
         status: r.status,
+        period: r.period,
       })),
     });
   })
@@ -377,16 +379,26 @@ router.get(
     const dateStr = date.toISOString().slice(0, 10);
     const weekStart = weekStartSaturdayUtc(date);
 
-    const [absenceCount, lateCount, homeworkCount, weeklyPlanCount] = await Promise.all([
+    const [absenceCount, lateCount, homeworkCount, weeklyPlans] = await Promise.all([
       prisma.attendance.count({
         where: { date, status: { in: ['ABSENT', 'EXCUSED'] } },
       }),
       prisma.lateReport.count({ where: { date } }),
       prisma.homework.count({ where: { date } }),
-      prisma.weeklyPlan.count({
+      prisma.weeklyPlan.findMany({
         where: { weekStart },
+        select: { topics: true, classId: true, class: { select: { name: true } }, subject: { select: { nameAr: true } }, teacher: { select: { name: true } }, id: true },
       }),
     ]);
+
+    const weeklyLessonCount = weeklyPlans.flatMap((p) =>
+      expandWeeklyLessonRows({
+        ...p,
+        class: p.class,
+        subject: p.subject,
+        teacher: p.teacher,
+      })
+    ).length;
 
     res.json({
       date: dateStr,
@@ -424,7 +436,7 @@ router.get(
           description: 'خطط المواد للأسبوع الحالي',
           iconHint: 'CALENDAR_RANGE',
           context: weekStart.toISOString().slice(0, 10),
-          count: weeklyPlanCount,
+          count: weeklyLessonCount,
           lastGeneratedAt: new Date().toISOString(),
         },
         {

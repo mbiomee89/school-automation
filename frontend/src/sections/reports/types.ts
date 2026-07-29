@@ -29,11 +29,13 @@ export interface ReportSummary {
 export type AbsenceRowStatus = 'ABSENT' | 'EXCUSED'
 
 export interface DailyAbsenceRow {
+  id?: number
   studentId: string
   studentName: string
   className: string
   date: string
   status: AbsenceRowStatus
+  period?: string
 }
 
 export interface DailyAbsenceReportDetail {
@@ -167,6 +169,11 @@ export interface ReportsProps {
   studentSearchResults?: StudentSearchOption[]
   studentSearchQuery?: string
   studentSearchLoading?: boolean
+  /** True while date-scoped reports are reloading */
+  reportsLoading?: boolean
+  /** Inline non-fatal error (e.g. student history failed) — does not unmount the hub */
+  actionError?: string | null
+  onDismissActionError?: () => void
   /** Currently opened report, for controlled preview. */
   activeReport?: ReportType | null
   /** Open a report's detail/printable view */
