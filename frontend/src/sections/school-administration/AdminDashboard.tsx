@@ -17,6 +17,7 @@ import {
   Bell,
   BookOpen,
   RotateCcw,
+  Download,
 } from 'lucide-react'
 import type {
   AdminTab,
@@ -167,6 +168,7 @@ export function AdminDashboard({
   onPrint,
   onSaveSchoolSettings,
   onUploadSchoolLogo,
+  onBackupData,
   onResetAllData,
   onRestoreFromBackup,
 }: SchoolAdministrationProps) {
@@ -226,6 +228,7 @@ export function AdminDashboard({
   const [resetConfirmText, setResetConfirmText] = useState('')
   const [resetBusy, setResetBusy] = useState(false)
   const [restoreBusy, setRestoreBusy] = useState(false)
+  const [backupBusy, setBackupBusy] = useState(false)
 
   useEffect(() => {
     setSettingsForm({
@@ -538,6 +541,26 @@ export function AdminDashboard({
       setLogoPreview(schoolSettings.logoUrl)
       const message = err instanceof ApiError ? err.message : 'فشل رفع الشعار'
       setSettingsMessage({ type: 'err', text: message })
+    }
+  }
+
+  async function handleBackupOnly() {
+    if (!onBackupData || resetBusy || restoreBusy || backupBusy) return
+    setBackupBusy(true)
+    setSettingsMessage(null)
+    try {
+      const result = await onBackupData()
+      setSettingsMessage({
+        type: 'ok',
+        text: result?.backupFileName
+          ? `تم تنزيل النسخة الاحتياطية (${result.backupFileName}) دون حذف أي بيانات.`
+          : 'تم تنزيل النسخة الاحتياطية دون حذف أي بيانات.',
+      })
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'فشل إنشاء النسخة الاحتياطية'
+      setSettingsMessage({ type: 'err', text: message })
+    } finally {
+      setBackupBusy(false)
     }
   }
 
@@ -1639,6 +1662,25 @@ export function AdminDashboard({
             </form>
           </div>
 
+          <div className="max-w-xl rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-100">
+              <Download className="size-5" strokeWidth={1.5} />
+              نسخة احتياطية فقط
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              ينزّل ملف ZIP بكل البيانات التشغيلية دون حذف أي شيء. احفظه خارج القرص المؤقت للاستضافة.
+            </p>
+            <button
+              type="button"
+              onClick={() => void handleBackupOnly()}
+              disabled={!onBackupData || backupBusy || resetBusy || restoreBusy}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-900/80"
+            >
+              <Download className="size-4" strokeWidth={1.5} />
+              {backupBusy ? 'جارٍ إنشاء النسخة…' : 'تنزيل نسخة احتياطية ZIP'}
+            </button>
+          </div>
+
           <div className="max-w-xl rounded-lg border border-red-200 bg-white p-5 dark:border-red-900/60 dark:bg-slate-800 dark:text-slate-100">
             <h2 className="flex items-center gap-2 text-lg font-bold text-red-700 dark:text-red-300">
               <RotateCcw className="size-5" strokeWidth={1.5} />
@@ -1655,7 +1697,7 @@ export function AdminDashboard({
                 setResetConfirmText('')
                 setShowResetModal(true)
               }}
-              disabled={!onResetAllData || resetBusy || restoreBusy}
+              disabled={!onResetAllData || resetBusy || restoreBusy || backupBusy}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RotateCcw className="size-4" strokeWidth={1.5} />
@@ -1677,7 +1719,7 @@ export function AdminDashboard({
                   type="file"
                   accept=".zip,application/zip,.json,application/json"
                   className="hidden"
-                  disabled={!onRestoreFromBackup || restoreBusy || resetBusy}
+                  disabled={!onRestoreFromBackup || restoreBusy || resetBusy || backupBusy}
                   onChange={handleRestoreBackup}
                 />
               </label>

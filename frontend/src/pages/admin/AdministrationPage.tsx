@@ -31,6 +31,7 @@ import {
   uploadSchoolLogo,
   resetAllDataWithBackup,
   restoreDataFromBackupFile,
+  backupDataOnly,
   downloadBackupZip,
 } from '../../api/admin'
 import { ApiError } from '../../api/client'
@@ -354,6 +355,11 @@ export function AdministrationPage() {
         const logoUrl = await uploadSchoolLogo(file)
         setSchoolSettings((prev) => ({ ...prev, logoUrl }))
         return logoUrl
+      }}
+      onBackupData={async () => {
+        const result = await backupDataOnly()
+        downloadBackupZip(result.backupFileName, result.backupZipBase64)
+        return { backupFileName: result.backupFileName }
       }}
       onResetAllData={async () => {
         const result = await resetAllDataWithBackup()

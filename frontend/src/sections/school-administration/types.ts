@@ -277,6 +277,8 @@ export interface SchoolAdministrationProps {
   onSaveSchoolSettings?: (settings: Omit<SchoolSettings, 'logoUrl'>) => void | Promise<void>
   /** Upload a new school logo file; backend stores it under /uploads and returns the new logo URL/path */
   onUploadSchoolLogo?: (file: File) => void | Promise<string>
+  /** Download a ZIP backup of all data without wiping. */
+  onBackupData?: () => void | Promise<{ backupFileName: string }>
   /**
    * Backup all data (including report records) then wipe operational data,
    * keeping ADMIN accounts and school settings.

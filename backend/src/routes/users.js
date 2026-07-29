@@ -10,7 +10,13 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { tryNormalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { parseNoorTeachersSpreadsheet } from '../services/noorTeacherImport.js';
-import { backupAndResetData, restoreFromBackup, parseBackupUpload } from '../services/resetData.js';
+import {
+  backupAndResetData,
+  createDataBackup,
+  writeBackupFile,
+  restoreFromBackup,
+  parseBackupUpload,
+} from '../services/resetData.js';
 
 const router = Router();
 
@@ -262,6 +268,23 @@ router.patch(
 const resetSchema = z.object({
   confirm: z.literal('DELETE_ALL_EXCEPT_ADMIN'),
 });
+
+/** POST /users/backup-data — download ZIP backup only (no wipe) */
+router.post(
+  '/backup-data',
+  asyncHandler(async (_req, res) => {
+    const backup = await createDataBackup(prisma);
+    const stored = await writeBackupFile(backup);
+    res.json({
+      ok: true,
+      counts: backup.counts,
+      backupFileName: stored.fileName,
+      backupDownloadUrl: stored.downloadUrl,
+      // Base64 ZIP so the browser can download even if /uploads is delayed.
+      backupZipBase64: stored.zipBuffer.toString('base64'),
+    });
+  })
+);
 
 /** POST /users/reset-data — backup all data as ZIP, then wipe operational data (keep ADMIN) */
 router.post(

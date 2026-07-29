@@ -543,6 +543,22 @@ export async function parseStudentImportFile(file: File) {
   return rows
 }
 
+export type BackupDataResult = {
+  ok: boolean
+  counts: Record<string, unknown>
+  backupFileName: string
+  backupDownloadUrl: string
+  backupZipBase64: string
+}
+
+/** Download a ZIP backup of all operational data without wiping. */
+export async function backupDataOnly() {
+  return apiRequest<BackupDataResult>('/users/backup-data', {
+    method: 'POST',
+    body: {},
+  })
+}
+
 export type ResetDataResult = {
   ok: boolean
   summary: Record<string, unknown>

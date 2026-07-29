@@ -23,7 +23,7 @@ Uploaded files live on the web service disk and are **lost on every redeploy**:
 **Ops rules:**
 
 1. After every redeploy, open Settings and **re-upload the school logo** if missing.
-2. Treat the **browser-downloaded ZIP** as the real backup — keep it outside Render (local drive / cloud).
+2. Treat the **browser-downloaded ZIP** as the real backup — keep it outside Render (local drive / cloud). Prefer **Settings → تنزيل نسخة احتياطية ZIP** (`POST /api/users/backup-data`) for a backup **without** wiping; use reset only when you intend to wipe.
 3. Parent excuse attachments may need re-submit after a redeploy if the file is gone.
 
 ## Passwords
