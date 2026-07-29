@@ -1007,8 +1007,18 @@ export function AdminDashboard({
                 <tbody>
                   {staff.map((u) => (
                     <tr key={u.id} className="border-t border-slate-100 dark:border-slate-800">
-                      <td className="px-3 py-2 font-semibold">{u.name}</td>
-                      <td className="hidden px-3 py-2 text-slate-500 sm:table-cell">{u.email}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold">{u.name}</div>
+                        <div
+                          className="mt-0.5 break-all text-xs text-slate-500 sm:hidden"
+                          dir="ltr"
+                        >
+                          {u.email}
+                        </div>
+                      </td>
+                      <td className="hidden px-3 py-2 text-slate-500 sm:table-cell" dir="ltr">
+                        {u.email}
+                      </td>
                       <td className="px-3 py-2">
                         <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', roleBadge(u.role))}>
                           {ROLE_AR[u.role]}
