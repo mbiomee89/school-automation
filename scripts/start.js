@@ -1,6 +1,11 @@
 /**
  * Render start: validate DATABASE_URL, push schema, seed, then boot API.
  * Avoids cryptic Prisma P1001 when DATABASE_URL is missing/malformed.
+ *
+ * Schema apply: prefer `prisma migrate deploy` once a baseline migration exists
+ * for both sqlite (local) and postgres (Render sed in render-build.sh). Until
+ * then, `db push` WITHOUT `--accept-data-loss` to avoid silent drops.
+ * See docs/ops-hosting.md.
  */
 import { spawnSync } from 'child_process';
 import path from 'path';
@@ -60,8 +65,9 @@ describeDatabaseUrl(process.env.DATABASE_URL);
 console.log('[start] dedupe teacher assignments…');
 run('node', ['scripts/dedupe-teacher-assignments.js']);
 
+// No --accept-data-loss: refuse destructive schema drift rather than wipe data.
 console.log('[start] prisma db push…');
-run('npx', ['prisma', 'db', 'push', '--accept-data-loss', '--schema=prisma/schema.prisma']);
+run('npx', ['prisma', 'db', 'push', '--schema=prisma/schema.prisma']);
 
 console.log('[start] seed…');
 run('node', ['prisma/seed.js']);

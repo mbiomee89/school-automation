@@ -4,10 +4,15 @@
 # Free limits (testing):
 # - Web service sleeps after ~15 min idle (first request ~30–60s)
 # - Free Postgres expires after 30 days
-# - Uploaded files are ephemeral (lost on redeploy)
+# - Uploaded files are ephemeral (lost on redeploy) — re-upload logo;
+#   keep ZIP backups locally. See docs/ops-hosting.md.
+#
+# Start (scripts/start.js): prisma db push WITHOUT --accept-data-loss;
+# migrate deploy baseline deferred (sqlite local vs postgres on Render).
 #
 # IMPORTANT: web service + Postgres must be in the SAME region or the
 # internal DATABASE_URL host (dpg-…-a) is unreachable (Prisma P1001).
+# Prefer External DATABASE_URL if internal host fails (P1001).
 
 databases:
   - name: school-db
