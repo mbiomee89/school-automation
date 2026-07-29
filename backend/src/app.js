@@ -81,9 +81,12 @@ export function createApp() {
   app.use('/uploads', express.static(UPLOAD_ROOT));
   app.use('/api/uploads', express.static(UPLOAD_ROOT));
 
-  // Local Vite proxy strips `/api` → mount at root.
-  // Production frontend calls `/api/...` on the same host → also mount under `/api`.
-  mountApiRoutes(app, '');
+  // Local Vite proxy strips `/api` → mount APIs at root only in development.
+  // In production, mounting at root would steal SPA routes like GET /reports
+  // (browser refresh returns JSON auth errors instead of index.html).
+  if (process.env.NODE_ENV !== 'production') {
+    mountApiRoutes(app, '');
+  }
   mountApiRoutes(app, '/api');
 
   const hasFrontend = fs.existsSync(path.join(FRONTEND_DIST, 'index.html'));

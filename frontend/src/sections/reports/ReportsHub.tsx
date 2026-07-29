@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, type ReactNode } from 'react'
+﻿import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Printer,
   CalendarOff,
@@ -86,6 +86,8 @@ export function ReportsHub({
   /** When set, open that report then trigger browser print once the detail is on screen. */
   const [pendingPrint, setPendingPrint] = useState<ReportType | null>(null)
   const [printHint, setPrintHint] = useState<string | null>(null)
+  /** Guards against React effect re-runs opening the print dialog twice. */
+  const printStartedFor = useRef<ReportType | null>(null)
 
   const currentActive = controlledActiveReport ?? activeReport
   const activeSummary = reports.find((r) => r.type === currentActive) ?? null
@@ -104,15 +106,16 @@ export function ReportsHub({
       setPrintHint('اختر طالبًا أولًا ثم اضغط طباعة.')
       return
     }
+    if (printStartedFor.current === pendingPrint) return
 
     const timer = window.setTimeout(() => {
+      printStartedFor.current = pendingPrint
       window.print()
-      onPrint?.(pendingPrint)
       setPendingPrint(null)
-    }, 200)
+    }, 250)
 
     return () => window.clearTimeout(timer)
-  }, [pendingPrint, currentActive, studentHistoryDetail, onPrint, reportsLoading])
+  }, [pendingPrint, currentActive, studentHistoryDetail, reportsLoading])
 
   function openReport(type: ReportType) {
     setPrintHint(null)
@@ -123,6 +126,7 @@ export function ReportsHub({
   function closeReport() {
     setPendingPrint(null)
     setPrintHint(null)
+    printStartedFor.current = null
     setActiveReport(null)
     onCloseReport?.()
   }
@@ -134,6 +138,7 @@ export function ReportsHub({
       setPrintHint('اختر طالبًا من البحث أدناه ثم اضغط طباعة.')
       return
     }
+    printStartedFor.current = null
     setPendingPrint(type)
     setActiveReport(type)
     onSelectReport?.(type)
