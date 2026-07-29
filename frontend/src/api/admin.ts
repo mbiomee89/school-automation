@@ -548,7 +548,7 @@ export type ResetDataResult = {
   summary: Record<string, unknown>
   backupFileName: string
   backupDownloadUrl: string
-  backup: unknown
+  backupZipBase64: string
 }
 
 /** Backup all operational data then wipe everything except ADMIN accounts + school settings. */
@@ -566,7 +566,7 @@ export type RestoreDataResult = {
   defaultPassword: string
 }
 
-/** Upload a previously downloaded backup JSON and restore it (replaces current operational data). */
+/** Upload a previously downloaded backup ZIP/JSON and restore it. */
 export async function restoreDataFromBackupFile(file: File) {
   const form = new FormData()
   form.append('backup', file)
@@ -575,4 +575,20 @@ export async function restoreDataFromBackupFile(file: File) {
     method: 'POST',
     body: form,
   })
+}
+
+/** Decode base64 ZIP from reset response and trigger a browser download. */
+export function downloadBackupZip(fileName: string, base64: string) {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i)
+  const blob = new Blob([bytes], { type: 'application/zip' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = fileName || `school-backup-${Date.now()}.zip`
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }

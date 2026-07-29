@@ -282,6 +282,6 @@ export interface SchoolAdministrationProps {
    * keeping ADMIN accounts and school settings.
    */
   onResetAllData?: () => void | Promise<{ backupFileName: string }>
-  /** Restore platform data from a previously downloaded backup JSON file. */
+  /** Restore platform data from a previously downloaded backup ZIP/JSON file. */
   onRestoreFromBackup?: (file: File) => void | Promise<{ defaultPassword: string }>
 }

@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import JSZip from 'jszip';
 import { UPLOAD_ROOT } from '../middleware/upload.js';
 import { hashPassword } from './auth.js';
 import { badRequest } from '../utils/errors.js';
 
 const DEFAULT_RESTORED_PASSWORD = 'Password123!';
+const BACKUP_JSON_NAME = 'school-backup.json';
 
 function asDate(value) {
   if (value == null || value === '') return null;
@@ -131,18 +133,65 @@ export async function createDataBackup(prisma) {
   };
 }
 
-/** Persist backup under /uploads/backups and return public path + filename. */
-export function writeBackupFile(backup) {
+/** Persist backup as a compressed ZIP under /uploads/backups. */
+export async function writeBackupFile(backup) {
   const dir = path.join(UPLOAD_ROOT, 'backups');
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const fileName = `school-backup-${stamp}.json`;
+  const fileName = `school-backup-${stamp}.zip`;
   const absolute = path.join(dir, fileName);
-  fs.writeFileSync(absolute, JSON.stringify(backup, null, 2), 'utf8');
+
+  const zip = new JSZip();
+  zip.file(BACKUP_JSON_NAME, JSON.stringify(backup, null, 2));
+  const buffer = await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 9 },
+  });
+  fs.writeFileSync(absolute, buffer);
+
   return {
     fileName,
     downloadUrl: `/uploads/backups/${fileName}`,
+    zipBuffer: buffer,
   };
+}
+
+/**
+ * Parse an uploaded backup (.zip preferred, .json still accepted).
+ */
+export async function parseBackupUpload(buffer, originalName = '') {
+  const name = String(originalName || '').toLowerCase();
+  const looksZip =
+    name.endsWith('.zip') ||
+    (buffer.length >= 4 && buffer[0] === 0x50 && buffer[1] === 0x4b);
+
+  if (looksZip) {
+    let zip;
+    try {
+      zip = await JSZip.loadAsync(buffer);
+    } catch {
+      throw badRequest('تعذّر فتح ملف ZIP — قد يكون تالفاً');
+    }
+    const preferred = zip.file(BACKUP_JSON_NAME);
+    const jsonEntry =
+      preferred ||
+      Object.values(zip.files).find((f) => !f.dir && f.name.toLowerCase().endsWith('.json'));
+    if (!jsonEntry) {
+      throw badRequest('ملف ZIP لا يحتوي على school-backup.json');
+    }
+    try {
+      return JSON.parse(await jsonEntry.async('string'));
+    } catch {
+      throw badRequest('تعذّر قراءة JSON داخل ملف ZIP');
+    }
+  }
+
+  try {
+    return JSON.parse(buffer.toString('utf8'));
+  } catch {
+    throw badRequest('تعذّر قراءة ملف النسخة الاحتياطية');
+  }
 }
 
 /**
@@ -203,11 +252,11 @@ export async function resetDataKeepAdmin(prisma) {
 }
 
 /**
- * Backup everything, write a server copy, then wipe operational data.
+ * Backup everything, write a ZIP copy, then wipe operational data.
  */
 export async function backupAndResetData(prisma) {
   const backup = await createDataBackup(prisma);
-  const stored = writeBackupFile(backup);
+  const stored = await writeBackupFile(backup);
   const summary = await resetDataKeepAdmin(prisma);
   return { backup, stored, summary };
 }

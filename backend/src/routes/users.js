@@ -10,26 +10,29 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { tryNormalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { parseNoorTeachersSpreadsheet } from '../services/noorTeacherImport.js';
-import { backupAndResetData, restoreFromBackup } from '../services/resetData.js';
+import { backupAndResetData, restoreFromBackup, parseBackupUpload } from '../services/resetData.js';
 
 const router = Router();
 
 router.use(requireStaff, requireRole('ADMIN'));
 
-const uploadBackupJson = multer({
+const uploadBackupFile = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 },
+  limits: { fileSize: 80 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const name = (file.originalname || '').toLowerCase();
     if (
+      name.endsWith('.zip') ||
       name.endsWith('.json') ||
+      file.mimetype === 'application/zip' ||
+      file.mimetype === 'application/x-zip-compressed' ||
       file.mimetype === 'application/json' ||
       file.mimetype === 'application/octet-stream' ||
       file.mimetype === 'text/plain'
     ) {
       return cb(null, true);
     }
-    return cb(badRequest('Only JSON backup files are allowed'));
+    return cb(badRequest('Only ZIP or JSON backup files are allowed'));
   },
 }).single('backup');
 
@@ -260,38 +263,33 @@ const resetSchema = z.object({
   confirm: z.literal('DELETE_ALL_EXCEPT_ADMIN'),
 });
 
-/** POST /users/reset-data — backup all data, then wipe operational data (keep ADMIN) */
+/** POST /users/reset-data — backup all data as ZIP, then wipe operational data (keep ADMIN) */
 router.post(
   '/reset-data',
   validateBody(resetSchema),
   asyncHandler(async (_req, res) => {
-    const { backup, stored, summary } = await backupAndResetData(prisma);
+    const { stored, summary } = await backupAndResetData(prisma);
     res.json({
       ok: true,
       summary,
       backupFileName: stored.fileName,
       backupDownloadUrl: stored.downloadUrl,
-      backup,
+      // Base64 ZIP so the browser can download even if /uploads is delayed.
+      backupZipBase64: stored.zipBuffer.toString('base64'),
     });
   })
 );
 
-/** POST /users/restore-data — upload backup JSON and restore (wipes current operational data first) */
+/** POST /users/restore-data — upload backup ZIP/JSON and restore */
 router.post(
   '/restore-data',
-  (req, res, next) => uploadBackupJson(req, res, next),
+  (req, res, next) => uploadBackupFile(req, res, next),
   asyncHandler(async (req, res) => {
-    if (!req.file) throw badRequest('أرفق ملف النسخة الاحتياطية JSON');
-    let backup;
-    try {
-      backup = JSON.parse(req.file.buffer.toString('utf8'));
-    } catch {
-      throw badRequest('تعذّر قراءة ملف JSON');
-    }
-    // Optional confirm field may arrive as multipart text field
+    if (!req.file) throw badRequest('أرفق ملف النسخة الاحتياطية (ZIP أو JSON)');
     if (req.body?.confirm && req.body.confirm !== 'RESTORE_FROM_BACKUP') {
       throw badRequest('Confirmation required');
     }
+    const backup = await parseBackupUpload(req.file.buffer, req.file.originalname);
     const result = await restoreFromBackup(prisma, backup);
     res.json({ ok: true, ...result });
   })

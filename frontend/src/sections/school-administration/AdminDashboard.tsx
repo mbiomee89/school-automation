@@ -1645,7 +1645,7 @@ export function AdminDashboard({
               إعادة تعيين المنصة
             </h2>
             <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
-              ينشئ تلقائياً نسخة احتياطية JSON لكل البيانات (بما فيها سجلات التقارير: الغياب،
+              ينشئ تلقائياً نسخة احتياطية مضغوطة (ZIP) لكل البيانات (بما فيها سجلات التقارير: الغياب،
               التأخر، الواجبات، الخطط الأسبوعية، الطلاب، الفصول، …) ثم يحذف كل البيانات التشغيلية.
               تبقى حسابات المدير وإعدادات المدرسة فقط.
             </p>
@@ -1664,18 +1664,18 @@ export function AdminDashboard({
 
             <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                استعادة من ملف JSON
+                استعادة من ملف ZIP
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
-                ارفع ملف النسخة الاحتياطية الذي نزّلته سابقاً لإرجاع الطلاب والتقارير والبيانات.
-                كلمة مرور الحسابات المستعادة ستكون Password123!
+                ارفع ملف النسخة الاحتياطية (ZIP أو JSON القديم) الذي نزّلته سابقاً لإرجاع الطلاب
+                والتقارير والبيانات. كلمة مرور الحسابات المستعادة ستكون Password123!
               </p>
               <label className="mt-3 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-800">
                 <Upload className="size-4" strokeWidth={1.5} />
                 {restoreBusy ? 'جارٍ الاستعادة…' : 'رفع ملف النسخة الاحتياطية'}
                 <input
                   type="file"
-                  accept="application/json,.json"
+                  accept=".zip,application/zip,.json,application/json"
                   className="hidden"
                   disabled={!onRestoreFromBackup || restoreBusy || resetBusy}
                   onChange={handleRestoreBackup}
@@ -2444,7 +2444,7 @@ export function AdminDashboard({
           setResetConfirmText('')
         }}
         title="تأكيد إعادة التعيين"
-        description="سيتم تنزيل نسخة احتياطية ثم حذف كل البيانات التشغيلية."
+        description="سيتم تنزيل نسخة احتياطية ZIP ثم حذف كل البيانات التشغيلية."
         maxWidthClassName="max-w-md"
       >
         <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
