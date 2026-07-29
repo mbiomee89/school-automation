@@ -61,3 +61,18 @@ body {
   box-shadow: 0 0 0 1000px rgb(30 41 59) inset !important;
   transition: background-color 99999s ease-out;
 }
+
+/* Reports / staff print: only the open report body, not the hub cards or shell chrome */
+@media print {
+  html,
+  body,
+  #root {
+    background: white !important;
+    color: black !important;
+  }
+
+  .report-print-area {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+}

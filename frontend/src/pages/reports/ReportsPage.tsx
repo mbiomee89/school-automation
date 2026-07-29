@@ -169,7 +169,6 @@ export function ReportsPage() {
       activeReport={activeReport}
       onSelectReport={setActiveReport}
       onCloseReport={() => setActiveReport(null)}
-      onPrint={() => window.print()}
       onFilterByDate={async (_type, nextDate) => {
         setDate(nextDate)
       }}

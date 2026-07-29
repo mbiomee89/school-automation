@@ -1,4 +1,4 @@
-﻿import { useState, type ReactNode } from 'react'
+﻿import { useEffect, useState, type ReactNode } from 'react'
 import {
   Printer,
   CalendarOff,
@@ -80,9 +80,28 @@ export function ReportsHub({
   const [dateFilter, setDateFilter] = useState(
     dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
   )
+  /** When set, open that report then trigger browser print once the detail is on screen. */
+  const [pendingPrint, setPendingPrint] = useState<ReportType | null>(null)
 
   const currentActive = controlledActiveReport ?? activeReport
   const activeSummary = reports.find((r) => r.type === currentActive) ?? null
+
+  useEffect(() => {
+    if (!pendingPrint) return
+    if (currentActive !== pendingPrint) return
+    if (pendingPrint === 'STUDENT_HISTORY' && !studentHistoryDetail) {
+      setPendingPrint(null)
+      return
+    }
+
+    const timer = window.setTimeout(() => {
+      window.print()
+      onPrint?.(pendingPrint)
+      setPendingPrint(null)
+    }, 150)
+
+    return () => window.clearTimeout(timer)
+  }, [pendingPrint, currentActive, studentHistoryDetail, onPrint])
 
   function openReport(type: ReportType) {
     setActiveReport(type)
@@ -90,15 +109,19 @@ export function ReportsHub({
   }
 
   function closeReport() {
+    setPendingPrint(null)
     setActiveReport(null)
     onCloseReport?.()
   }
 
   function printReport(type: ReportType) {
+    if (type === 'STUDENT_HISTORY' && !studentHistoryDetail) {
+      openReport(type)
+      return
+    }
+    setPendingPrint(type)
     setActiveReport(type)
     onSelectReport?.(type)
-    onPrint?.(type)
-    window.setTimeout(() => window.print(), 50)
   }
 
   return (
@@ -108,7 +131,7 @@ export function ReportsHub({
       className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
       style={fontArabic}
     >
-      <div className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-blue-50 px-4 py-6 sm:px-6 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-blue-950/40">
+      <div className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-blue-50 px-4 py-6 sm:px-6 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-blue-950/40 print:hidden">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07] dark:opacity-[0.12]"
           style={{
@@ -144,7 +167,7 @@ export function ReportsHub({
 
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
         {!currentActive && (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:hidden">
             {reports.map((report) => {
               const Icon = ICON_MAP[report.iconHint]
               return (
@@ -196,7 +219,7 @@ export function ReportsHub({
         )}
 
         {currentActive && activeSummary && (
-          <div className="space-y-4">
+          <div className="space-y-4 report-print-area">
             <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
               <button
                 type="button"
