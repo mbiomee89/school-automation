@@ -38,6 +38,7 @@ import { TONE_CLASSES, type Tone } from '../../shared/colors'
 import { Modal } from '../../shared/Modal'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { ApiError } from '../../api/client'
+import { PhoneText } from '../../shared/PhoneText'
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: 'نظرة عامة' },
@@ -798,8 +799,8 @@ export function AdminDashboard({
                       <td className="px-3 py-2">
                         {s.className ?? <span className="text-slate-400">بدون فصل</span>}
                       </td>
-                      <td className="px-3 py-2" style={fontMono}>
-                        {s.parentPhone}
+                      <td className="px-3 py-2">
+                        <PhoneText value={s.parentPhone} />
                       </td>
                       <td className="px-3 py-2">
                         {s.waOptedIn ? (
@@ -881,8 +882,12 @@ export function AdminDashboard({
                   >
                     <div className="text-lg font-bold">{s.nameAr}</div>
                     <div className="text-sm text-slate-500">{s.nameEn}</div>
-                    <div className="mt-2 text-xs text-slate-500" style={fontMono}>
-                      {s.id} · {s.parentPhone}
+                    <div className="mt-2 text-xs text-slate-500">
+                      <span dir="ltr" style={fontMono}>
+                        {s.id}
+                      </span>
+                      {' · '}
+                      <PhoneText value={s.parentPhone} />
                     </div>
                     <div className="mt-1 text-sm">
                       {s.className ?? <span className="text-slate-400">بدون فصل</span>}
@@ -1449,8 +1454,8 @@ export function AdminDashboard({
                         {STATUS_AR[n.status]}
                       </span>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500" style={fontMono}>
-                      {n.parentPhone}
+                    <div className="mt-1 text-xs text-slate-500">
+                      <PhoneText value={n.parentPhone} />
                       {n.sentAt
                         ? ` · ${new Date(n.sentAt).toLocaleString('ar-SA')}`
                         : ' · لم يُرسل'}
@@ -1612,7 +1617,7 @@ export function AdminDashboard({
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   {selectedStudent.classId == null ? 'بدون فصل' : selectedStudent.className} · ولي
-                  الأمر {selectedStudent.parentPhone}
+                  الأمر <PhoneText value={selectedStudent.parentPhone} />
                 </p>
                 <button
                   type="button"

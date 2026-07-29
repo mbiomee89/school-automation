@@ -21,6 +21,7 @@ import type {
 } from './types'
 import { cn } from '../../shared/utils'
 import { fontArabic, fontMono } from '../../shared/fonts'
+import { PhoneText } from '../../shared/PhoneText'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_OFF: CalendarOff,
@@ -803,8 +804,8 @@ function StudentHistoryDetailView({
             </div>
             <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
               <dt className="text-xs text-slate-500">جوال ولي الأمر</dt>
-              <dd className="mt-1 font-medium" style={fontMono}>
-                {detail.student.parentPhone}
+              <dd className="mt-1 font-medium">
+                <PhoneText value={detail.student.parentPhone} />
               </dd>
             </div>
             <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
