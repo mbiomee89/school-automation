@@ -9,7 +9,7 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { tryNormalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { parseNoorTeachersSpreadsheet } from '../services/noorTeacherImport.js';
-import { resetDataKeepAdmin } from '../services/resetData.js';
+import { backupAndResetData } from '../services/resetData.js';
 
 const router = Router();
 
@@ -242,13 +242,19 @@ const resetSchema = z.object({
   confirm: z.literal('DELETE_ALL_EXCEPT_ADMIN'),
 });
 
-/** POST /users/reset-data — wipe all operational data; keep ADMIN accounts */
+/** POST /users/reset-data — backup all data, then wipe operational data (keep ADMIN) */
 router.post(
   '/reset-data',
   validateBody(resetSchema),
   asyncHandler(async (_req, res) => {
-    const summary = await resetDataKeepAdmin(prisma);
-    res.json({ ok: true, summary });
+    const { backup, stored, summary } = await backupAndResetData(prisma);
+    res.json({
+      ok: true,
+      summary,
+      backupFileName: stored.fileName,
+      backupDownloadUrl: stored.downloadUrl,
+      backup,
+    });
   })
 );
 

@@ -16,6 +16,7 @@ import {
   GraduationCap,
   Bell,
   BookOpen,
+  RotateCcw,
 } from 'lucide-react'
 import type {
   AdminTab,
@@ -166,6 +167,7 @@ export function AdminDashboard({
   onPrint,
   onSaveSchoolSettings,
   onUploadSchoolLogo,
+  onResetAllData,
 }: SchoolAdministrationProps) {
   const [tab, setTab] = useState<AdminTab>(controlledTab ?? 'overview')
   const [query, setQuery] = useState('')
@@ -219,6 +221,9 @@ export function AdminDashboard({
     type: 'ok' | 'err'
     text: string
   } | null>(null)
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetConfirmText, setResetConfirmText] = useState('')
+  const [resetBusy, setResetBusy] = useState(false)
 
   useEffect(() => {
     setSettingsForm({
@@ -531,6 +536,28 @@ export function AdminDashboard({
       setLogoPreview(schoolSettings.logoUrl)
       const message = err instanceof ApiError ? err.message : 'فشل رفع الشعار'
       setSettingsMessage({ type: 'err', text: message })
+    }
+  }
+
+  async function confirmResetAllData() {
+    if (resetConfirmText.trim() !== 'تأكيد' || resetBusy) return
+    setResetBusy(true)
+    setSettingsMessage(null)
+    try {
+      const result = await onResetAllData?.()
+      setShowResetModal(false)
+      setResetConfirmText('')
+      setSettingsMessage({
+        type: 'ok',
+        text: result?.backupFileName
+          ? `تم إنشاء نسخة احتياطية (${result.backupFileName}) وإعادة تعيين البيانات.`
+          : 'تم إنشاء نسخة احتياطية وإعادة تعيين البيانات.',
+      })
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'فشل إعادة تعيين البيانات'
+      setSettingsMessage({ type: 'err', text: message })
+    } finally {
+      setResetBusy(false)
     }
   }
 
@@ -1476,6 +1503,7 @@ export function AdminDashboard({
         )}
 
         {currentTab === 'settings' && (
+          <div className="space-y-6">
           <div className="max-w-xl rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
             <h2 className="text-lg font-bold">بيانات المدرسة</h2>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -1583,6 +1611,31 @@ export function AdminDashboard({
                 </button>
               </div>
             </form>
+          </div>
+
+          <div className="max-w-xl rounded-lg border border-red-200 bg-white p-5 dark:border-red-900/60 dark:bg-slate-800 dark:text-slate-100">
+            <h2 className="flex items-center gap-2 text-lg font-bold text-red-700 dark:text-red-300">
+              <RotateCcw className="size-5" strokeWidth={1.5} />
+              إعادة تعيين المنصة
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600 dark:text-slate-300">
+              ينشئ تلقائياً نسخة احتياطية JSON لكل البيانات (بما فيها سجلات التقارير: الغياب،
+              التأخر، الواجبات، الخطط الأسبوعية، الطلاب، الفصول، …) ثم يحذف كل البيانات التشغيلية.
+              تبقى حسابات المدير وإعدادات المدرسة فقط.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setResetConfirmText('')
+                setShowResetModal(true)
+              }}
+              disabled={!onResetAllData || resetBusy}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RotateCcw className="size-4" strokeWidth={1.5} />
+              نسخ احتياطي ثم إعادة تعيين الكل
+            </button>
+          </div>
           </div>
         )}
       </div>
@@ -2334,6 +2387,59 @@ export function AdminDashboard({
             </div>
           </>
         )}
+      </Modal>
+
+      <Modal
+        open={showResetModal}
+        onClose={() => {
+          if (resetBusy) return
+          setShowResetModal(false)
+          setResetConfirmText('')
+        }}
+        title="تأكيد إعادة التعيين"
+        description="سيتم تنزيل نسخة احتياطية ثم حذف كل البيانات التشغيلية."
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+          <p>
+            احفظ ملف النسخة الاحتياطية في مكان آمن. بعد التأكيد تُحذف الطلاب والفصول والمواد
+            والمعلمين (غير المدير) وجميع سجلات التقارير.
+          </p>
+          <label className="block">
+            <span className="text-slate-700 dark:text-slate-200">
+              اكتب كلمة <strong>تأكيد</strong> للمتابعة
+            </span>
+            <input
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              disabled={resetBusy}
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+              placeholder="تأكيد"
+              autoComplete="off"
+            />
+          </label>
+          <div className="flex gap-2 pt-1">
+            <button
+              type="button"
+              disabled={resetBusy || resetConfirmText.trim() !== 'تأكيد'}
+              onClick={() => void confirmResetAllData()}
+              className="flex-1 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {resetBusy ? 'جارٍ النسخ وإعادة التعيين…' : 'تنفيذ الآن'}
+            </button>
+            <button
+              type="button"
+              disabled={resetBusy}
+              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600"
+              onClick={() => {
+                setShowResetModal(false)
+                setResetConfirmText('')
+              }}
+            >
+              إلغاء
+            </button>
+          </div>
+        </div>
       </Modal>
     </div>
   )

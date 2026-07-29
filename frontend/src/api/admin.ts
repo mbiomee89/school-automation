@@ -542,3 +542,19 @@ export async function parseStudentImportFile(file: File) {
   }
   return rows
 }
+
+export type ResetDataResult = {
+  ok: boolean
+  summary: Record<string, unknown>
+  backupFileName: string
+  backupDownloadUrl: string
+  backup: unknown
+}
+
+/** Backup all operational data then wipe everything except ADMIN accounts + school settings. */
+export async function resetAllDataWithBackup() {
+  return apiRequest<ResetDataResult>('/users/reset-data', {
+    method: 'POST',
+    body: { confirm: 'DELETE_ALL_EXCEPT_ADMIN' },
+  })
+}

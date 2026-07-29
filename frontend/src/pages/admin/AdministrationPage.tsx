@@ -29,6 +29,7 @@ import {
   unassignStudent,
   updateStudent,
   uploadSchoolLogo,
+  resetAllDataWithBackup,
 } from '../../api/admin'
 import { ApiError } from '../../api/client'
 import { AdminDashboard } from '../../sections/school-administration/AdminDashboard'
@@ -351,6 +352,26 @@ export function AdministrationPage() {
         const logoUrl = await uploadSchoolLogo(file)
         setSchoolSettings((prev) => ({ ...prev, logoUrl }))
         return logoUrl
+      }}
+      onResetAllData={async () => {
+        const result = await resetAllDataWithBackup()
+        const blob = new Blob([JSON.stringify(result.backup, null, 2)], {
+          type: 'application/json;charset=utf-8',
+        })
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = result.backupFileName || `school-backup-${Date.now()}.json`
+        document.body.appendChild(a)
+        a.click()
+        a.remove()
+        URL.revokeObjectURL(url)
+
+        setImportResult(null)
+        setTeacherImportResult(null)
+        setEnrollments([])
+        await loadAll()
+        return { backupFileName: result.backupFileName }
       }}
     />
   )
