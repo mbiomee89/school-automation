@@ -20,6 +20,7 @@ import type {
   WeeklyPlanReportDetail,
 } from './types'
 import { cn } from '../../shared/utils'
+import { fontArabic, fontMono } from '../../shared/fonts'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_OFF: CalendarOff,
@@ -34,9 +35,6 @@ const STATUS_AR: Record<'PRESENT' | 'ABSENT' | 'EXCUSED', string> = {
   ABSENT: 'غائب',
   EXCUSED: 'غياب بعذر',
 }
-
-const fontSerif = { fontFamily: '"Amiri", "Times New Roman", serif' } as const
-const fontMono = { fontFamily: '"IBM Plex Mono", ui-monospace, monospace' } as const
 
 const DATE_FILTER_TYPES: ReportType[] = [
   'DAILY_ABSENCE',
@@ -107,10 +105,10 @@ export function ReportsHub({
     <div
       dir="rtl"
       lang="ar"
-      className="min-h-full bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-50"
-      style={fontSerif}
+      className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
+      style={fontArabic}
     >
-      <div className="relative overflow-hidden border-b border-stone-200 bg-gradient-to-bl from-stone-100 via-white to-lime-50 px-4 py-6 sm:px-6 dark:border-stone-800 dark:from-stone-900 dark:via-stone-950 dark:to-lime-950/40">
+      <div className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-blue-50 px-4 py-6 sm:px-6 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-blue-950/40">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07] dark:opacity-[0.12]"
           style={{
@@ -121,11 +119,11 @@ export function ReportsHub({
         />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs text-stone-500 dark:text-stone-400">منصة إدارة المدرسة</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-stone-900 dark:text-stone-50 sm:text-4xl">
+            <p className="text-xs text-slate-500 dark:text-slate-400">منصة إدارة المدرسة</p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50 sm:text-4xl">
               التقارير
             </h1>
-            <p className="mt-1 text-stone-600 dark:text-stone-400">
+            <p className="mt-1 text-slate-600 dark:text-slate-400">
               {activeSummary
                 ? activeSummary.title
                 : 'مركز تقارير مشترك للإداري والمرشد الطلابي — عرض وطباعة فقط'}
@@ -135,7 +133,7 @@ export function ReportsHub({
             <button
               type="button"
               onClick={() => printReport(currentActive)}
-              className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 shadow-sm hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800 print:hidden"
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 print:hidden"
             >
               <Printer className="size-4" strokeWidth={1.5} />
               طباعة
@@ -152,40 +150,40 @@ export function ReportsHub({
               return (
                 <div
                   key={report.type}
-                  className="flex flex-col rounded-lg border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-800 dark:bg-stone-900"
+                  className="flex flex-col rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900"
                 >
                   <div className="flex items-start gap-3">
-                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-lime-500/15 text-lime-700 dark:bg-lime-400/15 dark:text-lime-300">
+                    <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-md bg-blue-500/15 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300">
                       <Icon className="size-5" strokeWidth={1.5} />
                     </span>
                     <div className="min-w-0">
                       <h2 className="font-bold">{report.title}</h2>
-                      <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">
+                      <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
                         {report.description}
                       </p>
                     </div>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500 dark:text-stone-400">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
                     <span>{report.context}</span>
                     <span className="tabular-nums" style={fontMono}>
                       {report.count != null ? `${report.count} سطراً` : 'يُحدَّد عند الفتح'}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-stone-400 dark:text-stone-500">
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                     {formatGeneratedAt(report.lastGeneratedAt)}
                   </p>
-                  <div className="mt-4 flex gap-2 border-t border-stone-100 pt-3 dark:border-stone-800">
+                  <div className="mt-4 flex gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={() => openReport(report.type)}
-                      className="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50 dark:border-stone-600 dark:text-stone-200 dark:hover:bg-stone-800"
+                      className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       عرض التقرير
                     </button>
                     <button
                       type="button"
                       onClick={() => printReport(report.type)}
-                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-lime-400 active:bg-lime-600"
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 active:bg-blue-800"
                     >
                       <Printer className="size-4" strokeWidth={1.5} />
                       طباعة
@@ -203,13 +201,13 @@ export function ReportsHub({
               <button
                 type="button"
                 onClick={closeReport}
-                className="inline-flex items-center gap-2 text-sm text-stone-600 underline hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50"
+                className="inline-flex items-center gap-2 text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-50"
               >
                 <LayoutGrid className="size-4" strokeWidth={1.5} />
                 كل التقارير
               </button>
               {DATE_FILTER_TYPES.includes(currentActive) && (
-                <label className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-400">
+                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
                   <span>{currentActive === 'WEEKLY_PLAN' ? 'يوم من الأسبوع' : 'التاريخ'}</span>
                   <input
                     type="date"
@@ -218,7 +216,7 @@ export function ReportsHub({
                       setDateFilter(e.target.value)
                       onFilterByDate?.(currentActive, e.target.value)
                     }}
-                    className="rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm dark:border-stone-600 dark:bg-stone-950"
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
                     style={fontMono}
                   />
                 </label>
@@ -254,7 +252,7 @@ export function ReportsHub({
 
 function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }) {
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
       <ReportHeader
         schoolName={detail.schoolName}
         academicYear={detail.academicYear}
@@ -262,9 +260,9 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
         dateLabel={detail.date}
         generatedAt={detail.generatedAt}
       />
-      <div className="hidden overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800 md:block">
+      <div className="hidden overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 md:block">
         <table className="w-full text-start text-sm">
-          <thead className="bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+          <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
               <th className="px-3 py-2 font-medium">الطالب</th>
               <th className="px-3 py-2 font-medium">الفصل</th>
@@ -273,7 +271,7 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
           </thead>
           <tbody>
             {detail.rows.map((row) => (
-              <tr key={row.studentId} className="border-t border-stone-100 dark:border-stone-800">
+              <tr key={row.studentId} className="border-t border-slate-100 dark:border-slate-800">
                 <td className="px-3 py-2 font-semibold">{row.studentName}</td>
                 <td className="px-3 py-2">{row.className}</td>
                 <td className="px-3 py-2">
@@ -293,14 +291,14 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
           </tbody>
         </table>
         {detail.rows.length === 0 && (
-          <p className="p-6 text-center text-sm text-stone-500">لا يوجد غياب مسجل لهذا اليوم.</p>
+          <p className="p-6 text-center text-sm text-slate-500">لا يوجد غياب مسجل لهذا اليوم.</p>
         )}
       </div>
       <div className="space-y-2 md:hidden">
         {detail.rows.map((row) => (
           <div
             key={row.studentId}
-            className="rounded-lg border border-stone-200 p-3 text-sm dark:border-stone-800"
+            className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"
           >
             <div className="flex items-center justify-between gap-2">
               <span className="font-semibold">{row.studentName}</span>
@@ -315,11 +313,11 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
                 {STATUS_AR[row.status]}
               </span>
             </div>
-            <div className="mt-1 text-stone-500">{row.className}</div>
+            <div className="mt-1 text-slate-500">{row.className}</div>
           </div>
         ))}
         {detail.rows.length === 0 && (
-          <p className="p-6 text-center text-sm text-stone-500">لا يوجد غياب مسجل لهذا اليوم.</p>
+          <p className="p-6 text-center text-sm text-slate-500">لا يوجد غياب مسجل لهذا اليوم.</p>
         )}
       </div>
     </div>
@@ -328,7 +326,7 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
 
 function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }) {
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
       <ReportHeader
         schoolName={detail.schoolName}
         academicYear={detail.academicYear}
@@ -358,7 +356,7 @@ function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) 
 
   if (classes.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
         لا توجد واجبات مسجّلة لهذا اليوم.
       </p>
     )
@@ -401,7 +399,7 @@ function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
 
   if (classes.length === 0) {
     return (
-      <p className="rounded-lg border border-dashed border-stone-300 bg-white p-8 text-center text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
         لا توجد خطط أسبوعية لهذا الأسبوع.
       </p>
     )
@@ -466,7 +464,7 @@ function FormalClassSheet({
 }) {
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:break-after-page print:shadow-none dark:border-slate-700 dark:bg-stone-900 dark:text-stone-50"
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:break-after-page print:shadow-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-50"
       style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
     >
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 px-4 py-4 sm:px-6 dark:border-slate-800">
@@ -538,7 +536,7 @@ function FormalTable({
           </thead>
           <tbody>
             {rows.map((cols, i) => (
-              <tr key={i} className="bg-white dark:bg-stone-950">
+              <tr key={i} className="bg-white dark:bg-slate-950">
                 {cols.map((c, j) => (
                   <td
                     key={j}
@@ -552,7 +550,7 @@ function FormalTable({
           </tbody>
         </table>
       </div>
-      {rows.length === 0 && <p className="p-6 text-center text-sm text-stone-500">{empty}</p>}
+      {rows.length === 0 && <p className="p-6 text-center text-sm text-slate-500">{empty}</p>}
     </div>
   )
 }
@@ -590,7 +588,7 @@ function WeeklyPlanClassTable({
           </thead>
           <tbody>
             {rows.map((r, i) => (
-              <tr key={`${r.planId}-${r.dayKey}-${r.subjectName}-${i}`} className="bg-white dark:bg-stone-950">
+              <tr key={`${r.planId}-${r.dayKey}-${r.subjectName}-${i}`} className="bg-white dark:bg-slate-950">
                 {spans[i] > 0 && (
                   <td
                     rowSpan={spans[i]}
@@ -614,7 +612,7 @@ function WeeklyPlanClassTable({
         </table>
       </div>
       {rows.length === 0 && (
-        <p className="p-6 text-center text-sm text-stone-500">لا توجد دروس مسجّلة لهذا الفصل.</p>
+        <p className="p-6 text-center text-sm text-slate-500">لا توجد دروس مسجّلة لهذا الفصل.</p>
       )}
     </div>
   )
@@ -637,34 +635,34 @@ function StudentHistoryDetailView({
 }) {
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 print:hidden dark:border-stone-800 dark:bg-stone-900">
-        <label className="block text-sm font-medium text-stone-700 dark:text-stone-200">
+      <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 print:hidden dark:border-slate-800 dark:bg-slate-900">
+        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">
           ابحث عن طالب (الاسم أو رقم الهوية)
           <input
             type="search"
             value={searchQuery}
             onChange={(e) => onSearchStudent?.(e.target.value)}
             placeholder="اكتب للبحث…"
-            className="mt-2 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-950"
+            className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
           />
         </label>
         {searchLoading && (
-          <p className="mt-2 text-xs text-stone-400">جارٍ البحث…</p>
+          <p className="mt-2 text-xs text-slate-400">جارٍ البحث…</p>
         )}
         {!searchLoading && searchQuery.trim().length >= 2 && searchResults.length === 0 && (
-          <p className="mt-2 text-xs text-stone-400">لا نتائج مطابقة.</p>
+          <p className="mt-2 text-xs text-slate-400">لا نتائج مطابقة.</p>
         )}
         {searchResults.length > 0 && (
-          <ul className="mt-3 max-h-48 overflow-y-auto rounded-md border border-stone-200 dark:border-stone-700">
+          <ul className="mt-3 max-h-48 overflow-y-auto rounded-md border border-slate-200 dark:border-slate-700">
             {searchResults.map((s) => (
-              <li key={s.id} className="border-b border-stone-100 last:border-0 dark:border-stone-800">
+              <li key={s.id} className="border-b border-slate-100 last:border-0 dark:border-slate-800">
                 <button
                   type="button"
                   onClick={() => onSelectStudent?.(s.id)}
-                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-stone-50 dark:hover:bg-stone-800"
+                  className="flex w-full items-center justify-between gap-2 px-3 py-2 text-start text-sm hover:bg-slate-50 dark:hover:bg-slate-800"
                 >
                   <span className="font-semibold">{s.nameAr}</span>
-                  <span className="text-xs text-stone-500" style={fontMono}>
+                  <span className="text-xs text-slate-500" style={fontMono}>
                     {s.className ?? 'بدون فصل'} · {s.id}
                   </span>
                 </button>
@@ -687,7 +685,7 @@ function StudentHistoryDetailView({
           }}
         />
       ) : (
-        <div className="rounded-lg border border-stone-200 bg-white p-4 sm:p-6 dark:border-stone-800 dark:bg-stone-900">
+        <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
           <ReportHeader
             schoolName={detail.schoolName}
             academicYear={detail.academicYear}
@@ -696,18 +694,18 @@ function StudentHistoryDetailView({
             generatedAt={detail.generatedAt}
           />
           <dl className="mb-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
-              <dt className="text-xs text-stone-500">الفصل الحالي</dt>
+            <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
+              <dt className="text-xs text-slate-500">الفصل الحالي</dt>
               <dd className="mt-1 font-medium">{detail.student.currentClassName ?? '—'}</dd>
             </div>
-            <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
-              <dt className="text-xs text-stone-500">جوال ولي الأمر</dt>
+            <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
+              <dt className="text-xs text-slate-500">جوال ولي الأمر</dt>
               <dd className="mt-1 font-medium" style={fontMono}>
                 {detail.student.parentPhone}
               </dd>
             </div>
-            <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
-              <dt className="text-xs text-stone-500">الحالة</dt>
+            <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
+              <dt className="text-xs text-slate-500">الحالة</dt>
               <dd className="mt-1 font-medium">{detail.student.isActive ? 'نشط' : 'موقوف'}</dd>
             </div>
           </dl>
@@ -767,15 +765,15 @@ function ReportHeader({
   generatedAt?: string
 }) {
   return (
-    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-stone-100 pb-4 dark:border-stone-800">
+    <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 pb-4 dark:border-slate-800">
       <div>
         <h2 className="text-lg font-bold">{schoolName}</h2>
-        <p className="text-sm text-stone-500 dark:text-stone-400">
+        <p className="text-sm text-slate-500 dark:text-slate-400">
           {subtitle} · العام الدراسي {academicYear}
         </p>
-        <p className="mt-1 text-xs text-stone-400">{formatGeneratedAt(generatedAt)}</p>
+        <p className="mt-1 text-xs text-slate-400">{formatGeneratedAt(generatedAt)}</p>
       </div>
-      <p className="text-sm text-stone-500" style={fontMono}>
+      <p className="text-sm text-slate-500" style={fontMono}>
         {dateLabel}
       </p>
     </div>
@@ -792,10 +790,10 @@ function SimpleTable({
   empty: string
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-stone-200 dark:border-stone-800">
+    <div className="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
       <div className="overflow-x-auto">
         <table className="w-full min-w-[40rem] text-start text-sm">
-          <thead className="bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+          <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
               {headers.map((h) => (
                 <th key={h} className="px-3 py-2 font-medium">
@@ -806,7 +804,7 @@ function SimpleTable({
           </thead>
           <tbody>
             {rows.map((cols, i) => (
-              <tr key={i} className="border-t border-stone-100 dark:border-stone-800">
+              <tr key={i} className="border-t border-slate-100 dark:border-slate-800">
                 {cols.map((c, j) => (
                   <td key={j} className={cn('px-3 py-2', j === 0 && 'font-semibold')}>
                     {c}
@@ -817,7 +815,7 @@ function SimpleTable({
           </tbody>
         </table>
       </div>
-      {rows.length === 0 && <p className="p-6 text-center text-sm text-stone-500">{empty}</p>}
+      {rows.length === 0 && <p className="p-6 text-center text-sm text-slate-500">{empty}</p>}
     </div>
   )
 }
@@ -825,33 +823,33 @@ function SimpleTable({
 function ReportSummarySheet({ report, note }: { report: ReportSummary; note?: string }) {
   const Icon = ICON_MAP[report.iconHint]
   return (
-    <div className="rounded-lg border border-stone-200 bg-white p-6 dark:border-stone-800 dark:bg-stone-900">
-      <div className="flex items-start gap-3 border-b border-stone-100 pb-4 dark:border-stone-800">
-        <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-md bg-lime-500/15 text-lime-700 dark:bg-lime-400/15 dark:text-lime-300">
+    <div className="rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-start gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+        <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-md bg-blue-500/15 text-blue-700 dark:bg-blue-400/15 dark:text-blue-300">
           <Icon className="size-6" strokeWidth={1.5} />
         </span>
         <div>
           <h2 className="text-xl font-bold">{report.title}</h2>
-          <p className="mt-1 text-sm text-stone-600 dark:text-stone-400">{report.description}</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{report.description}</p>
         </div>
       </div>
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
-          <dt className="text-xs text-stone-500 dark:text-stone-400">النطاق</dt>
+        <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
+          <dt className="text-xs text-slate-500 dark:text-slate-400">النطاق</dt>
           <dd className="mt-1 font-medium">{report.context}</dd>
         </div>
-        <div className="rounded-md bg-stone-100 p-3 dark:bg-stone-800">
-          <dt className="text-xs text-stone-500 dark:text-stone-400">عدد السطور</dt>
+        <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
+          <dt className="text-xs text-slate-500 dark:text-slate-400">عدد السطور</dt>
           <dd className="mt-1 font-medium tabular-nums" style={fontMono}>
             {report.count != null ? report.count : 'يُحدَّد عند الفتح'}
           </dd>
         </div>
       </dl>
-      <p className="mt-4 text-xs text-stone-400 dark:text-stone-500">
+      <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
         {formatGeneratedAt(report.lastGeneratedAt)}
       </p>
       {note && (
-        <p className="mt-4 rounded-md border border-dashed border-stone-300 bg-stone-50 p-3 text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-950/40 dark:text-stone-400">
+        <p className="mt-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-400">
           {note}
         </p>
       )}
