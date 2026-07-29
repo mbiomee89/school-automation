@@ -72,7 +72,6 @@ export function ReportsHub({
   activeReport: controlledActiveReport,
   onSelectReport,
   onCloseReport,
-  onPrint,
   onFilterByDate,
   onSearchStudent,
   onSelectStudent,
