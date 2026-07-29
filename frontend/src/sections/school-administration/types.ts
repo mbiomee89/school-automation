@@ -274,7 +274,7 @@ export interface SchoolAdministrationProps {
   /** Trigger browser print for current printable view */
   onPrint?: (view: 'roster' | 'overview') => void
   /** Save school profile fields (name, academic year, principal, address). Logo is uploaded separately via onUploadSchoolLogo. */
-  onSaveSchoolSettings?: (settings: Omit<SchoolSettings, 'logoUrl'>) => void
+  onSaveSchoolSettings?: (settings: Omit<SchoolSettings, 'logoUrl'>) => void | Promise<void>
   /** Upload a new school logo file; backend stores it under /uploads and returns the new logo URL/path */
-  onUploadSchoolLogo?: (file: File) => void
+  onUploadSchoolLogo?: (file: File) => void | Promise<string>
 }

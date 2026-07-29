@@ -345,19 +345,12 @@ export function AdministrationPage() {
         window.print()
       }}
       onSaveSchoolSettings={async (settings) => {
-        try {
-          setSchoolSettings(await saveSchoolSettings(settings))
-        } catch (err) {
-          alertError(err, 'فشل حفظ إعدادات المدرسة')
-        }
+        setSchoolSettings(await saveSchoolSettings(settings))
       }}
       onUploadSchoolLogo={async (file) => {
-        try {
-          const logoUrl = await uploadSchoolLogo(file)
-          setSchoolSettings((prev) => ({ ...prev, logoUrl }))
-        } catch (err) {
-          alertError(err, 'فشل رفع الشعار')
-        }
+        const logoUrl = await uploadSchoolLogo(file)
+        setSchoolSettings((prev) => ({ ...prev, logoUrl }))
+        return logoUrl
       }}
     />
   )

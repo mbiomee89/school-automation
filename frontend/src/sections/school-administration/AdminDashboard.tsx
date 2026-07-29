@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, type ChangeEvent } from 'react'
+﻿import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import {
   Printer,
   Search,
@@ -37,6 +37,7 @@ import { buttonVariants } from '../../shared/buttonVariants'
 import { TONE_CLASSES, type Tone } from '../../shared/colors'
 import { Modal } from '../../shared/Modal'
 import { fontArabic, fontMono } from '../../shared/fonts'
+import { ApiError } from '../../api/client'
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: 'نظرة عامة' },
@@ -212,6 +213,42 @@ export function AdminDashboard({
     address: schoolSettings.address ?? '',
   })
   const [logoPreview, setLogoPreview] = useState<string | null>(schoolSettings.logoUrl)
+  const [settingsSaving, setSettingsSaving] = useState(false)
+  const [settingsMessage, setSettingsMessage] = useState<{
+    type: 'ok' | 'err'
+    text: string
+  } | null>(null)
+
+  useEffect(() => {
+    setSettingsForm({
+      name: schoolSettings.name,
+      academicYear: schoolSettings.academicYear,
+      principalName: schoolSettings.principalName ?? '',
+      educationAdminName: schoolSettings.educationAdminName ?? '',
+      address: schoolSettings.address ?? '',
+    })
+  }, [
+    schoolSettings.name,
+    schoolSettings.academicYear,
+    schoolSettings.principalName,
+    schoolSettings.educationAdminName,
+    schoolSettings.address,
+  ])
+
+  useEffect(() => {
+    setLogoPreview((prev) => {
+      if (prev?.startsWith('blob:')) return prev
+      return schoolSettings.logoUrl
+    })
+  }, [schoolSettings.logoUrl])
+
+  useEffect(() => {
+    if (!settingsMessage || settingsMessage.type !== 'ok') return
+    const t = window.setTimeout(() => setSettingsMessage(null), 4000)
+    return () => window.clearTimeout(t)
+  }, [settingsMessage])
+
+  const displayLogo = logoPreview || schoolSettings.logoUrl
 
   const currentTab = controlledTab ?? tab
 
@@ -450,26 +487,50 @@ export function AdminDashboard({
     }
   }
 
-  function submitSettingsForm() {
+  async function submitSettingsForm() {
     if (!settingsForm.name.trim() || !settingsForm.academicYear.trim()) return
-    onSaveSchoolSettings?.({
-      name: settingsForm.name.trim(),
-      academicYear: settingsForm.academicYear.trim(),
-      principalName: settingsForm.principalName.trim() || null,
-      educationAdminName: settingsForm.educationAdminName.trim() || null,
-      address: settingsForm.address.trim() || null,
-    })
+    setSettingsSaving(true)
+    setSettingsMessage(null)
+    try {
+      await onSaveSchoolSettings?.({
+        name: settingsForm.name.trim(),
+        academicYear: settingsForm.academicYear.trim(),
+        principalName: settingsForm.principalName.trim() || null,
+        educationAdminName: settingsForm.educationAdminName.trim() || null,
+        address: settingsForm.address.trim() || null,
+      })
+      setSettingsMessage({ type: 'ok', text: 'تم حفظ بيانات المدرسة بنجاح.' })
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'فشل حفظ إعدادات المدرسة'
+      setSettingsMessage({ type: 'err', text: message })
+    } finally {
+      setSettingsSaving(false)
+    }
   }
 
-  function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
+  async function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     e.target.value = ''
     if (!file) return
+    const blobUrl = URL.createObjectURL(file)
     setLogoPreview((prev) => {
       if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev)
-      return URL.createObjectURL(file)
+      return blobUrl
     })
-    onUploadSchoolLogo?.(file)
+    setSettingsMessage(null)
+    try {
+      const url = await onUploadSchoolLogo?.(file)
+      if (typeof url === 'string' && url) {
+        URL.revokeObjectURL(blobUrl)
+        setLogoPreview(url)
+      }
+      setSettingsMessage({ type: 'ok', text: 'تم رفع شعار المدرسة بنجاح.' })
+    } catch (err) {
+      URL.revokeObjectURL(blobUrl)
+      setLogoPreview(schoolSettings.logoUrl)
+      const message = err instanceof ApiError ? err.message : 'فشل رفع الشعار'
+      setSettingsMessage({ type: 'err', text: message })
+    }
   }
 
   return (
@@ -1417,9 +1478,9 @@ export function AdminDashboard({
             </p>
 
             <div className="mt-4 flex items-center gap-4">
-              {logoPreview ? (
+              {displayLogo ? (
                 <img
-                  src={logoPreview}
+                  src={displayLogo}
                   alt="شعار المدرسة"
                   className="size-16 shrink-0 rounded-md border border-slate-200 object-contain dark:border-slate-700"
                 />
@@ -1434,6 +1495,24 @@ export function AdminDashboard({
                 <input type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
               </label>
             </div>
+
+            {settingsMessage && (
+              <div
+                role="status"
+                className={
+                  settingsMessage.type === 'ok'
+                    ? 'mt-4 flex items-start gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200'
+                    : 'mt-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+                }
+              >
+                {settingsMessage.type === 'ok' ? (
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
+                ) : (
+                  <AlertTriangle className="mt-0.5 size-4 shrink-0" strokeWidth={1.5} />
+                )}
+                <span>{settingsMessage.text}</span>
+              </div>
+            )}
 
             <form
               className="mt-5 space-y-3"
@@ -1492,9 +1571,10 @@ export function AdminDashboard({
               <div className="flex gap-2 pt-2">
                 <button
                   type="submit"
-                  className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  disabled={settingsSaving}
+                  className="flex-1 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  حفظ البيانات
+                  {settingsSaving ? 'جارٍ الحفظ…' : 'حفظ البيانات'}
                 </button>
               </div>
             </form>
