@@ -558,3 +558,21 @@ export async function resetAllDataWithBackup() {
     body: { confirm: 'DELETE_ALL_EXCEPT_ADMIN' },
   })
 }
+
+export type RestoreDataResult = {
+  ok: boolean
+  wipeSummary: Record<string, unknown>
+  restored: Record<string, unknown>
+  defaultPassword: string
+}
+
+/** Upload a previously downloaded backup JSON and restore it (replaces current operational data). */
+export async function restoreDataFromBackupFile(file: File) {
+  const form = new FormData()
+  form.append('backup', file)
+  form.append('confirm', 'RESTORE_FROM_BACKUP')
+  return apiRequest<RestoreDataResult>('/users/restore-data', {
+    method: 'POST',
+    body: form,
+  })
+}

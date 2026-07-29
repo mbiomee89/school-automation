@@ -168,6 +168,7 @@ export function AdminDashboard({
   onSaveSchoolSettings,
   onUploadSchoolLogo,
   onResetAllData,
+  onRestoreFromBackup,
 }: SchoolAdministrationProps) {
   const [tab, setTab] = useState<AdminTab>(controlledTab ?? 'overview')
   const [query, setQuery] = useState('')
@@ -224,6 +225,7 @@ export function AdminDashboard({
   const [showResetModal, setShowResetModal] = useState(false)
   const [resetConfirmText, setResetConfirmText] = useState('')
   const [resetBusy, setResetBusy] = useState(false)
+  const [restoreBusy, setRestoreBusy] = useState(false)
 
   useEffect(() => {
     setSettingsForm({
@@ -558,6 +560,30 @@ export function AdminDashboard({
       setSettingsMessage({ type: 'err', text: message })
     } finally {
       setResetBusy(false)
+    }
+  }
+
+  async function handleRestoreBackup(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file || !onRestoreFromBackup) return
+    const ok = window.confirm(
+      'سيتم استبدال البيانات الحالية بمحتوى ملف النسخة الاحتياطية. هل تريد المتابعة؟'
+    )
+    if (!ok) return
+    setRestoreBusy(true)
+    setSettingsMessage(null)
+    try {
+      const result = await onRestoreFromBackup(file)
+      setSettingsMessage({
+        type: 'ok',
+        text: `تمت استعادة البيانات من الملف. كلمة مرور الموظفين وأولياء الأمور المستعادين: ${result?.defaultPassword || 'Password123!'}`,
+      })
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'فشل استعادة النسخة الاحتياطية'
+      setSettingsMessage({ type: 'err', text: message })
+    } finally {
+      setRestoreBusy(false)
     }
   }
 
@@ -1629,12 +1655,33 @@ export function AdminDashboard({
                 setResetConfirmText('')
                 setShowResetModal(true)
               }}
-              disabled={!onResetAllData || resetBusy}
+              disabled={!onResetAllData || resetBusy || restoreBusy}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-red-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <RotateCcw className="size-4" strokeWidth={1.5} />
               نسخ احتياطي ثم إعادة تعيين الكل
             </button>
+
+            <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+              <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                استعادة من ملف JSON
+              </p>
+              <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
+                ارفع ملف النسخة الاحتياطية الذي نزّلته سابقاً لإرجاع الطلاب والتقارير والبيانات.
+                كلمة مرور الحسابات المستعادة ستكون Password123!
+              </p>
+              <label className="mt-3 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-800">
+                <Upload className="size-4" strokeWidth={1.5} />
+                {restoreBusy ? 'جارٍ الاستعادة…' : 'رفع ملف النسخة الاحتياطية'}
+                <input
+                  type="file"
+                  accept="application/json,.json"
+                  className="hidden"
+                  disabled={!onRestoreFromBackup || restoreBusy || resetBusy}
+                  onChange={handleRestoreBackup}
+                />
+              </label>
+            </div>
           </div>
           </div>
         )}

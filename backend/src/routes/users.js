@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import multer from 'multer';
 import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, idParam } from '../middleware/validate.js';
@@ -9,11 +10,28 @@ import { badRequest, notFound } from '../utils/errors.js';
 import { tryNormalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { parseNoorTeachersSpreadsheet } from '../services/noorTeacherImport.js';
-import { backupAndResetData } from '../services/resetData.js';
+import { backupAndResetData, restoreFromBackup } from '../services/resetData.js';
 
 const router = Router();
 
 router.use(requireStaff, requireRole('ADMIN'));
+
+const uploadBackupJson = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    if (
+      name.endsWith('.json') ||
+      file.mimetype === 'application/json' ||
+      file.mimetype === 'application/octet-stream' ||
+      file.mimetype === 'text/plain'
+    ) {
+      return cb(null, true);
+    }
+    return cb(badRequest('Only JSON backup files are allowed'));
+  },
+}).single('backup');
 
 /** Default password for newly imported Noor teachers (admin should ask them to change it). */
 const NOOR_TEACHER_DEFAULT_PASSWORD = 'Password123!';
@@ -255,6 +273,27 @@ router.post(
       backupDownloadUrl: stored.downloadUrl,
       backup,
     });
+  })
+);
+
+/** POST /users/restore-data — upload backup JSON and restore (wipes current operational data first) */
+router.post(
+  '/restore-data',
+  (req, res, next) => uploadBackupJson(req, res, next),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('أرفق ملف النسخة الاحتياطية JSON');
+    let backup;
+    try {
+      backup = JSON.parse(req.file.buffer.toString('utf8'));
+    } catch {
+      throw badRequest('تعذّر قراءة ملف JSON');
+    }
+    // Optional confirm field may arrive as multipart text field
+    if (req.body?.confirm && req.body.confirm !== 'RESTORE_FROM_BACKUP') {
+      throw badRequest('Confirmation required');
+    }
+    const result = await restoreFromBackup(prisma, backup);
+    res.json({ ok: true, ...result });
   })
 );
 

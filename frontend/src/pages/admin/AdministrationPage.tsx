@@ -30,6 +30,7 @@ import {
   updateStudent,
   uploadSchoolLogo,
   resetAllDataWithBackup,
+  restoreDataFromBackupFile,
 } from '../../api/admin'
 import { ApiError } from '../../api/client'
 import { AdminDashboard } from '../../sections/school-administration/AdminDashboard'
@@ -372,6 +373,14 @@ export function AdministrationPage() {
         setEnrollments([])
         await loadAll()
         return { backupFileName: result.backupFileName }
+      }}
+      onRestoreFromBackup={async (file) => {
+        const result = await restoreDataFromBackupFile(file)
+        setImportResult(null)
+        setTeacherImportResult(null)
+        setEnrollments([])
+        await loadAll()
+        return { defaultPassword: result.defaultPassword }
       }}
     />
   )
