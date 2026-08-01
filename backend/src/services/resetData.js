@@ -197,56 +197,75 @@ export async function parseBackupUpload(buffer, originalName = '') {
 /**
  * Wipe all operational data; keep ADMIN users (and SchoolSettings row).
  * Used by CLI script and ADMIN API.
+ *
+ * Uses short per-table transactions instead of one long interactive
+ * $transaction — free Render Postgres often closes interactive txs mid-wipe
+ * ("Transaction not found" on later deleteMany calls).
  */
 export async function resetDataKeepAdmin(prisma) {
   const summary = {};
 
-  await prisma.$transaction(async (tx) => {
-    summary.notifications = (await tx.notification.deleteMany()).count;
-    summary.attendance = (await tx.attendance.deleteMany()).count;
-    summary.lateReports = (await tx.lateReport.deleteMany()).count;
-    summary.homework = (await tx.homework.deleteMany()).count;
-    summary.weeklyPlans = (await tx.weeklyPlan.deleteMany()).count;
-    summary.classEnrollments = (await tx.classEnrollment.deleteMany()).count;
-    summary.teacherAssignments = (await tx.teacherAssignment.deleteMany()).count;
-    summary.students = (await tx.student.deleteMany()).count;
-    summary.importBatches = (await tx.studentImportBatch.deleteMany()).count;
-    summary.classes = (await tx.class.deleteMany()).count;
-    summary.subjects = (await tx.subject.deleteMany()).count;
-    summary.parentOtps = (await tx.parentOtp.deleteMany()).count;
-    summary.parentAccounts = (await tx.parentAccount.deleteMany()).count;
-    summary.nonAdminUsers = (
-      await tx.user.deleteMany({ where: { role: { not: 'ADMIN' } } })
-    ).count;
+  async function wipe(label, run) {
+    const count = await run();
+    summary[label] = count;
+    return count;
+  }
 
-    const admins = await tx.user.findMany({
-      where: { role: 'ADMIN' },
-      select: { id: true, email: true, name: true },
-    });
-    summary.adminsKept = admins;
+  // FK-safe order (children → parents). Each step is its own short transaction.
+  await wipe('notifications', async () => (await prisma.notification.deleteMany()).count);
+  await wipe('attendance', async () => (await prisma.attendance.deleteMany()).count);
+  await wipe('lateReports', async () => (await prisma.lateReport.deleteMany()).count);
+  await wipe('homework', async () => (await prisma.homework.deleteMany()).count);
+  await wipe('weeklyPlans', async () => (await prisma.weeklyPlan.deleteMany()).count);
+  await wipe(
+    'classEnrollments',
+    async () => (await prisma.classEnrollment.deleteMany()).count
+  );
+  await wipe(
+    'teacherAssignments',
+    async () => (await prisma.teacherAssignment.deleteMany()).count
+  );
+  await wipe('students', async () => (await prisma.student.deleteMany()).count);
+  await wipe(
+    'importBatches',
+    async () => (await prisma.studentImportBatch.deleteMany()).count
+  );
+  await wipe('classes', async () => (await prisma.class.deleteMany()).count);
+  await wipe('subjects', async () => (await prisma.subject.deleteMany()).count);
+  await wipe('parentOtps', async () => (await prisma.parentOtp.deleteMany()).count);
+  await wipe('parentAccounts', async () => (await prisma.parentAccount.deleteMany()).count);
+  await wipe(
+    'nonAdminUsers',
+    async () => (await prisma.user.deleteMany({ where: { role: { not: 'ADMIN' } } })).count
+  );
 
-    if (admins.length === 0) {
-      throw new Error('No ADMIN user left after reset — aborting');
-    }
-
-    const settings = await tx.schoolSettings.findUnique({ where: { id: 1 } });
-    if (!settings) {
-      await tx.schoolSettings.create({
-        data: {
-          id: 1,
-          name: 'المدرسة',
-          academicYear: '2026-2027',
-          principalName: null,
-          educationAdminName: null,
-          address: null,
-          logoPath: null,
-        },
-      });
-      summary.schoolSettings = 'created';
-    } else {
-      summary.schoolSettings = 'kept';
-    }
+  const admins = await prisma.user.findMany({
+    where: { role: 'ADMIN' },
+    select: { id: true, email: true, name: true },
   });
+  summary.adminsKept = admins;
+
+  if (admins.length === 0) {
+    throw new Error('No ADMIN user left after reset — aborting');
+  }
+
+  const settings = await prisma.schoolSettings.findUnique({ where: { id: 1 } });
+  if (!settings) {
+    await prisma.schoolSettings.create({
+      data: {
+        id: 1,
+        name: 'المدرسة',
+        academicYear: '2026-2027',
+        principalName: null,
+        educationAdminName: null,
+        address: null,
+        logoPath: null,
+      },
+    });
+    summary.schoolSettings = 'created';
+  } else {
+    summary.schoolSettings = 'kept';
+  }
 
   return summary;
 }
