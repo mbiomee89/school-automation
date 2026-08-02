@@ -170,6 +170,16 @@ router.get(
   })
 );
 
+/** GET /students/stats — lightweight counts for admin overview (no full roster). */
+router.get(
+  '/stats',
+  asyncHandler(async (req, res) => {
+    const activeWhere = await applyStaffStudentScope(req.user, { isActive: true });
+    const activeCount = await prisma.student.count({ where: activeWhere });
+    res.json({ activeCount });
+  })
+);
+
 router.get(
   '/:id',
   validateParams(studentIdParam),

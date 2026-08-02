@@ -71,6 +71,7 @@ export function ReportsHub({
   studentSearchQuery = '',
   studentSearchLoading = false,
   reportsLoading = false,
+  selectedDate,
   actionError = null,
   onDismissActionError,
   activeReport: controlledActiveReport,
@@ -84,7 +85,7 @@ export function ReportsHub({
     controlledActiveReport ?? null
   )
   const [dateFilter, setDateFilter] = useState(
-    dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
+    selectedDate || dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
   )
   /** `ALL` or stringified classId — scopes homework / weekly sheets to one class. */
   const [classFilter, setClassFilter] = useState<string>('ALL')
@@ -122,9 +123,21 @@ export function ReportsHub({
   }, [currentActive, homeworkLogDetail, weeklyPlanDetail])
 
   useEffect(() => {
-    const next = dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
+    const next =
+      selectedDate ||
+      dailyAbsenceDetail?.date ||
+      lateArrivalsDetail?.date ||
+      homeworkLogDetail?.date ||
+      weeklyPlanDetail?.date ||
+      ''
     if (next) setDateFilter(next)
-  }, [dailyAbsenceDetail?.date, weeklyPlanDetail?.date])
+  }, [
+    selectedDate,
+    dailyAbsenceDetail?.date,
+    lateArrivalsDetail?.date,
+    homeworkLogDetail?.date,
+    weeklyPlanDetail?.date,
+  ])
 
   useEffect(() => {
     setClassFilter('ALL')
@@ -370,6 +383,10 @@ export function ReportsHub({
                 onSearchStudent={onSearchStudent}
                 onSelectStudent={onSelectStudent}
               />
+            ) : reportsLoading ? (
+              <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700">
+                جارٍ تحميل التقرير…
+              </p>
             ) : (
               <ReportSummarySheet report={activeSummary} />
             )}

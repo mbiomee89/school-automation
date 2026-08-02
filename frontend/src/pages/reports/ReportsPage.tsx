@@ -25,6 +25,21 @@ import type {
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
 
+function detailMatchesDate(
+  type: ReportType,
+  date: string,
+  daily: DailyAbsenceReportDetail | null,
+  late: LateArrivalsReportDetail | null,
+  homework: HomeworkLogReportDetail | null,
+  weekly: WeeklyPlanReportDetail | null
+): boolean {
+  if (type === 'DAILY_ABSENCE') return daily?.date === date
+  if (type === 'LATE_ARRIVALS') return late?.date === date
+  if (type === 'HOMEWORK_LOG') return homework?.date === date
+  if (type === 'WEEKLY_PLAN') return weekly?.date === date
+  return true
+}
+
 export function ReportsPage() {
   const [date, setDate] = useState(todayDateStr())
   const [reports, setReports] = useState<ReportSummary[]>([])
@@ -43,21 +58,17 @@ export function ReportsPage() {
   const [studentSearchLoading, setStudentSearchLoading] = useState(false)
   const [activeReport, setActiveReport] = useState<ReportType | null>(null)
   const [loading, setLoading] = useState(true)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [fatalError, setFatalError] = useState<string | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const searchTimer = useRef<number | null>(null)
-  const loadGen = useRef(0)
+  const summaryGen = useRef(0)
+  const detailGen = useRef(0)
 
-  const load = useCallback(async (forDate: string) => {
-    const gen = ++loadGen.current
-    const [summary, absence, late, homework, weekly] = await Promise.all([
-      getReportsSummary(forDate),
-      getDailyAbsenceReport(forDate),
-      getLateArrivalsReport(forDate),
-      getHomeworkLogReport(forDate),
-      getWeeklyPlanReport(forDate),
-    ])
-    if (gen !== loadGen.current) return
+  const loadSummary = useCallback(async (forDate: string) => {
+    const gen = ++summaryGen.current
+    const summary = await getReportsSummary(forDate)
+    if (gen !== summaryGen.current) return
     setReports((prev) => {
       const hist = prev.find((r) => r.type === 'STUDENT_HISTORY')
       return summary.map((r) => {
@@ -72,10 +83,43 @@ export function ReportsPage() {
         return r
       })
     })
-    setDailyAbsenceDetail(absence)
-    setLateArrivalsDetail(late)
-    setHomeworkLogDetail(homework)
-    setWeeklyPlanDetail(weekly)
+    // Date change invalidates cached detail payloads.
+    setDailyAbsenceDetail(null)
+    setLateArrivalsDetail(null)
+    setHomeworkLogDetail(null)
+    setWeeklyPlanDetail(null)
+  }, [])
+
+  const loadDetail = useCallback(async (type: ReportType, forDate: string) => {
+    if (type === 'STUDENT_HISTORY') return
+    const gen = ++detailGen.current
+    setDetailLoading(true)
+    setActionError(null)
+    try {
+      if (type === 'DAILY_ABSENCE') {
+        const detail = await getDailyAbsenceReport(forDate)
+        if (gen !== detailGen.current) return
+        setDailyAbsenceDetail(detail)
+      } else if (type === 'LATE_ARRIVALS') {
+        const detail = await getLateArrivalsReport(forDate)
+        if (gen !== detailGen.current) return
+        setLateArrivalsDetail(detail)
+      } else if (type === 'HOMEWORK_LOG') {
+        const detail = await getHomeworkLogReport(forDate)
+        if (gen !== detailGen.current) return
+        setHomeworkLogDetail(detail)
+      } else if (type === 'WEEKLY_PLAN') {
+        const detail = await getWeeklyPlanReport(forDate)
+        if (gen !== detailGen.current) return
+        setWeeklyPlanDetail(detail)
+      }
+    } catch (err) {
+      if (gen === detailGen.current) {
+        setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل التقرير')
+      }
+    } finally {
+      if (gen === detailGen.current) setDetailLoading(false)
+    }
   }, [])
 
   useEffect(() => {
@@ -84,7 +128,7 @@ export function ReportsPage() {
       setLoading(true)
       setActionError(null)
       try {
-        await load(date)
+        await loadSummary(date)
         if (!cancelled) setFatalError(null)
       } catch (err) {
         if (!cancelled) {
@@ -100,7 +144,32 @@ export function ReportsPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reload when date changes
-  }, [date, load])
+  }, [date, loadSummary])
+
+  useEffect(() => {
+    if (!activeReport || activeReport === 'STUDENT_HISTORY') return
+    if (
+      detailMatchesDate(
+        activeReport,
+        date,
+        dailyAbsenceDetail,
+        lateArrivalsDetail,
+        homeworkLogDetail,
+        weeklyPlanDetail
+      )
+    ) {
+      return
+    }
+    void loadDetail(activeReport, date)
+  }, [
+    activeReport,
+    date,
+    dailyAbsenceDetail,
+    lateArrivalsDetail,
+    homeworkLogDetail,
+    weeklyPlanDetail,
+    loadDetail,
+  ])
 
   useEffect(() => {
     return () => {
@@ -191,7 +260,8 @@ export function ReportsPage() {
       studentSearchQuery={studentSearchQuery}
       studentSearchResults={studentSearchResults}
       studentSearchLoading={studentSearchLoading}
-      reportsLoading={loading}
+      reportsLoading={loading || detailLoading}
+      selectedDate={date}
       actionError={actionError}
       onDismissActionError={() => setActionError(null)}
       activeReport={activeReport}

@@ -91,7 +91,26 @@ export function createApp() {
 
   const hasFrontend = fs.existsSync(path.join(FRONTEND_DIST, 'index.html'));
   if (hasFrontend) {
-    app.use(express.static(FRONTEND_DIST));
+    // Hashed Vite assets under /assets — cache forever (filename changes on build).
+    app.use(
+      '/assets',
+      express.static(path.join(FRONTEND_DIST, 'assets'), {
+        maxAge: '365d',
+        immutable: true,
+        setHeaders(res) {
+          res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        },
+      })
+    );
+    app.use(
+      express.static(FRONTEND_DIST, {
+        setHeaders(res, filePath) {
+          if (filePath.endsWith('index.html')) {
+            res.setHeader('Cache-Control', 'no-cache');
+          }
+        },
+      })
+    );
     app.use((req, res, next) => {
       if (req.method !== 'GET' && req.method !== 'HEAD') return next();
       if (
@@ -101,6 +120,7 @@ export function createApp() {
       ) {
         return next();
       }
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
     });
   }

@@ -201,6 +201,8 @@ export interface SchoolAdministrationProps {
   subjects: Subject[]
   assignments: TeacherAssignment[]
   students: Student[]
+  /** True while the students roster is being fetched (deferred until tab open). */
+  studentsLoading?: boolean
   enrollments: ClassEnrollment[]
   importBatches: ImportBatch[]
   importResult: ImportResult | null

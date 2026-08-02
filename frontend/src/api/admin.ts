@@ -341,6 +341,12 @@ export async function listStudents(params?: { q?: string; classId?: number; unas
   return data.students.map(mapStudent)
 }
 
+/** Lightweight active-student count for overview — avoids downloading the full roster. */
+export async function getStudentStats() {
+  const data = await apiRequest<{ activeCount: number }>('/students/stats')
+  return data
+}
+
 export async function createStudent(input: StudentInput) {
   const classId = input.classId && input.classId > 0 ? input.classId : null
   const data = await apiRequest<{ student: ApiStudent }>('/students', {

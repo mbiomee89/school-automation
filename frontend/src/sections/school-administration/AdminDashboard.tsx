@@ -18,6 +18,9 @@ import {
   BookOpen,
   RotateCcw,
   Download,
+  MoreHorizontal,
+  ChevronRight,
+  ChevronLeft,
 } from 'lucide-react'
 import type {
   AdminTab,
@@ -95,6 +98,70 @@ const EMPTY_STAFF_FORM: StaffInput = {
   phone: '',
 }
 
+/** Students rendered per page — keeps DOM small for large Noor imports. */
+const STUDENT_PAGE_SIZE = 25
+
+function StudentRowActions({
+  onEdit,
+  onPromote,
+  onUnassign,
+  onRemove,
+}: {
+  onEdit: () => void
+  onPromote: () => void
+  onUnassign?: () => void
+  onRemove?: () => void
+}) {
+  return (
+    <details className="relative text-start">
+      <summary
+        className={cn(
+          'inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700',
+          'hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700',
+          '[&::-webkit-details-marker]:hidden'
+        )}
+      >
+        إجراءات
+        <MoreHorizontal className="size-3.5 opacity-70" strokeWidth={1.75} />
+      </summary>
+      <div className="absolute end-0 z-20 mt-1 min-w-[10rem] rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800">
+        <button
+          type="button"
+          className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+          onClick={onEdit}
+        >
+          تعديل
+        </button>
+        <button
+          type="button"
+          className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+          onClick={onPromote}
+        >
+          نقل
+        </button>
+        {onUnassign && (
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
+            onClick={onUnassign}
+          >
+            إزالة من الفصل
+          </button>
+        )}
+        {onRemove && (
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-start text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
+            onClick={onRemove}
+          >
+            استبعاد
+          </button>
+        )}
+      </div>
+    </details>
+  )
+}
+
 /** Matches the backend's accepted Saudi mobile shapes; used for a soft inline hint only. */
 function looksLikeSaudiPhone(value: string) {
   const digits = value.trim().replace(/[\s()-]/g, '').replace(/^\+/, '')
@@ -138,6 +205,7 @@ export function AdminDashboard({
   subjects,
   assignments,
   students,
+  studentsLoading = false,
   enrollments,
   importBatches,
   importResult,
@@ -178,6 +246,11 @@ export function AdminDashboard({
   const [promoteFor, setPromoteFor] = useState<Student | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<Student | null>(null)
   const [studentClassFilter, setStudentClassFilter] = useState<'ALL' | 'UNASSIGNED' | number>('ALL')
+  const [studentPage, setStudentPage] = useState(0)
+  /** Mount only desktop table OR mobile cards — both used to double DOM (~3.4k buttons). */
+  const [isMdUp, setIsMdUp] = useState(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(min-width: 768px)').matches : true
+  )
 
   const [studentForm, setStudentForm] = useState<StudentInput>(EMPTY_STUDENT_FORM)
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null)
@@ -259,6 +332,18 @@ export function AdminDashboard({
     return () => window.clearTimeout(t)
   }, [settingsMessage])
 
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const apply = () => setIsMdUp(mq.matches)
+    apply()
+    mq.addEventListener('change', apply)
+    return () => mq.removeEventListener('change', apply)
+  }, [])
+
+  useEffect(() => {
+    setStudentPage(0)
+  }, [query, studentClassFilter, students.length])
+
   const displayLogo = logoPreview || schoolSettings.logoUrl
 
   const currentTab = controlledTab ?? tab
@@ -288,6 +373,13 @@ export function AdminDashboard({
         (qDigits.length >= 3 && digitsOnly(s.parentPhone).includes(qDigits))
     )
   }, [students, query, studentClassFilter])
+
+  const studentPageCount = Math.max(1, Math.ceil(filteredStudents.length / STUDENT_PAGE_SIZE))
+  const safeStudentPage = Math.min(studentPage, studentPageCount - 1)
+  const pagedStudents = useMemo(() => {
+    const start = safeStudentPage * STUDENT_PAGE_SIZE
+    return filteredStudents.slice(start, start + STUDENT_PAGE_SIZE)
+  }, [filteredStudents, safeStudentPage])
 
   const selectedStudent = students.find((s) => s.id === selectedStudentId) ?? null
   const studentEnrollments = enrollments.filter((e) => e.studentId === selectedStudentId)
@@ -812,10 +904,18 @@ export function AdminDashboard({
                 )}
               </div>
               <select
-                value={studentClassFilter === 'ALL' ? 'ALL' : studentClassFilter === 'UNASSIGNED' ? 'UNASSIGNED' : String(studentClassFilter)}
+                value={
+                  studentClassFilter === 'ALL'
+                    ? 'ALL'
+                    : studentClassFilter === 'UNASSIGNED'
+                      ? 'UNASSIGNED'
+                      : String(studentClassFilter)
+                }
                 onChange={(e) => {
                   const v = e.target.value
-                  setStudentClassFilter(v === 'ALL' ? 'ALL' : v === 'UNASSIGNED' ? 'UNASSIGNED' : Number(v))
+                  setStudentClassFilter(
+                    v === 'ALL' ? 'ALL' : v === 'UNASSIGNED' ? 'UNASSIGNED' : Number(v)
+                  )
                 }}
                 className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
               >
@@ -837,170 +937,169 @@ export function AdminDashboard({
               </button>
             </div>
 
-            <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100 md:block">
-              <table className="w-full text-start text-sm">
-                <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">الطالب</th>
-                    <th className="px-3 py-2 font-medium">رقم الهوية/الإقامة</th>
-                    <th className="px-3 py-2 font-medium">الفصل</th>
-                    <th className="px-3 py-2 font-medium">ولي الأمر</th>
-                    <th className="px-3 py-2 font-medium">واتساب</th>
-                    <th className="px-3 py-2 font-medium">الحالة</th>
-                    <th className="px-3 py-2 font-medium" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredStudents.map((s) => (
-                    <tr
-                      key={s.id}
-                      className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
-                    >
-                      <td className="px-3 py-2">
-                        <button
-                          type="button"
-                          className="text-start hover:text-blue-700 dark:hover:text-blue-300"
-                          onClick={() => {
-                            setSelectedStudentId(s.id)
-                            onSelectStudent?.(s.id)
-                          }}
-                        >
-                          <div className="font-semibold">{s.nameAr}</div>
-                          <div className="text-xs text-slate-500">{s.nameEn}</div>
-                        </button>
-                      </td>
-                      <td className="px-3 py-2" style={fontMono}>
-                        {s.id}
-                      </td>
-                      <td className="px-3 py-2">
-                        {s.className ?? <span className="text-slate-400">بدون فصل</span>}
-                      </td>
-                      <td className="px-3 py-2">
-                        <PhoneText value={s.parentPhone} />
-                      </td>
-                      <td className="px-3 py-2">
-                        {s.waOptedIn ? (
-                          <CheckCircle2 className="size-4 text-blue-600" />
-                        ) : (
-                          <Ban className="size-4 text-slate-400" />
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <span
-                          className={cn(
-                            'rounded-full px-2 py-0.5 text-xs',
-                            s.isActive
-                              ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
-                              : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                          )}
-                        >
-                          {s.isActive ? 'نشط' : 'غير نشط'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-end">
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300"
-                            onClick={() => openEditStudent(s)}
-                          >
-                            تعديل
-                          </button>
-                          <button
-                            type="button"
-                            className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300"
-                            onClick={() => setPromoteFor(s)}
-                          >
-                            نقل
-                          </button>
-                          {s.classId != null && (
-                            <button
-                              type="button"
-                              className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300"
-                              onClick={() => onUnassignStudent?.(s.id)}
-                            >
-                              إزالة من الفصل
-                            </button>
-                          )}
-                          {s.isActive && (
-                            <button
-                              type="button"
-                              className="text-xs text-red-600 underline"
-                              onClick={() => setConfirmRemove(s)}
-                            >
-                              استبعاد
-                            </button>
-                          )}
-                        </div>
-                      </td>
+            {studentsLoading && students.length === 0 ? (
+              <p className="p-8 text-center text-sm text-slate-500">جارٍ تحميل قائمة الطلاب…</p>
+            ) : isMdUp ? (
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                <table className="w-full text-start text-sm">
+                  <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">الطالب</th>
+                      <th className="px-3 py-2 font-medium">رقم الهوية/الإقامة</th>
+                      <th className="px-3 py-2 font-medium">الفصل</th>
+                      <th className="px-3 py-2 font-medium">ولي الأمر</th>
+                      <th className="px-3 py-2 font-medium">واتساب</th>
+                      <th className="px-3 py-2 font-medium">الحالة</th>
+                      <th className="px-3 py-2 font-medium" />
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-              {filteredStudents.length === 0 && (
-                <p className="p-6 text-center text-sm text-slate-500">لا يوجد طلاب مطابقون لبحثك.</p>
-              )}
-            </div>
+                  </thead>
+                  <tbody>
+                    {pagedStudents.map((s) => (
+                      <tr
+                        key={s.id}
+                        className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
+                      >
+                        <td className="px-3 py-2">
+                          <button
+                            type="button"
+                            className="text-start hover:text-blue-700 dark:hover:text-blue-300"
+                            onClick={() => {
+                              setSelectedStudentId(s.id)
+                              onSelectStudent?.(s.id)
+                            }}
+                          >
+                            <div className="font-semibold">{s.nameAr}</div>
+                            <div className="text-xs text-slate-500">{s.nameEn}</div>
+                          </button>
+                        </td>
+                        <td className="px-3 py-2" style={fontMono}>
+                          {s.id}
+                        </td>
+                        <td className="px-3 py-2">
+                          {s.className ?? <span className="text-slate-400">بدون فصل</span>}
+                        </td>
+                        <td className="px-3 py-2">
+                          <PhoneText value={s.parentPhone} />
+                        </td>
+                        <td className="px-3 py-2">
+                          {s.waOptedIn ? (
+                            <CheckCircle2 className="size-4 text-blue-600" />
+                          ) : (
+                            <Ban className="size-4 text-slate-400" />
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={cn(
+                              'rounded-full px-2 py-0.5 text-xs',
+                              s.isActive
+                                ? 'bg-blue-500/15 text-blue-800 dark:text-blue-300'
+                                : 'bg-gray-200 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
+                            )}
+                          >
+                            {s.isActive ? 'نشط' : 'غير نشط'}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-end">
+                          <StudentRowActions
+                            onEdit={() => openEditStudent(s)}
+                            onPromote={() => setPromoteFor(s)}
+                            onUnassign={
+                              s.classId != null ? () => onUnassignStudent?.(s.id) : undefined
+                            }
+                            onRemove={s.isActive ? () => setConfirmRemove(s) : undefined}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filteredStudents.length === 0 && !studentsLoading && (
+                  <p className="p-6 text-center text-sm text-slate-500">
+                    لا يوجد طلاب مطابقون لبحثك.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {pagedStudents.map((s) => (
+                  <div
+                    key={s.id}
+                    className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100"
+                  >
+                    <button
+                      type="button"
+                      className="w-full text-start"
+                      onClick={() => {
+                        setSelectedStudentId(s.id)
+                        onSelectStudent?.(s.id)
+                      }}
+                    >
+                      <div className="text-lg font-bold">{s.nameAr}</div>
+                      <div className="text-sm text-slate-500">{s.nameEn}</div>
+                      <div className="mt-2 text-xs text-slate-500">
+                        <span dir="ltr" style={fontMono}>
+                          {s.id}
+                        </span>
+                        {' · '}
+                        <PhoneText value={s.parentPhone} />
+                      </div>
+                      <div className="mt-1 text-sm">
+                        {s.className ?? <span className="text-slate-400">بدون فصل</span>}
+                      </div>
+                    </button>
+                    <div className="mt-3 flex justify-end border-t border-slate-100 pt-3 dark:border-slate-800">
+                      <StudentRowActions
+                        onEdit={() => openEditStudent(s)}
+                        onPromote={() => setPromoteFor(s)}
+                        onUnassign={
+                          s.classId != null ? () => onUnassignStudent?.(s.id) : undefined
+                        }
+                        onRemove={s.isActive ? () => setConfirmRemove(s) : undefined}
+                      />
+                    </div>
+                  </div>
+                ))}
+                {filteredStudents.length === 0 && !studentsLoading && (
+                  <p className="p-6 text-center text-sm text-slate-500">
+                    لا يوجد طلاب مطابقون لبحثك.
+                  </p>
+                )}
+              </div>
+            )}
 
-            <div className="space-y-3 md:hidden">
-              {filteredStudents.map((s) => (
-                <div
-                  key={s.id}
-                  className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100"
-                >
+            {filteredStudents.length > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <span style={fontMono}>
+                  {safeStudentPage * STUDENT_PAGE_SIZE + 1}–
+                  {Math.min((safeStudentPage + 1) * STUDENT_PAGE_SIZE, filteredStudents.length)} من{' '}
+                  {filteredStudents.length}
+                </span>
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="w-full text-start"
-                    onClick={() => {
-                      setSelectedStudentId(s.id)
-                      onSelectStudent?.(s.id)
-                    }}
+                    disabled={safeStudentPage <= 0}
+                    onClick={() => setStudentPage((p) => Math.max(0, p - 1))}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800"
                   >
-                    <div className="text-lg font-bold">{s.nameAr}</div>
-                    <div className="text-sm text-slate-500">{s.nameEn}</div>
-                    <div className="mt-2 text-xs text-slate-500">
-                      <span dir="ltr" style={fontMono}>
-                        {s.id}
-                      </span>
-                      {' · '}
-                      <PhoneText value={s.parentPhone} />
-                    </div>
-                    <div className="mt-1 text-sm">
-                      {s.className ?? <span className="text-slate-400">بدون فصل</span>}
-                    </div>
+                    <ChevronRight className="size-3.5" />
+                    السابق
                   </button>
-                  <div className="mt-3 flex flex-wrap gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-                    <button type="button" className="text-xs underline" onClick={() => openEditStudent(s)}>
-                      تعديل
-                    </button>
-                    <button type="button" className="text-xs underline" onClick={() => setPromoteFor(s)}>
-                      نقل
-                    </button>
-                    {s.classId != null && (
-                      <button
-                        type="button"
-                        className="text-xs underline"
-                        onClick={() => onUnassignStudent?.(s.id)}
-                      >
-                        إزالة من الفصل
-                      </button>
-                    )}
-                    {s.isActive && (
-                      <button
-                        type="button"
-                        className="text-xs text-red-600 underline"
-                        onClick={() => setConfirmRemove(s)}
-                      >
-                        استبعاد
-                      </button>
-                    )}
-                  </div>
+                  <span className="tabular-nums" style={fontMono}>
+                    {safeStudentPage + 1} / {studentPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={safeStudentPage >= studentPageCount - 1}
+                    onClick={() => setStudentPage((p) => Math.min(studentPageCount - 1, p + 1))}
+                    className="inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800"
+                  >
+                    التالي
+                    <ChevronLeft className="size-3.5" />
+                  </button>
                 </div>
-              ))}
-              {filteredStudents.length === 0 && (
-                <p className="p-6 text-center text-sm text-slate-500">لا يوجد طلاب مطابقون لبحثك.</p>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         )}
 

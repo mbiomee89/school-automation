@@ -1,14 +1,17 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import {
   activateUser,
   addAssignment,
+  backupDataOnly,
   createStudent,
   createUser,
   deactivateUser,
   deleteClass,
   deleteSubject,
+  downloadBackupZip,
   getSchoolSettings,
+  getStudentStats,
   importNoorFile,
   importNoorTeachersFile,
   listAssignments,
@@ -21,6 +24,8 @@ import {
   promoteStudent,
   removeAllStudentsFromClass,
   removeAssignment,
+  resetAllDataWithBackup,
+  restoreDataFromBackupFile,
   saveClass,
   saveSchoolSettings,
   saveSubject,
@@ -29,14 +34,11 @@ import {
   unassignStudent,
   updateStudent,
   uploadSchoolLogo,
-  resetAllDataWithBackup,
-  restoreDataFromBackupFile,
-  backupDataOnly,
-  downloadBackupZip,
 } from '../../api/admin'
 import { ApiError } from '../../api/client'
 import { AdminDashboard } from '../../sections/school-administration/AdminDashboard'
 import type {
+  AdminTab,
   AssignmentInput,
   ClassEnrollment,
   ClassInput,
@@ -64,6 +66,7 @@ function alertError(err: unknown, fallback: string) {
 export function AdministrationPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<AdminTab>('overview')
 
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>({
     name: 'منصة إدارة المدرسة',
@@ -78,37 +81,74 @@ export function AdministrationPage() {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [assignments, setAssignments] = useState<TeacherAssignment[]>([])
   const [students, setStudents] = useState<Student[]>([])
+  const [activeStudentCount, setActiveStudentCount] = useState(0)
+  const [studentsLoading, setStudentsLoading] = useState(false)
+  const [studentsLoaded, setStudentsLoaded] = useState(false)
   const [enrollments, setEnrollments] = useState<ClassEnrollment[]>([])
   const [importBatches, setImportBatches] = useState<ImportBatch[]>([])
+  const [importBatchesLoaded, setImportBatchesLoaded] = useState(false)
+  const [assignmentsLoaded, setAssignmentsLoaded] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [teacherImportResult, setTeacherImportResult] = useState<ImportResult | null>(null)
+  const studentsLoadGen = useRef(0)
 
-  const loadAll = useCallback(async () => {
+  const refreshStudentStats = useCallback(async () => {
+    const stats = await getStudentStats()
+    setActiveStudentCount(stats.activeCount)
+  }, [])
+
+  const loadStudents = useCallback(async (query?: string) => {
+    const gen = ++studentsLoadGen.current
+    setStudentsLoading(true)
+    try {
+      const list = await listStudents({ q: query || undefined })
+      if (gen !== studentsLoadGen.current) return
+      setStudents(list)
+      setStudentsLoaded(true)
+      if (!query) setActiveStudentCount(list.filter((s) => s.isActive).length)
+    } finally {
+      if (gen === studentsLoadGen.current) setStudentsLoading(false)
+    }
+  }, [])
+
+  const loadAssignments = useCallback(async () => {
+    setAssignments(await listAssignments())
+    setAssignmentsLoaded(true)
+  }, [])
+
+  const loadImportBatches = useCallback(async () => {
+    setImportBatches(await listImportBatches())
+    setImportBatchesLoaded(true)
+  }, [])
+
+  /** Core shell for overview — no full student roster. */
+  const loadShell = useCallback(async () => {
     setError(null)
-    const [settings, users, classList, subjectList, assignmentList, studentList, batches] =
-      await Promise.all([
-        getSchoolSettings(),
-        listUsers(),
-        listClasses(),
-        listSubjects(),
-        listAssignments(),
-        listStudents(),
-        listImportBatches(),
-      ])
+    const [settings, users, classList, subjectList, stats] = await Promise.all([
+      getSchoolSettings(),
+      listUsers(),
+      listClasses(),
+      listSubjects(),
+      getStudentStats(),
+    ])
     setSchoolSettings(settings)
     setStaff(users)
     setClasses(classList)
     setSubjects(subjectList)
-    setAssignments(assignmentList)
-    setStudents(studentList)
-    setImportBatches(batches)
+    setActiveStudentCount(stats.activeCount)
+    setStudentsLoaded(false)
+    setStudents([])
+    setAssignmentsLoaded(false)
+    setAssignments([])
+    setImportBatchesLoaded(false)
+    setImportBatches([])
   }, [])
 
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
-        await loadAll()
+        await loadShell()
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : 'تعذّر تحميل بيانات الإدارة')
@@ -120,10 +160,31 @@ export function AdministrationPage() {
     return () => {
       cancelled = true
     }
-  }, [loadAll])
+  }, [loadShell])
+
+  useEffect(() => {
+    if (activeTab === 'students' && !studentsLoaded && !studentsLoading) {
+      void loadStudents().catch((err) => alertError(err, 'فشل تحميل الطلاب'))
+    }
+    if (activeTab === 'assignments' && !assignmentsLoaded) {
+      void loadAssignments().catch((err) => alertError(err, 'فشل تحميل التوزيع'))
+    }
+    if (activeTab === 'import' && !importBatchesLoaded) {
+      void loadImportBatches().catch((err) => alertError(err, 'فشل تحميل سجل الاستيراد'))
+    }
+  }, [
+    activeTab,
+    studentsLoaded,
+    studentsLoading,
+    assignmentsLoaded,
+    importBatchesLoaded,
+    loadStudents,
+    loadAssignments,
+    loadImportBatches,
+  ])
 
   const overviewStats: OverviewStats = {
-    activeStudents: students.filter((s) => s.isActive).length,
+    activeStudents: activeStudentCount,
     staffCount: staff.filter((s) => s.isActive).length,
     classesThisYear: classes.filter((c) => c.academicYear === schoolSettings.academicYear).length,
     notificationsFailedToday: 0,
@@ -148,7 +209,7 @@ export function AdministrationPage() {
         actionLabel="إعادة المحاولة"
         onAction={() => {
           setLoading(true)
-          loadAll()
+          loadShell()
             .catch((err) => setError(err instanceof ApiError ? err.message : 'فشل التحميل'))
             .finally(() => setLoading(false))
         }}
@@ -165,13 +226,16 @@ export function AdministrationPage() {
       subjects={subjects}
       assignments={assignments}
       students={students}
+      studentsLoading={studentsLoading}
       enrollments={enrollments}
       importBatches={importBatches}
       importResult={importResult}
       notifications={[]}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       onSearchStudents={async (query) => {
         try {
-          setStudents(await listStudents({ q: query || undefined }))
+          await loadStudents(query || undefined)
         } catch (err) {
           alertError(err, 'فشل البحث')
         }
@@ -196,8 +260,7 @@ export function AdministrationPage() {
           } else {
             await createStudent(input)
           }
-          setStudents(await listStudents())
-          setClasses(await listClasses())
+          await Promise.all([loadStudents(), listClasses().then(setClasses), refreshStudentStats()])
         } catch (err) {
           alertError(err, 'فشل حفظ الطالب')
         }
@@ -205,7 +268,7 @@ export function AdministrationPage() {
       onSoftRemoveStudent={async (studentId) => {
         try {
           await softRemoveStudent(studentId)
-          setStudents(await listStudents())
+          await Promise.all([loadStudents(), refreshStudentStats()])
         } catch (err) {
           alertError(err, 'فشل استبعاد الطالب')
         }
@@ -213,8 +276,7 @@ export function AdministrationPage() {
       onPromoteStudent={async (studentId, classId) => {
         try {
           await promoteStudent(studentId, classId)
-          setStudents(await listStudents())
-          setClasses(await listClasses())
+          await Promise.all([loadStudents(), listClasses().then(setClasses)])
         } catch (err) {
           alertError(err, 'فشل نقل الطالب')
         }
@@ -222,8 +284,7 @@ export function AdministrationPage() {
       onUnassignStudent={async (studentId) => {
         try {
           await unassignStudent(studentId)
-          setStudents(await listStudents())
-          setClasses(await listClasses())
+          await Promise.all([loadStudents(), listClasses().then(setClasses)])
         } catch (err) {
           alertError(err, 'فشل إزالة الطالب من الفصل')
         }
@@ -247,8 +308,11 @@ export function AdministrationPage() {
       onRemoveAllStudentsFromClass={async (classId) => {
         try {
           await removeAllStudentsFromClass(classId)
-          setStudents(await listStudents())
-          setClasses(await listClasses())
+          await Promise.all([
+            loadStudents(),
+            listClasses().then(setClasses),
+            refreshStudentStats(),
+          ])
         } catch (err) {
           alertError(err, 'فشل تفريغ الفصل')
         }
@@ -265,7 +329,7 @@ export function AdministrationPage() {
         try {
           await deleteSubject(subjectId)
           setSubjects(await listSubjects())
-          setAssignments(await listAssignments())
+          if (assignmentsLoaded) await loadAssignments()
         } catch (err) {
           alertError(err, 'فشل حذف المادة')
         }
@@ -298,18 +362,15 @@ export function AdministrationPage() {
       onAddAssignment={async (input: AssignmentInput) => {
         try {
           await addAssignment(input)
-          setAssignments(await listAssignments())
+          await loadAssignments()
         } catch (err) {
           alertError(err, 'فشل إضافة التوزيع')
         }
       }}
       onSyncAssignments={async (input) => {
         try {
-          const result = await syncTeacherAssignments(input)
-          setAssignments(await listAssignments())
-          if (result.created || result.removed) {
-            // silent success — list refresh is enough
-          }
+          await syncTeacherAssignments(input)
+          await loadAssignments()
         } catch (err) {
           alertError(err, 'فشل حفظ توزيع المعلم')
           throw err
@@ -318,7 +379,7 @@ export function AdministrationPage() {
       onRemoveAssignment={async (assignmentId) => {
         try {
           await removeAssignment(assignmentId)
-          setAssignments(await listAssignments())
+          await loadAssignments()
         } catch (err) {
           alertError(err, 'فشل حذف التوزيع')
         }
@@ -328,9 +389,13 @@ export function AdministrationPage() {
         try {
           const result = await importNoorFile(file)
           setImportResult(result)
-          setStudents(await listStudents())
-          setClasses(await listClasses())
-          setImportBatches(await listImportBatches())
+          setStudentsLoaded(false)
+          await Promise.all([
+            loadStudents(),
+            listClasses().then(setClasses),
+            loadImportBatches(),
+            refreshStudentStats(),
+          ])
         } catch (err) {
           alertError(err, 'فشل استيراد الطلاب')
         }
@@ -368,7 +433,8 @@ export function AdministrationPage() {
         setImportResult(null)
         setTeacherImportResult(null)
         setEnrollments([])
-        await loadAll()
+        setActiveTab('overview')
+        await loadShell()
         return { backupFileName: result.backupFileName }
       }}
       onRestoreFromBackup={async (file) => {
@@ -376,7 +442,8 @@ export function AdministrationPage() {
         setImportResult(null)
         setTeacherImportResult(null)
         setEnrollments([])
-        await loadAll()
+        setActiveTab('overview')
+        await loadShell()
         return { defaultPassword: result.defaultPassword }
       }}
     />

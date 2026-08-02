@@ -168,6 +168,8 @@ export interface ReportsProps {
   studentSearchLoading?: boolean
   /** True while date-scoped reports are reloading */
   reportsLoading?: boolean
+  /** Controlled date scope (YYYY-MM-DD) for hub/detail filters when details are lazy-loaded. */
+  selectedDate?: string
   /** Inline non-fatal error (e.g. student history failed) — does not unmount the hub */
   actionError?: string | null
   onDismissActionError?: () => void
