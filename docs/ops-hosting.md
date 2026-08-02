@@ -14,17 +14,19 @@ Short checklist for the school-automation web service + Postgres on Render.
 
 ## Ephemeral disk (accepted on free Render)
 
-Uploaded files live on the web service disk and are **lost on every redeploy**:
+Uploaded files on the web service disk are **lost on every redeploy**.
 
-- School logo
-- Parent absence attachments
+**School logo** is stored in **Postgres** (`SchoolSettings.logoData`) and served from `GET /api/school-settings/logo` — it **survives redeploy**. Re-upload only when changing the logo, not after every deploy.
+
+Still ephemeral on disk only:
+
+- Parent absence attachments (DB bytes are preferred when present; older disk-only files may need re-submit)
 - Server-side `/uploads/backups/*` copies
 
 **Ops rules:**
 
-1. After every redeploy, open Settings and **re-upload the school logo** if missing.
-2. Treat the **browser-downloaded ZIP** as the real backup — keep it outside Render (local drive / cloud). Prefer **Settings → تنزيل نسخة احتياطية ZIP** (`POST /api/users/backup-data`) for a backup **without** wiping; use reset only when you intend to wipe.
-3. Parent excuse attachments may need re-submit after a redeploy if the file is gone.
+1. Treat the **browser-downloaded ZIP** as the real backup — keep it outside Render (local drive / cloud). Prefer **Settings → تنزيل نسخة احتياطية ZIP** (`POST /api/users/backup-data`) for a backup **without** wiping; use reset only when you intend to wipe.
+2. Parent excuse attachments may need re-submit after a redeploy if only the disk copy existed.
 
 ## Passwords
 

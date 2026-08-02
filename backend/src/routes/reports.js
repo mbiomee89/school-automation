@@ -6,7 +6,7 @@ import { validateQuery } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { notFound } from '../utils/errors.js';
 import { toUtcMidnight, weekStartSaturdayUtc } from '../utils/dates.js';
-import { logoPathToUrl } from '../middleware/upload.js';
+import { schoolLogoUrl } from '../services/schoolLogo.js';
 
 const router = Router();
 
@@ -19,13 +19,24 @@ const dateQuery = z.object({
 const SINGLETON_ID = 1;
 
 async function schoolHeader() {
-  const settings = await prisma.schoolSettings.findUnique({ where: { id: SINGLETON_ID } });
+  const settings = await prisma.schoolSettings.findUnique({
+    where: { id: SINGLETON_ID },
+    select: {
+      name: true,
+      academicYear: true,
+      principalName: true,
+      educationAdminName: true,
+      logoPath: true,
+      logoMime: true,
+      updatedAt: true,
+    },
+  });
   return {
     schoolName: settings?.name ?? 'المدرسة',
     academicYear: settings?.academicYear ?? '',
     principalName: settings?.principalName ?? null,
     educationAdminName: settings?.educationAdminName ?? null,
-    logoUrl: logoPathToUrl(settings?.logoPath),
+    logoUrl: schoolLogoUrl(settings),
   };
 }
 

@@ -25,6 +25,24 @@ function stripAttendanceForBackup(row) {
   };
 }
 
+function stripSchoolSettingsForBackup(row) {
+  if (!row) return row;
+  const { logoData, ...rest } = row;
+  return {
+    ...rest,
+    logoDataBase64: logoData ? Buffer.from(logoData).toString('base64') : null,
+  };
+}
+
+function restoreLogoBytes(row) {
+  if (!row) return null;
+  if (row.logoDataBase64) return Buffer.from(row.logoDataBase64, 'base64');
+  if (row.logoData?.type === 'Buffer' && Array.isArray(row.logoData.data)) {
+    return Buffer.from(row.logoData.data);
+  }
+  return null;
+}
+
 function restoreAttachmentBytes(row) {
   if (row.absenceAttachmentDataBase64) {
     return Buffer.from(row.absenceAttachmentDataBase64, 'base64');
@@ -92,12 +110,13 @@ export async function createDataBackup(prisma) {
   ]);
 
   const attendanceSafe = attendance.map(stripAttendanceForBackup);
+  const schoolSettingsSafe = schoolSettings.map(stripSchoolSettingsForBackup);
 
   return {
     version: 1,
     kind: 'school-automation-full-backup',
     createdAt: new Date().toISOString(),
-    schoolSettings,
+    schoolSettings: schoolSettingsSafe,
     users,
     classes,
     subjects,
@@ -327,6 +346,12 @@ export async function restoreFromBackup(prisma, backup) {
     ? backup.schoolSettings[0]
     : backup.schoolSettings;
   if (settingsRow) {
+    const logoData = restoreLogoBytes(settingsRow);
+    const logoFields = {
+      logoPath: settingsRow.logoPath ?? null,
+      logoMime: settingsRow.logoMime ?? null,
+      logoData,
+    };
     await prisma.schoolSettings.upsert({
       where: { id: 1 },
       update: {
@@ -335,6 +360,7 @@ export async function restoreFromBackup(prisma, backup) {
         principalName: settingsRow.principalName ?? null,
         educationAdminName: settingsRow.educationAdminName ?? null,
         address: settingsRow.address ?? null,
+        ...logoFields,
       },
       create: {
         id: 1,
@@ -343,7 +369,7 @@ export async function restoreFromBackup(prisma, backup) {
         principalName: settingsRow.principalName ?? null,
         educationAdminName: settingsRow.educationAdminName ?? null,
         address: settingsRow.address ?? null,
-        logoPath: null,
+        ...logoFields,
       },
     });
   }

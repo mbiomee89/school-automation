@@ -374,7 +374,11 @@ model SchoolSettings {
   name          String
   // Relative path under /uploads (e.g. "logos/abc123.png") — never a
   // client-supplied absolute path. Null means no logo has been uploaded yet.
+  // Disk is ephemeral on free Render; prefer logoData for durability.
   logoPath      String?
+  /// Logo bytes in Postgres — survives Render redeploys (disk does not).
+  logoData      Bytes?
+  logoMime      String?
   academicYear  String
   principalName String?
   /// Education administration / directorate shown on printed report headers (إدارة التعليم)
