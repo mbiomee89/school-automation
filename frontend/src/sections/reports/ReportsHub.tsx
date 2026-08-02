@@ -7,6 +7,8 @@ import {
   CalendarRange,
   History,
   LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
 import type {
@@ -23,14 +25,10 @@ import { cn } from '../../shared/utils'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { PhoneText } from '../../shared/PhoneText'
 import {
-  daysInMonth,
+  addDaysToDateOnly,
   formatReportDate,
   formatReportDateRange,
-  MONTH_OPTIONS,
-  parseDateOnly,
-  toDateOnly,
   todayDateOnly,
-  yearOptionsAround,
 } from '../../shared/dates'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
@@ -342,6 +340,7 @@ export function ReportsHub({
                 {DATE_FILTER_TYPES.includes(currentActive) && (
                   <ReportDateNavigator
                     value={dateFilter || selectedDate || todayDateOnly()}
+                    stepDays={currentActive === 'WEEKLY_PLAN' ? 7 : 1}
                     weekMode={currentActive === 'WEEKLY_PLAN'}
                     disabled={reportsLoading}
                     onChange={(next) => {
@@ -977,86 +976,66 @@ function StudentHistoryDetailView({
   )
 }
 
-/** Day / month / year dropdowns — display as dd mmm yyyy. */
+/** Prev/next (+ today) — date shown as dd/mm/yyyy. */
 function ReportDateNavigator({
   value,
   onChange,
+  stepDays = 1,
   weekMode = false,
   disabled = false,
 }: {
   value: string
   onChange: (next: string) => void
+  stepDays?: number
   weekMode?: boolean
   disabled?: boolean
 }) {
+  const safeValue = /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : todayDateOnly()
   const today = todayDateOnly()
-  const parsed = parseDateOnly(value) ?? parseDateOnly(today)!
-  const { year, month, day } = parsed
-  const maxDay = daysInMonth(year, month)
-  const todayYear = parseDateOnly(today)?.year ?? year
-  const years = [...new Set([...yearOptionsAround(year), todayYear])].sort((a, b) => a - b)
-  const selectClass =
-    'rounded-lg border border-slate-300 bg-white px-2 py-2 text-sm font-medium text-slate-800 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100'
-
-  function commit(nextYear: number, nextMonth: number, nextDay: number) {
-    onChange(toDateOnly(nextYear, nextMonth, nextDay))
-  }
+  const label = weekMode
+    ? `أسبوع ${formatReportDate(safeValue)}`
+    : formatReportDate(safeValue)
+  const prevLabel = weekMode ? 'الأسبوع السابق' : 'اليوم السابق'
+  const nextLabel = weekMode ? 'الأسبوع التالي' : 'اليوم التالي'
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div
-        className="inline-flex flex-wrap items-center gap-1.5 rounded-xl border border-slate-300 bg-white p-1.5 dark:border-slate-600 dark:bg-slate-900"
-        role="group"
-        aria-label={weekMode ? 'اختيار أسبوع التقرير' : 'اختيار تاريخ التقرير'}
-      >
-        <select
-          aria-label="اليوم"
+      <div className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-900">
+        <button
+          type="button"
           disabled={disabled}
-          value={Math.min(day, maxDay)}
-          onChange={(e) => commit(year, month, Number(e.target.value))}
-          className={selectClass}
-          style={fontMono}
+          aria-label={prevLabel}
+          title={prevLabel}
+          onClick={() => onChange(addDaysToDateOnly(safeValue, -stepDays))}
+          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
         >
-          {Array.from({ length: maxDay }, (_, i) => i + 1).map((d) => (
-            <option key={d} value={d}>
-              {String(d).padStart(2, '0')}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="الشهر"
+          <ChevronRight className="size-5" strokeWidth={1.75} />
+        </button>
+        <div className="min-w-[8.5rem] px-2 text-center">
+          <p
+            className="text-sm font-bold tabular-nums text-slate-900 dark:text-slate-50"
+            style={fontMono}
+          >
+            {label}
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {weekMode ? 'بداية الأسبوع (السبت)' : 'التاريخ'}
+          </p>
+        </div>
+        <button
+          type="button"
           disabled={disabled}
-          value={month}
-          onChange={(e) => commit(year, Number(e.target.value), day)}
-          className={selectClass}
+          aria-label={nextLabel}
+          title={nextLabel}
+          onClick={() => onChange(addDaysToDateOnly(safeValue, stepDays))}
+          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
         >
-          {MONTH_OPTIONS.map((m) => (
-            <option key={m.value} value={m.value}>
-              {m.label}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label="السنة"
-          disabled={disabled}
-          value={year}
-          onChange={(e) => commit(Number(e.target.value), month, day)}
-          className={selectClass}
-          style={fontMono}
-        >
-          {years.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          <ChevronLeft className="size-5" strokeWidth={1.75} />
+        </button>
       </div>
-      <p className="text-xs text-slate-500 dark:text-slate-400" style={fontMono}>
-        {weekMode ? `أسبوع ${formatReportDate(toDateOnly(year, month, day))}` : formatReportDate(toDateOnly(year, month, day))}
-      </p>
       <button
         type="button"
-        disabled={disabled || toDateOnly(year, month, day) === today}
+        disabled={disabled || safeValue === today}
         onClick={() => onChange(today)}
         className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
       >
