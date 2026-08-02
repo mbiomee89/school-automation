@@ -22,6 +22,7 @@ import type {
 import { cn } from '../../shared/utils'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { PhoneText } from '../../shared/PhoneText'
+import { formatReportDate, formatReportDateRange } from '../../shared/dates'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_OFF: CalendarOff,
@@ -49,7 +50,7 @@ const CLASS_FILTER_TYPES: ReportType[] = ['HOMEWORK_LOG', 'WEEKLY_PLAN']
 
 function formatGeneratedAt(iso: string | null | undefined) {
   if (!iso) return 'لم يُولَّد بعد'
-  return `آخر توليد: ${new Date(iso).toLocaleString('ar-SA')}`
+  return `آخر توليد: ${formatReportDate(iso)}`
 }
 
 function formatTime(iso: string) {
@@ -286,7 +287,7 @@ export function ReportsHub({
                     </div>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <span>{report.context}</span>
+                    <span>{formatReportDate(report.context)}</span>
                     <span className="tabular-nums" style={fontMono}>
                       {report.count != null ? `${report.count} سطراً` : 'يُحدَّد عند الفتح'}
                     </span>
@@ -406,7 +407,7 @@ function DailyAbsenceDetailView({ detail }: { detail: DailyAbsenceReportDetail }
         educationAdminName={detail.educationAdminName}
         logoUrl={detail.logoUrl}
         subtitle="تقرير الغياب اليومي"
-        dateLabel={detail.date}
+        dateLabel={formatReportDate(detail.date)}
         generatedAt={detail.generatedAt}
       />
       <div className="hidden overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800 md:block">
@@ -485,7 +486,7 @@ function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }
         educationAdminName={detail.educationAdminName}
         logoUrl={detail.logoUrl}
         subtitle="تقرير التأخر"
-        dateLabel={detail.date}
+        dateLabel={formatReportDate(detail.date)}
         generatedAt={detail.generatedAt}
       />
       <SimpleTable
@@ -548,7 +549,10 @@ function HomeworkLogDetailView({
           educationAdminName={detail.educationAdminName}
           logoUrl={detail.logoUrl}
           principalName={detail.principalName}
-          metaLines={[`تاريخ الواجبات: ${detail.date}`, `الفصل: ${cls.className}`]}
+          metaLines={[
+            `تاريخ الواجبات: ${formatReportDate(detail.date)}`,
+            `الفصل: ${cls.className}`,
+          ]}
           title={`سجل الواجبات — ${cls.className}`}
         >
           <FormalTable
@@ -559,7 +563,7 @@ function HomeworkLogDetailView({
               r.subjectName,
               r.teacherName,
               r.description,
-              r.dueDate || '—',
+              r.dueDate ? formatReportDate(r.dueDate) : '—',
             ])}
           />
         </FormalClassSheet>
@@ -610,7 +614,7 @@ function WeeklyPlanDetailView({
           principalName={detail.principalName}
           metaLines={[
             `العام الدراسي ${detail.academicYear}`,
-            `من ${detail.weekStart} إلى ${weekEnd}`,
+            formatReportDateRange(detail.weekStart, weekEnd),
             `الفصل: ${cls.className}`,
           ]}
           title={`الخطة الدراسية الأسبوعية — ${cls.className}`}
@@ -935,8 +939,8 @@ function StudentHistoryDetailView({
             rows={detail.enrollments.map((e) => [
               e.className + (e.isCurrent ? ' (حالي)' : ''),
               e.academicYear,
-              e.startDate,
-              e.endDate ?? '—',
+              formatReportDate(e.startDate),
+              e.endDate ? formatReportDate(e.endDate) : '—',
             ])}
           />
 
@@ -945,7 +949,7 @@ function StudentHistoryDetailView({
             headers={['التاريخ', 'الفصل', 'الحالة', 'العذر']}
             empty="لا يوجد سجل حضور."
             rows={detail.attendance.map((a) => [
-              a.date,
+              formatReportDate(a.date),
               a.className,
               STATUS_AR[a.status] ?? a.status,
               a.absenceReason || '—',
@@ -957,7 +961,7 @@ function StudentHistoryDetailView({
             headers={['التاريخ', 'الفصل', 'الوقت', 'السبب']}
             empty="لا يوجد سجل تأخر."
             rows={detail.lateArrivals.map((l) => [
-              l.date,
+              formatReportDate(l.date),
               l.className,
               formatTime(l.time),
               l.reason || '—',
@@ -1071,7 +1075,7 @@ function ReportSummarySheet({ report, note }: { report: ReportSummary; note?: st
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
           <dt className="text-xs text-slate-500 dark:text-slate-400">النطاق</dt>
-          <dd className="mt-1 font-medium">{report.context}</dd>
+          <dd className="mt-1 font-medium">{formatReportDate(report.context)}</dd>
         </div>
         <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
           <dt className="text-xs text-slate-500 dark:text-slate-400">عدد السطور</dt>
