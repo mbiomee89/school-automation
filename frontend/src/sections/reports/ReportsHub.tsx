@@ -1,12 +1,12 @@
 ﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Printer,
+  Calendar,
   CalendarOff,
   Clock,
   BookOpen,
   CalendarRange,
   History,
-  LayoutGrid,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -233,17 +233,6 @@ export function ReportsHub({
                 : 'مركز تقارير مشترك للإداري والمرشد الطلابي — عرض وطباعة فقط'}
             </p>
           </div>
-          {currentActive && (
-            <button
-              type="button"
-              onClick={() => printReport(currentActive)}
-              disabled={!!pendingPrint || reportsLoading}
-              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 print:hidden"
-            >
-              <Printer className="size-4" strokeWidth={1.5} />
-              طباعة
-            </button>
-          )}
         </div>
       </div>
 
@@ -328,16 +317,20 @@ export function ReportsHub({
 
         {currentActive && activeSummary && (
           <div className="space-y-4 report-print-area">
-            <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
+            <div className="print:hidden">
               <button
                 type="button"
                 onClick={closeReport}
-                className="inline-flex items-center gap-2 text-sm text-slate-600 underline hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-50"
+                className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-slate-50"
               >
-                <LayoutGrid className="size-4" strokeWidth={1.5} />
-                كل التقارير
+                <ChevronRight className="size-4" strokeWidth={1.75} />
+                عودة
               </button>
-              <div className="flex flex-wrap items-center gap-3">
+            </div>
+
+            {(DATE_FILTER_TYPES.includes(currentActive) ||
+              (CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0)) && (
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 print:hidden dark:border-slate-700 dark:bg-slate-900">
                 {DATE_FILTER_TYPES.includes(currentActive) && (
                   <ReportDateNavigator
                     value={dateFilter || selectedDate || todayDateOnly()}
@@ -351,13 +344,13 @@ export function ReportsHub({
                   />
                 )}
                 {CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0 && (
-                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                    <span>الفصل</span>
+                  <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    <span className="shrink-0">الفصل</span>
                     <select
                       value={classFilter}
                       disabled={reportsLoading}
                       onChange={(e) => setClassFilter(e.target.value)}
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      className="h-10 min-w-[8rem] rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
                     >
                       <option value="ALL">كل الفصول</option>
                       {classOptions.map((c) => (
@@ -369,7 +362,7 @@ export function ReportsHub({
                   </label>
                 )}
               </div>
-            </div>
+            )}
 
             {currentActive === 'DAILY_ABSENCE' && dailyAbsenceDetail ? (
               <DailyAbsenceDetailView detail={dailyAbsenceDetail} />
@@ -395,6 +388,26 @@ export function ReportsHub({
             ) : (
               <ReportSummarySheet report={activeSummary} />
             )}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 print:hidden dark:border-slate-800">
+              <button
+                type="button"
+                onClick={closeReport}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <ChevronRight className="size-4" strokeWidth={1.75} />
+                عودة
+              </button>
+              <button
+                type="button"
+                onClick={() => printReport(currentActive)}
+                disabled={!!pendingPrint || reportsLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+              >
+                <Printer className="size-4" strokeWidth={1.5} />
+                طباعة
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -977,7 +990,7 @@ function StudentHistoryDetailView({
   )
 }
 
-/** Prev/next (+ today) with Gregorian calendar popup (Arabic month names). */
+/** Compact prev/next (+ today) with Gregorian calendar popup. */
 function ReportDateNavigator({
   value,
   onChange,
@@ -1002,66 +1015,57 @@ function ReportDateNavigator({
   const nextLabel = weekMode ? 'الأسبوع التالي' : 'اليوم التالي'
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-900">
-        <button
-          type="button"
-          disabled={disabled}
-          aria-label={prevLabel}
-          title={prevLabel}
-          onClick={() => onChange(addDaysToDateOnly(safeValue, -stepDays))}
-          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <ChevronRight className="size-5" strokeWidth={1.75} />
-        </button>
-        <button
-          ref={triggerRef}
-          type="button"
-          disabled={disabled}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          aria-label="فتح التقويم"
-          title="اختيار التاريخ من التقويم"
-          onClick={() => setOpen((v) => !v)}
-          className="min-w-[8.5rem] rounded-lg px-2 py-1 text-center hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
-        >
-          <p
-            className="text-sm font-bold tabular-nums text-slate-900 dark:text-slate-50"
-            style={fontMono}
-          >
-            {label}
-          </p>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            {weekMode ? 'بداية الأسبوع (السبت)' : 'اضغط للتقويم'}
-          </p>
-        </button>
-        <button
-          type="button"
-          disabled={disabled}
-          aria-label={nextLabel}
-          title={nextLabel}
-          onClick={() => onChange(addDaysToDateOnly(safeValue, stepDays))}
-          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
-        >
-          <ChevronLeft className="size-5" strokeWidth={1.75} />
-        </button>
-        <ReportCalendarPicker
-          value={safeValue}
-          open={open}
-          onClose={() => setOpen(false)}
-          disabled={disabled}
-          anchorRef={triggerRef}
-          onChange={onChange}
-        />
-      </div>
+    <div className="relative inline-flex h-10 items-center gap-0.5 rounded-lg border border-slate-300 bg-slate-50 p-0.5 dark:border-slate-600 dark:bg-slate-950">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={prevLabel}
+        title={prevLabel}
+        onClick={() => onChange(addDaysToDateOnly(safeValue, -stepDays))}
+        className="inline-flex size-9 items-center justify-center rounded-md text-slate-600 hover:bg-white disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        <ChevronRight className="size-4" strokeWidth={1.75} />
+      </button>
+      <button
+        ref={triggerRef}
+        type="button"
+        disabled={disabled}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-label="فتح التقويم"
+        title="اختيار التاريخ من التقويم"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex min-w-[7.5rem] items-center justify-center gap-1.5 rounded-md px-2 text-sm font-bold tabular-nums text-slate-900 hover:bg-white disabled:opacity-40 dark:text-slate-50 dark:hover:bg-slate-800"
+      >
+        <Calendar className="size-4 shrink-0 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
+        <span style={fontMono}>{label}</span>
+      </button>
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={nextLabel}
+        title={nextLabel}
+        onClick={() => onChange(addDaysToDateOnly(safeValue, stepDays))}
+        className="inline-flex size-9 items-center justify-center rounded-md text-slate-600 hover:bg-white disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+      >
+        <ChevronLeft className="size-4" strokeWidth={1.75} />
+      </button>
       <button
         type="button"
         disabled={disabled || safeValue === today}
         onClick={() => onChange(today)}
-        className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+        className="ms-0.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-white disabled:opacity-40 dark:text-slate-200 dark:hover:bg-slate-800"
       >
         اليوم
       </button>
+      <ReportCalendarPicker
+        value={safeValue}
+        open={open}
+        onClose={() => setOpen(false)}
+        disabled={disabled}
+        anchorRef={triggerRef}
+        onChange={onChange}
+      />
     </div>
   )
 }
