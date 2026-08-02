@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState, type ReactNode } from 'react'
+﻿import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Printer,
   CalendarOff,
@@ -44,6 +44,9 @@ const DATE_FILTER_TYPES: ReportType[] = [
   'WEEKLY_PLAN',
 ]
 
+/** Homework + weekly plan are generated as one sheet per class. */
+const CLASS_FILTER_TYPES: ReportType[] = ['HOMEWORK_LOG', 'WEEKLY_PLAN']
+
 function formatGeneratedAt(iso: string | null | undefined) {
   if (!iso) return 'لم يُولَّد بعد'
   return `آخر توليد: ${new Date(iso).toLocaleString('ar-SA')}`
@@ -83,6 +86,8 @@ export function ReportsHub({
   const [dateFilter, setDateFilter] = useState(
     dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
   )
+  /** `ALL` or stringified classId — scopes homework / weekly sheets to one class. */
+  const [classFilter, setClassFilter] = useState<string>('ALL')
   /** When set, open that report then trigger browser print once the detail is on screen. */
   const [pendingPrint, setPendingPrint] = useState<ReportType | null>(null)
   const [printHint, setPrintHint] = useState<string | null>(null)
@@ -92,10 +97,44 @@ export function ReportsHub({
   const currentActive = controlledActiveReport ?? activeReport
   const activeSummary = reports.find((r) => r.type === currentActive) ?? null
 
+  const classOptions = useMemo(() => {
+    if (currentActive === 'HOMEWORK_LOG' && homeworkLogDetail) {
+      const groups =
+        homeworkLogDetail.classes && homeworkLogDetail.classes.length > 0
+          ? homeworkLogDetail.classes
+          : groupFlatByClass(homeworkLogDetail.rows)
+      return groups.map((c) => ({
+        id: String(c.classId ?? c.className),
+        name: c.className,
+      }))
+    }
+    if (currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail) {
+      const groups =
+        weeklyPlanDetail.classes && weeklyPlanDetail.classes.length > 0
+          ? weeklyPlanDetail.classes
+          : groupFlatByClass(weeklyPlanDetail.rows)
+      return groups.map((c) => ({
+        id: String(c.classId ?? c.className),
+        name: c.className,
+      }))
+    }
+    return [] as Array<{ id: string; name: string }>
+  }, [currentActive, homeworkLogDetail, weeklyPlanDetail])
+
   useEffect(() => {
     const next = dailyAbsenceDetail?.date || weeklyPlanDetail?.date || ''
     if (next) setDateFilter(next)
   }, [dailyAbsenceDetail?.date, weeklyPlanDetail?.date])
+
+  useEffect(() => {
+    setClassFilter('ALL')
+  }, [currentActive, homeworkLogDetail?.date, weeklyPlanDetail?.weekStart])
+
+  useEffect(() => {
+    if (classFilter === 'ALL') return
+    if (classOptions.length === 0) return
+    if (!classOptions.some((c) => c.id === classFilter)) setClassFilter('ALL')
+  }, [classFilter, classOptions])
 
   useEffect(() => {
     if (!pendingPrint) return
@@ -276,22 +315,42 @@ export function ReportsHub({
                 <LayoutGrid className="size-4" strokeWidth={1.5} />
                 كل التقارير
               </button>
-              {DATE_FILTER_TYPES.includes(currentActive) && (
-                <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                  <span>{currentActive === 'WEEKLY_PLAN' ? 'يوم من الأسبوع' : 'التاريخ'}</span>
-                  <input
-                    type="date"
-                    value={dateFilter}
-                    disabled={reportsLoading}
-                    onChange={(e) => {
-                      setDateFilter(e.target.value)
-                      onFilterByDate?.(currentActive, e.target.value)
-                    }}
-                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
-                    style={fontMono}
-                  />
-                </label>
-              )}
+              <div className="flex flex-wrap items-center gap-3">
+                {DATE_FILTER_TYPES.includes(currentActive) && (
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    <span>{currentActive === 'WEEKLY_PLAN' ? 'يوم من الأسبوع' : 'التاريخ'}</span>
+                    <input
+                      type="date"
+                      value={dateFilter}
+                      disabled={reportsLoading}
+                      onChange={(e) => {
+                        setDateFilter(e.target.value)
+                        onFilterByDate?.(currentActive, e.target.value)
+                      }}
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      style={fontMono}
+                    />
+                  </label>
+                )}
+                {CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0 && (
+                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                    <span>الفصل</span>
+                    <select
+                      value={classFilter}
+                      disabled={reportsLoading}
+                      onChange={(e) => setClassFilter(e.target.value)}
+                      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                    >
+                      <option value="ALL">كل الفصول</option>
+                      {classOptions.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+              </div>
             </div>
 
             {currentActive === 'DAILY_ABSENCE' && dailyAbsenceDetail ? (
@@ -299,9 +358,9 @@ export function ReportsHub({
             ) : currentActive === 'LATE_ARRIVALS' && lateArrivalsDetail ? (
               <LateArrivalsDetailView detail={lateArrivalsDetail} />
             ) : currentActive === 'HOMEWORK_LOG' && homeworkLogDetail ? (
-              <HomeworkLogDetailView detail={homeworkLogDetail} />
+              <HomeworkLogDetailView detail={homeworkLogDetail} classFilter={classFilter} />
             ) : currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail ? (
-              <WeeklyPlanDetailView detail={weeklyPlanDetail} />
+              <WeeklyPlanDetailView detail={weeklyPlanDetail} classFilter={classFilter} />
             ) : currentActive === 'STUDENT_HISTORY' ? (
               <StudentHistoryDetailView
                 detail={studentHistoryDetail}
@@ -426,16 +485,38 @@ function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }
   )
 }
 
-function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) {
-  const classes =
+function filterClassesBySelection<
+  T extends { classId?: number | null; className: string; rows: unknown[] },
+>(classes: T[], classFilter: string): T[] {
+  if (classFilter === 'ALL') return classes
+  return classes.filter((c) => String(c.classId ?? c.className) === classFilter)
+}
+
+function HomeworkLogDetailView({
+  detail,
+  classFilter = 'ALL',
+}: {
+  detail: HomeworkLogReportDetail
+  classFilter?: string
+}) {
+  const allClasses =
     detail.classes && detail.classes.length > 0
       ? detail.classes
       : groupFlatByClass(detail.rows)
+  const classes = filterClassesBySelection(allClasses, classFilter)
+
+  if (allClasses.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+        لا توجد واجبات مسجّلة لهذا اليوم.
+      </p>
+    )
+  }
 
   if (classes.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
-        لا توجد واجبات مسجّلة لهذا اليوم.
+        لا توجد واجبات للفصل المحدد.
       </p>
     )
   }
@@ -450,7 +531,7 @@ function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) 
           educationAdminName={detail.educationAdminName}
           logoUrl={detail.logoUrl}
           principalName={detail.principalName}
-          metaLines={[`تاريخ الواجبات: ${detail.date}`]}
+          metaLines={[`تاريخ الواجبات: ${detail.date}`, `الفصل: ${cls.className}`]}
           title={`سجل الواجبات — ${cls.className}`}
         >
           <FormalTable
@@ -470,17 +551,32 @@ function HomeworkLogDetailView({ detail }: { detail: HomeworkLogReportDetail }) 
   )
 }
 
-function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
-  const classes =
+function WeeklyPlanDetailView({
+  detail,
+  classFilter = 'ALL',
+}: {
+  detail: WeeklyPlanReportDetail
+  classFilter?: string
+}) {
+  const allClasses =
     detail.classes && detail.classes.length > 0
       ? detail.classes
       : groupFlatByClass(detail.rows)
+  const classes = filterClassesBySelection(allClasses, classFilter)
   const weekEnd = detail.weekEnd ?? detail.weekStart
+
+  if (allClasses.length === 0) {
+    return (
+      <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
+        لا توجد خطط أسبوعية لهذا الأسبوع.
+      </p>
+    )
+  }
 
   if (classes.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
-        لا توجد خطط أسبوعية لهذا الأسبوع.
+        لا توجد خطة أسبوعية للفصل المحدد.
       </p>
     )
   }
@@ -498,6 +594,7 @@ function WeeklyPlanDetailView({ detail }: { detail: WeeklyPlanReportDetail }) {
           metaLines={[
             `العام الدراسي ${detail.academicYear}`,
             `من ${detail.weekStart} إلى ${weekEnd}`,
+            `الفصل: ${cls.className}`,
           ]}
           title={`الخطة الدراسية الأسبوعية — ${cls.className}`}
         >
