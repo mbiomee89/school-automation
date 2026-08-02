@@ -30,6 +30,7 @@ import {
   formatReportDateRange,
   todayDateOnly,
 } from '../../shared/dates'
+import { ReportCalendarPicker } from './ReportCalendarPicker'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_OFF: CalendarOff,
@@ -976,7 +977,7 @@ function StudentHistoryDetailView({
   )
 }
 
-/** Prev/next (+ today) — date shown as dd/mm/yyyy. */
+/** Prev/next (+ today) with Gregorian calendar popup (Arabic month names). */
 function ReportDateNavigator({
   value,
   onChange,
@@ -990,6 +991,8 @@ function ReportDateNavigator({
   weekMode?: boolean
   disabled?: boolean
 }) {
+  const [open, setOpen] = useState(false)
+  const triggerRef = useRef<HTMLButtonElement>(null)
   const safeValue = /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : todayDateOnly()
   const today = todayDateOnly()
   const label = weekMode
@@ -1000,7 +1003,7 @@ function ReportDateNavigator({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-900">
+      <div className="relative inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-900">
         <button
           type="button"
           disabled={disabled}
@@ -1011,7 +1014,17 @@ function ReportDateNavigator({
         >
           <ChevronRight className="size-5" strokeWidth={1.75} />
         </button>
-        <div className="min-w-[8.5rem] px-2 text-center">
+        <button
+          ref={triggerRef}
+          type="button"
+          disabled={disabled}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          aria-label="فتح التقويم"
+          title="اختيار التاريخ من التقويم"
+          onClick={() => setOpen((v) => !v)}
+          className="min-w-[8.5rem] rounded-lg px-2 py-1 text-center hover:bg-slate-50 disabled:opacity-40 dark:hover:bg-slate-800"
+        >
           <p
             className="text-sm font-bold tabular-nums text-slate-900 dark:text-slate-50"
             style={fontMono}
@@ -1019,9 +1032,9 @@ function ReportDateNavigator({
             {label}
           </p>
           <p className="text-[11px] text-slate-500 dark:text-slate-400">
-            {weekMode ? 'بداية الأسبوع (السبت)' : 'التاريخ'}
+            {weekMode ? 'بداية الأسبوع (السبت)' : 'اضغط للتقويم'}
           </p>
-        </div>
+        </button>
         <button
           type="button"
           disabled={disabled}
@@ -1032,6 +1045,14 @@ function ReportDateNavigator({
         >
           <ChevronLeft className="size-5" strokeWidth={1.75} />
         </button>
+        <ReportCalendarPicker
+          value={safeValue}
+          open={open}
+          onClose={() => setOpen(false)}
+          disabled={disabled}
+          anchorRef={triggerRef}
+          onChange={onChange}
+        />
       </div>
       <button
         type="button"
