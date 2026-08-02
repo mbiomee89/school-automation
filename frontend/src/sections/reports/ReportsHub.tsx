@@ -7,6 +7,8 @@ import {
   CalendarRange,
   History,
   LayoutGrid,
+  ChevronLeft,
+  ChevronRight,
   type LucideIcon,
 } from 'lucide-react'
 import type {
@@ -22,7 +24,12 @@ import type {
 import { cn } from '../../shared/utils'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { PhoneText } from '../../shared/PhoneText'
-import { formatReportDate, formatReportDateRange } from '../../shared/dates'
+import {
+  addDaysToDateOnly,
+  formatReportDate,
+  formatReportDateRange,
+  todayDateOnly,
+} from '../../shared/dates'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_OFF: CalendarOff,
@@ -331,20 +338,16 @@ export function ReportsHub({
               </button>
               <div className="flex flex-wrap items-center gap-3">
                 {DATE_FILTER_TYPES.includes(currentActive) && (
-                  <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
-                    <span>{currentActive === 'WEEKLY_PLAN' ? 'يوم من الأسبوع' : 'التاريخ'}</span>
-                    <input
-                      type="date"
-                      value={dateFilter}
-                      disabled={reportsLoading}
-                      onChange={(e) => {
-                        setDateFilter(e.target.value)
-                        onFilterByDate?.(currentActive, e.target.value)
-                      }}
-                      className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
-                      style={fontMono}
-                    />
-                  </label>
+                  <ReportDateNavigator
+                    value={dateFilter || selectedDate || todayDateOnly()}
+                    stepDays={currentActive === 'WEEKLY_PLAN' ? 7 : 1}
+                    weekMode={currentActive === 'WEEKLY_PLAN'}
+                    disabled={reportsLoading}
+                    onChange={(next) => {
+                      setDateFilter(next)
+                      onFilterByDate?.(currentActive, next)
+                    }}
+                  />
                 )}
                 {CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0 && (
                   <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
@@ -969,6 +972,86 @@ function StudentHistoryDetailView({
           />
         </div>
       )}
+    </div>
+  )
+}
+
+/** Prev/next (+ today) date control — avoids the awkward native date picker in RTL. */
+function ReportDateNavigator({
+  value,
+  onChange,
+  stepDays = 1,
+  weekMode = false,
+  disabled = false,
+}: {
+  value: string
+  onChange: (next: string) => void
+  stepDays?: number
+  weekMode?: boolean
+  disabled?: boolean
+}) {
+  const safeValue = /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : todayDateOnly()
+  const today = todayDateOnly()
+  const label = weekMode
+    ? `أسبوع ${formatReportDate(safeValue)}`
+    : formatReportDate(safeValue)
+  const prevLabel = weekMode ? 'الأسبوع السابق' : 'اليوم السابق'
+  const nextLabel = weekMode ? 'الأسبوع التالي' : 'اليوم التالي'
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="inline-flex items-center gap-1 rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-600 dark:bg-slate-900">
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label={prevLabel}
+          title={prevLabel}
+          onClick={() => onChange(addDaysToDateOnly(safeValue, -stepDays))}
+          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <ChevronRight className="size-5" strokeWidth={1.75} />
+        </button>
+        <div className="min-w-[7.5rem] px-2 text-center">
+          <p className="text-sm font-bold tabular-nums text-slate-900 dark:text-slate-50" style={fontMono}>
+            {label}
+          </p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            {weekMode ? 'بداية الأسبوع (السبت)' : 'التاريخ'}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={disabled}
+          aria-label={nextLabel}
+          title={nextLabel}
+          onClick={() => onChange(addDaysToDateOnly(safeValue, stepDays))}
+          className="inline-flex size-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <ChevronLeft className="size-5" strokeWidth={1.75} />
+        </button>
+      </div>
+      <button
+        type="button"
+        disabled={disabled || safeValue === today}
+        onClick={() => onChange(today)}
+        className="rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+      >
+        اليوم
+      </button>
+      <label className="relative inline-flex size-9 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800">
+        <CalendarRange className="size-4" strokeWidth={1.75} aria-hidden="true" />
+        <span className="sr-only">اختيار تاريخ</span>
+        <input
+          type="date"
+          value={safeValue}
+          disabled={disabled}
+          onChange={(e) => {
+            if (!e.target.value) return
+            onChange(e.target.value)
+          }}
+          className="absolute inset-0 cursor-pointer opacity-0"
+        />
+      </label>
     </div>
   )
 }

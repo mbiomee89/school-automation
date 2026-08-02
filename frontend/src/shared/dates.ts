@@ -3,6 +3,23 @@
  * Keep API and <input type="date"> values as YYYY-MM-DD; format only for UI.
  */
 
+/** Local today as YYYY-MM-DD. */
+export function todayDateOnly(): string {
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Add/subtract whole days from a date-only (YYYY-MM-DD), UTC-anchored. */
+export function addDaysToDateOnly(dateOnly: string, days: number): string {
+  const base = /^\d{4}-\d{2}-\d{2}/.test(dateOnly) ? dateOnly.slice(0, 10) : todayDateOnly()
+  const d = new Date(`${base}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
 /** Format a date-only or ISO string as dd/mm/yy. */
 export function formatReportDate(value: string | null | undefined): string {
   if (value == null || value === '') return '—'
