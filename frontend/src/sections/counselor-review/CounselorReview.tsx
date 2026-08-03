@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Printer,
   Search,
@@ -20,6 +20,8 @@ import type {
 import { cn } from '../../shared/utils'
 import { Modal } from '../../shared/Modal'
 import { GregorianDateField } from '../../shared/GregorianDateField'
+import { fontArabic } from '../../shared/fonts'
+import { formatReportDate } from '../../shared/dates'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
 
 const TABS: { id: CounselorTab; label: string; status: AbsenceReasonStatus }[] = [
@@ -28,13 +30,12 @@ const TABS: { id: CounselorTab; label: string; status: AbsenceReasonStatus }[] =
   { id: 'rejected', label: 'مرفوضة', status: 'REJECTED' },
 ]
 
-const fontSerif = { fontFamily: '"Amiri", "Times New Roman", serif' } as const
 const fontMono = { fontFamily: '"IBM Plex Mono", ui-monospace, monospace' } as const
 
 function statusBadgeClass(status: AbsenceReasonStatus) {
   const styles: Record<AbsenceReasonStatus, string> = {
     PENDING_REVIEW: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
-    APPROVED: 'bg-lime-500/15 text-lime-800 dark:text-lime-300',
+    APPROVED: 'bg-blue-600/15 text-blue-800 dark:text-blue-300',
     REJECTED: 'bg-red-500/15 text-red-800 dark:text-red-300',
   }
   return styles[status]
@@ -141,10 +142,10 @@ export function CounselorReview({
     <div
       dir="rtl"
       lang="ar"
-      className="min-h-full bg-stone-50 text-stone-900 dark:bg-stone-950 dark:text-stone-50"
-      style={fontSerif}
+      className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
+      style={fontArabic}
     >
-      <div className="relative overflow-hidden border-b border-stone-200 bg-gradient-to-bl from-stone-100 via-white to-lime-50 px-4 py-6 sm:px-6 dark:border-stone-800 dark:from-stone-900 dark:via-stone-950 dark:to-lime-950/40 print:hidden">
+      <div className="relative overflow-hidden border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-blue-50 px-4 py-6 sm:px-6 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-blue-950/40 print:hidden">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07] dark:opacity-[0.12]"
           style={{
@@ -155,11 +156,11 @@ export function CounselorReview({
         />
         <div className="relative flex flex-wrap items-end justify-between gap-4">
           <div>
-            <p className="text-xs text-stone-500 dark:text-stone-400">منصة إدارة المدرسة</p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-stone-900 dark:text-stone-50 sm:text-4xl">
+            <p className="text-xs text-slate-500 dark:text-slate-400">منصة إدارة المدرسة</p>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50 sm:text-4xl">
               مراجعة الأعذار
             </h1>
-            <p className="mt-1 text-stone-600 dark:text-stone-400">
+            <p className="mt-1 text-slate-600 dark:text-slate-400">
               مراجعة أعذار الغياب المقدّمة من أولياء الأمور والموافقة عليها أو رفضها
             </p>
           </div>
@@ -167,7 +168,7 @@ export function CounselorReview({
             <button
               type="button"
               onClick={() => onOpenReportsHub?.()}
-              className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 shadow-sm hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800"
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               <FileBarChart2 className="size-4" strokeWidth={1.5} />
               التقارير
@@ -175,7 +176,7 @@ export function CounselorReview({
             <button
               type="button"
               onClick={() => onPrint?.(selectedItemId != null ? 'case' : 'list', selectedItemId ?? undefined)}
-              className="inline-flex items-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 shadow-sm hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100 dark:hover:bg-stone-800"
+              className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
             >
               <Printer className="size-4" strokeWidth={1.5} />
               طباعة
@@ -189,17 +190,17 @@ export function CounselorReview({
           <button
             type="button"
             onClick={() => setSelectedItemId(null)}
-            className="mb-4 inline-flex items-center gap-1 text-sm text-stone-600 hover:text-stone-900 dark:text-stone-300 dark:hover:text-stone-50 print:hidden"
+            className="mb-4 inline-flex items-center gap-1 text-sm text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-50 print:hidden"
           >
             <ArrowRight className="size-4" strokeWidth={1.5} />
             رجوع إلى القائمة
           </button>
 
-          <div className="rounded-lg border border-stone-200 bg-white p-5 dark:border-stone-800 dark:bg-stone-900">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <h2 className="text-2xl font-bold">{selectedItem.studentName}</h2>
-                <p className="text-stone-500">
+                <p className="text-slate-500">
                   {selectedItem.className} · رقم الهوية/الإقامة{' '}
                   <span style={fontMono}>{selectedItem.studentId}</span>
                 </p>
@@ -216,13 +217,13 @@ export function CounselorReview({
 
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-stone-500 dark:text-stone-400">تاريخ الغياب</dt>
+                <dt className="text-slate-500 dark:text-slate-400">تاريخ الغياب</dt>
                 <dd className="mt-0.5 font-semibold" style={fontMono}>
-                  {selectedItem.absenceDate}
+                  {formatReportDate(selectedItem.absenceDate)}
                 </dd>
               </div>
               <div>
-                <dt className="text-stone-500 dark:text-stone-400">تاريخ التقديم</dt>
+                <dt className="text-slate-500 dark:text-slate-400">تاريخ التقديم</dt>
                 <dd className="mt-0.5" style={fontMono}>
                   {new Date(selectedItem.submittedAt).toLocaleString('ar-SA')}
                 </dd>
@@ -230,38 +231,38 @@ export function CounselorReview({
               {selectedItem.reviewedAt && (
                 <>
                   <div>
-                    <dt className="text-stone-500 dark:text-stone-400">تاريخ المراجعة</dt>
+                    <dt className="text-slate-500 dark:text-slate-400">تاريخ المراجعة</dt>
                     <dd className="mt-0.5" style={fontMono}>
                       {new Date(selectedItem.reviewedAt).toLocaleString('ar-SA')}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-stone-500 dark:text-stone-400">المرشد المراجع</dt>
+                    <dt className="text-slate-500 dark:text-slate-400">المرشد المراجع</dt>
                     <dd className="mt-0.5">{selectedItem.reviewerName}</dd>
                   </div>
                 </>
               )}
             </dl>
 
-            <h3 className="mt-5 mb-1 text-sm font-bold text-stone-700 dark:text-stone-300">
+            <h3 className="mt-5 mb-1 text-sm font-bold text-slate-700 dark:text-slate-300">
               السبب المقدّم
             </h3>
-            <p className="whitespace-pre-wrap text-sm text-stone-800 dark:text-stone-200">
+            <p className="whitespace-pre-wrap text-sm text-slate-800 dark:text-slate-200">
               {selectedItem.reasonText}
             </p>
 
             {selectedItem.attachments.length > 0 && (
               <div className="mt-4 print:hidden">
-                <h3 className="mb-2 text-sm font-bold text-stone-700 dark:text-stone-300">
+                <h3 className="mb-2 text-sm font-bold text-slate-700 dark:text-slate-300">
                   المرفقات
                 </h3>
                 <ul className="space-y-2">
                   {selectedItem.attachments.map((url) => (
                     <li
                       key={url}
-                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-stone-200 bg-stone-50 px-3 py-2 dark:border-stone-700 dark:bg-stone-800"
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800"
                     >
-                      <div className="flex min-w-0 items-center gap-2 text-xs text-stone-700 dark:text-stone-200">
+                      <div className="flex min-w-0 items-center gap-2 text-xs text-slate-700 dark:text-slate-200">
                         <Paperclip className="size-3.5 shrink-0" strokeWidth={1.5} />
                         <span className="truncate">مرفق العذر</span>
                       </div>
@@ -270,7 +271,7 @@ export function CounselorReview({
                           type="button"
                           disabled={attachmentBusy === url}
                           onClick={() => void openAttachment(url)}
-                          className="inline-flex items-center gap-1.5 rounded-md border border-stone-300 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-700 hover:bg-lime-50 disabled:opacity-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-200 dark:hover:bg-lime-950/30"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-blue-50 disabled:opacity-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-blue-950/30"
                         >
                           {attachmentBusy === url ? (
                             <span className={SPINNER_CLASS} aria-hidden="true" />
@@ -283,7 +284,7 @@ export function CounselorReview({
                           type="button"
                           disabled={attachmentBusy === url}
                           onClick={() => void onDownloadAttachment?.(url)}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-lime-500 px-2.5 py-1.5 text-xs font-semibold text-stone-950 hover:bg-lime-400 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                         >
                           <Download className="size-3.5" strokeWidth={1.5} />
                           تنزيل
@@ -307,7 +308,7 @@ export function CounselorReview({
                 <button
                   type="button"
                   onClick={() => onApprove?.(selectedItem.id)}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-lime-400"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
                 >
                   <CheckCircle2 className="size-4" strokeWidth={1.5} />
                   قبول العذر
@@ -326,7 +327,7 @@ export function CounselorReview({
         </div>
       ) : (
         <>
-          <div className="sticky top-0 z-10 border-b border-stone-200 bg-white/90 backdrop-blur dark:border-stone-800 dark:bg-stone-900/90 print:hidden">
+          <div className="sticky top-0 z-10 border-b border-slate-200 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90 print:hidden">
             <div className="flex gap-1 overflow-x-auto px-2 sm:px-4">
               {TABS.map((t) => (
                 <button
@@ -336,8 +337,8 @@ export function CounselorReview({
                   className={cn(
                     'shrink-0 border-b-2 px-3 py-3 text-sm transition-colors',
                     currentTab === t.id
-                      ? 'border-lime-500 font-semibold text-lime-800 dark:text-lime-300'
-                      : 'border-transparent text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200'
+                      ? 'border-blue-600 font-semibold text-blue-800 dark:text-blue-300'
+                      : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
                   )}
                 >
                   {t.label}
@@ -354,7 +355,7 @@ export function CounselorReview({
           <div className="mx-auto max-w-5xl p-4 sm:p-6">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between print:hidden">
               <div className="relative flex-1 sm:max-w-xs">
-                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-stone-400" />
+                <Search className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
                 <input
                   value={query}
                   onChange={(e) => {
@@ -362,7 +363,7 @@ export function CounselorReview({
                     onSearchStudents?.(e.target.value)
                   }}
                   placeholder="ابحث باسم الطالب…"
-                  className="w-full rounded-md border border-stone-300 bg-white py-2 pe-3 ps-10 text-sm dark:border-stone-700 dark:bg-stone-900"
+                  className="w-full rounded-md border border-slate-300 bg-white py-2 pe-3 ps-10 text-sm dark:border-slate-700 dark:bg-slate-900"
                 />
               </div>
               <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -393,7 +394,7 @@ export function CounselorReview({
                       onFilterDateRange?.({ from: null, to: null })
                     }}
                     aria-label="مسح تصفية التاريخ"
-                    className="text-stone-400 hover:text-stone-700 dark:hover:text-stone-200"
+                    className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                   >
                     <X className="size-4" />
                   </button>
@@ -401,9 +402,9 @@ export function CounselorReview({
               </div>
             </div>
 
-            <div className="hidden overflow-hidden rounded-lg border border-stone-200 bg-white dark:border-stone-800 dark:bg-stone-900 md:block">
+            <div className="hidden overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 md:block">
               <table className="w-full text-start text-sm">
-                <thead className="bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300">
+                <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   <tr>
                     <th className="px-3 py-2 font-medium">الطالب</th>
                     <th className="px-3 py-2 font-medium">تاريخ الغياب</th>
@@ -419,33 +420,33 @@ export function CounselorReview({
                   {filteredItems.map((item) => (
                     <tr
                       key={item.id}
-                      className="border-t border-stone-100 hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-800/50"
+                      className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
                     >
                       <td className="px-3 py-2">
                         <button
                           type="button"
-                          className="text-start hover:text-lime-700 dark:hover:text-lime-300"
+                          className="text-start hover:text-blue-700 dark:hover:text-blue-300"
                           onClick={() => openCase(item)}
                         >
                           <div className="font-semibold">{item.studentName}</div>
-                          <div className="text-xs text-stone-500">{item.className}</div>
+                          <div className="text-xs text-slate-500">{item.className}</div>
                         </button>
                       </td>
                       <td className="px-3 py-2" style={fontMono}>
-                        {item.absenceDate}
+                        {formatReportDate(item.absenceDate)}
                       </td>
                       <td className="max-w-xs px-3 py-2">
-                        <span className="line-clamp-2 text-stone-700 dark:text-stone-300">
+                        <span className="line-clamp-2 text-slate-700 dark:text-slate-300">
                           {item.reasonText}
                         </span>
                       </td>
                       <td className="px-3 py-2 print:hidden">
                         {item.attachments.length > 0 && (
-                          <Paperclip className="size-4 text-stone-400" strokeWidth={1.5} />
+                          <Paperclip className="size-4 text-slate-400" strokeWidth={1.5} />
                         )}
                       </td>
                       {currentTab !== 'pending' && (
-                        <td className="px-3 py-2 text-stone-500">
+                        <td className="px-3 py-2 text-slate-500">
                           {item.reviewedAt ? new Date(item.reviewedAt).toLocaleDateString('ar-SA') : ''}
                         </td>
                       )}
@@ -454,7 +455,7 @@ export function CounselorReview({
                           <div className="flex justify-end gap-2">
                             <button
                               type="button"
-                              className="text-xs font-medium text-lime-700 underline hover:text-lime-900 dark:text-lime-300"
+                              className="text-xs font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300"
                               onClick={() => onApprove?.(item.id)}
                             >
                               قبول
@@ -470,7 +471,7 @@ export function CounselorReview({
                         ) : (
                           <button
                             type="button"
-                            className="text-xs text-stone-600 underline hover:text-stone-900 dark:text-stone-300"
+                            className="text-xs text-slate-600 underline hover:text-slate-900 dark:text-slate-300"
                             onClick={() => openCase(item)}
                           >
                             عرض
@@ -482,7 +483,7 @@ export function CounselorReview({
                 </tbody>
               </table>
               {filteredItems.length === 0 && (
-                <p className="p-6 text-center text-sm text-stone-500">لا توجد حالات مطابقة.</p>
+                <p className="p-6 text-center text-sm text-slate-500">لا توجد حالات مطابقة.</p>
               )}
             </div>
 
@@ -490,30 +491,30 @@ export function CounselorReview({
               {filteredItems.map((item) => (
                 <div
                   key={item.id}
-                  className="rounded-lg border border-stone-200 bg-white p-4 dark:border-stone-800 dark:bg-stone-900"
+                  className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
                 >
                   <button type="button" className="w-full text-start" onClick={() => openCase(item)}>
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="text-lg font-bold">{item.studentName}</div>
-                        <div className="text-sm text-stone-500">{item.className}</div>
+                        <div className="text-sm text-slate-500">{item.className}</div>
                       </div>
                       {item.attachments.length > 0 && (
-                        <Paperclip className="mt-1 size-4 shrink-0 text-stone-400" strokeWidth={1.5} />
+                        <Paperclip className="mt-1 size-4 shrink-0 text-slate-400" strokeWidth={1.5} />
                       )}
                     </div>
-                    <div className="mt-2 text-xs text-stone-500" style={fontMono}>
-                      {item.absenceDate}
+                    <div className="mt-2 text-xs text-slate-500" style={fontMono}>
+                      {formatReportDate(item.absenceDate)}
                     </div>
-                    <p className="mt-2 line-clamp-2 text-sm text-stone-700 dark:text-stone-300">
+                    <p className="mt-2 line-clamp-2 text-sm text-slate-700 dark:text-slate-300">
                       {item.reasonText}
                     </p>
                   </button>
                   {item.status === 'PENDING_REVIEW' ? (
-                    <div className="mt-3 flex gap-3 border-t border-stone-100 pt-3 dark:border-stone-800">
+                    <div className="mt-3 flex gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
                       <button
                         type="button"
-                        className="text-xs font-medium text-lime-700 underline dark:text-lime-300"
+                        className="text-xs font-medium text-blue-700 underline dark:text-blue-300"
                         onClick={() => onApprove?.(item.id)}
                       >
                         قبول
@@ -527,14 +528,14 @@ export function CounselorReview({
                       </button>
                     </div>
                   ) : (
-                    <div className="mt-3 border-t border-stone-100 pt-3 text-xs text-stone-500 dark:border-stone-800">
+                    <div className="mt-3 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800">
                       {item.reviewedAt && new Date(item.reviewedAt).toLocaleDateString('ar-SA')}
                     </div>
                   )}
                 </div>
               ))}
               {filteredItems.length === 0 && (
-                <p className="p-6 text-center text-sm text-stone-500">لا توجد حالات مطابقة.</p>
+                <p className="p-6 text-center text-sm text-slate-500">لا توجد حالات مطابقة.</p>
               )}
             </div>
           </div>
@@ -553,13 +554,13 @@ export function CounselorReview({
       >
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="text-stone-600 dark:text-stone-400">ملاحظة (اختياري)</span>
+            <span className="text-slate-600 dark:text-slate-400">ملاحظة (اختياري)</span>
             <textarea
               value={rejectNote}
               onChange={(e) => setRejectNote(e.target.value)}
               rows={3}
               placeholder="اذكر سبب الرفض لولي الأمر…"
-              className="mt-1 w-full rounded-md border border-stone-300 bg-white px-3 py-2 text-sm dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
+              className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             />
           </label>
           <div className="flex gap-2 pt-1">
@@ -572,7 +573,7 @@ export function CounselorReview({
             </button>
             <button
               type="button"
-              className="flex-1 rounded-md border border-stone-300 px-3 py-2 text-sm dark:border-stone-600"
+              className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm dark:border-slate-600"
               onClick={() => {
                 setRejectTarget(null)
                 setRejectNote('')
@@ -601,16 +602,16 @@ export function CounselorReview({
               <img
                 src={lightbox.objectUrl}
                 alt="مرفق العذر"
-                className="max-h-[60vh] w-full rounded-md border border-stone-200 object-contain dark:border-stone-700"
+                className="max-h-[60vh] w-full rounded-md border border-slate-200 object-contain dark:border-slate-700"
               />
             ) : isPdfMime(lightbox.mime) ? (
               <iframe
                 title={lightbox.fileName}
                 src={lightbox.objectUrl}
-                className="h-[60vh] w-full rounded-md border border-stone-200 bg-white dark:border-stone-700"
+                className="h-[60vh] w-full rounded-md border border-slate-200 bg-white dark:border-slate-700"
               />
             ) : (
-              <div className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-stone-300 bg-stone-50 p-8 text-stone-500 dark:border-stone-700 dark:bg-stone-900">
+              <div className="flex w-full flex-col items-center gap-2 rounded-md border border-dashed border-slate-300 bg-slate-50 p-8 text-slate-500 dark:border-slate-700 dark:bg-slate-900">
                 <Paperclip className="size-8" strokeWidth={1.5} />
                 <span className="text-sm" style={fontMono}>
                   {lightbox.fileName}
@@ -623,7 +624,7 @@ export function CounselorReview({
                 href={lightbox.objectUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-stone-300 bg-white px-3 py-2 text-sm font-medium text-stone-800 hover:bg-stone-50 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-100"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
               >
                 <Eye className="size-4" strokeWidth={1.5} />
                 فتح في تبويب جديد
@@ -631,7 +632,7 @@ export function CounselorReview({
               <button
                 type="button"
                 onClick={() => void onDownloadAttachment?.(lightbox.apiPath)}
-                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-lime-500 px-3 py-2 text-sm font-semibold text-stone-950 hover:bg-lime-400"
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
               >
                 <Download className="size-4" strokeWidth={1.5} />
                 تنزيل المرفق

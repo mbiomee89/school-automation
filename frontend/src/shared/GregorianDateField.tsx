@@ -32,7 +32,7 @@ export function GregorianDateField({
   return (
     <div className={cn('relative inline-flex items-center gap-1.5', className)}>
       {label ? (
-        <span className="shrink-0 text-sm text-stone-600 dark:text-stone-400">{label}</span>
+        <span className="shrink-0 text-sm text-slate-600 dark:text-slate-400">{label}</span>
       ) : null}
       <button
         ref={triggerRef}
@@ -44,13 +44,13 @@ export function GregorianDateField({
         title="اختيار التاريخ من التقويم"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          'inline-flex h-9 min-w-[8.5rem] items-center justify-center gap-1.5 rounded-md border border-stone-300 bg-white px-2.5 text-sm font-semibold tabular-nums hover:bg-stone-50 disabled:opacity-40 dark:border-stone-600 dark:bg-stone-800 dark:hover:bg-stone-700',
+          'inline-flex h-9 min-w-[8.5rem] items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-2.5 text-sm font-semibold tabular-nums hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700',
           hasValue
-            ? 'text-stone-900 dark:text-stone-50'
-            : 'font-medium text-stone-400 dark:text-stone-500'
+            ? 'text-slate-900 dark:text-slate-50'
+            : 'font-medium text-slate-400 dark:text-slate-500'
         )}
       >
-        <Calendar className="size-4 shrink-0 text-stone-500 dark:text-stone-400" strokeWidth={1.75} />
+        <Calendar className="size-4 shrink-0 text-slate-500 dark:text-slate-400" strokeWidth={1.75} />
         <span style={hasValue ? fontMono : undefined}>{display}</span>
       </button>
       <GregorianCalendarPicker
