@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import {
@@ -63,7 +63,10 @@ export function ParentPortalPage() {
     }
   }, [students, activeChildId])
 
+  const loadGen = useRef(0)
+
   const loadChild = useCallback(async (studentId: string) => {
+    const gen = ++loadGen.current
     setError(null)
     const [summary, attendance, homework, plans, notifs, excuses] = await Promise.all([
       getParentSummary(studentId),
@@ -73,6 +76,7 @@ export function ParentPortalPage() {
       getParentNotifications(studentId),
       getParentExcuses(studentId),
     ])
+    if (gen !== loadGen.current) return
     setTodaySummary({
       date: summary.date,
       attendanceStatus: summary.attendanceStatus,
@@ -98,8 +102,17 @@ export function ParentPortalPage() {
       try {
         await loadChild(activeChildId)
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : 'تعذّر تحميل بيانات الابن')
+        if (!cancelled && loadGen.current) {
+          if (err instanceof ApiError && err.status === 401) {
+            logout()
+            navigate('/parent/login', { replace: true })
+            return
+          }
+          setError(
+            err instanceof ApiError
+              ? err.message
+              : 'تعذّر تحميل بيانات الابن'
+          )
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -108,7 +121,7 @@ export function ParentPortalPage() {
     return () => {
       cancelled = true
     }
-  }, [activeChildId, loadChild])
+  }, [activeChildId, loadChild, logout, navigate])
 
   if (bootstrapping) {
     return (
@@ -144,12 +157,25 @@ export function ParentPortalPage() {
         tone="error"
         title="تعذّر التحميل"
         description={error}
-        actionLabel="إعادة المحاولة"
+        actionLabel={error.includes('انتهت الجلسة') ? 'تسجيل الدخول' : 'إعادة المحاولة'}
         onAction={() => {
+          if (error.includes('انتهت الجلسة')) {
+            logout()
+            navigate('/parent/login', { replace: true })
+            return
+          }
           if (activeChildId) {
             setLoading(true)
+            setError(null)
             loadChild(activeChildId)
-              .catch((err) => setError(err instanceof ApiError ? err.message : 'فشل'))
+              .catch((err) => {
+                if (err instanceof ApiError && err.status === 401) {
+                  logout()
+                  navigate('/parent/login', { replace: true })
+                  return
+                }
+                setError(err instanceof ApiError ? err.message : 'فشل')
+              })
               .finally(() => setLoading(false))
           }
         }}

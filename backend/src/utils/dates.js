@@ -57,3 +57,33 @@ export function weekStartSaturdayUtc(input) {
 export function todayUtcMidnight() {
   return toUtcMidnight(new Date());
 }
+
+/** School calendar "today" as YYYY-MM-DD in Asia/Riyadh. */
+export function schoolDateOnlyStr(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date instanceof Date ? date : new Date(date));
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  const d = parts.find((p) => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+}
+
+/** School calendar today as UTC midnight Date (for DB date-only fields). */
+export function schoolTodayUtcMidnight(date = new Date()) {
+  return toUtcMidnight(schoolDateOnlyStr(date));
+}
+
+/** Hour 0–23 in Asia/Riyadh for a Date / ISO string. */
+export function schoolHourRiyadh(input = new Date()) {
+  const d = input instanceof Date ? input : new Date(input);
+  const hourStr = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh',
+    hour: '2-digit',
+    hour12: false,
+  }).format(d);
+  return Number(hourStr);
+}

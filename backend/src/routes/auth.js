@@ -17,10 +17,18 @@ const router = Router();
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30,
+  max: 20,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many attempts, try again later' },
+  message: { error: 'محاولات كثيرة، حاول لاحقاً' },
+  validate: { keyGeneratorIpFallback: false },
+  keyGenerator: (req) => {
+    const id =
+      (typeof req.body?.phone === 'string' && req.body.phone.trim()) ||
+      (typeof req.body?.email === 'string' && req.body.email.trim().toLowerCase()) ||
+      'anon';
+    return `${req.ip}:${id}`;
+  },
 });
 
 const loginSchema = z.object({

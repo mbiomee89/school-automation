@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Inbox } from 'lucide-react'
 import {
   addHomework,
@@ -48,6 +48,7 @@ export function TeacherDailyPage() {
   const [homeworkToday, setHomeworkToday] = useState<HomeworkEntry[]>([])
   const [currentWeekStart, setCurrentWeekStart] = useState(weekStartSaturday(today))
   const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlanEntry | null>(null)
+  const weekNavSeq = useRef(0)
 
   const active = assignments.find((a) => a.id === activeAssignmentId) ?? null
 
@@ -143,9 +144,11 @@ export function TeacherDailyPage() {
       onSelectAssignment={async (assignmentId) => {
         const next = assignments.find((a) => a.id === assignmentId)
         if (!next) return
-        setActiveAssignmentId(assignmentId)
         try {
+          // Load roster/marks before flipping the active id so draft attendance
+          // does not resync against a stale all-PRESENT roster.
           await loadAssignmentData(next, currentWeekStart)
+          setActiveAssignmentId(assignmentId)
         } catch (err) {
           alertError(err, 'فشل تحميل بيانات الصف')
         }
@@ -224,12 +227,15 @@ export function TeacherDailyPage() {
         }
       }}
       onNavigateWeek={async (weekStart) => {
+        const seq = ++weekNavSeq.current
         setCurrentWeekStart(weekStart)
+        setWeeklyPlan(null)
         if (!active) return
         try {
-          setWeeklyPlan(await getWeeklyPlan(active.classId, active.subjectId, weekStart))
+          const plan = await getWeeklyPlan(active.classId, active.subjectId, weekStart)
+          if (seq === weekNavSeq.current) setWeeklyPlan(plan)
         } catch (err) {
-          alertError(err, 'فشل تحميل الخطة الأسبوعية')
+          if (seq === weekNavSeq.current) alertError(err, 'فشل تحميل الخطة الأسبوعية')
         }
       }}
       onSaveWeeklyPlan={async (entry) => {

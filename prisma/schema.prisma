@@ -8,7 +8,7 @@
 // 2. ClassEnrollment: at most one row per student with endDate = null.
 //    Promote/move MUST run inside prisma.$transaction.
 // 3. ClassEnrollment.academicYear MUST always equal Class.academicYear of classId.
-// 4. reasonReviewedBy MUST be a User with role = COUNSELOR (check in service layer).
+// 4. reasonReviewedBy MUST be a User with role = COUNSELOR or ADMIN (check in service layer).
 // 5. Never hard-delete User or Student — set isActive=false (and deletedAt for students).
 // 6. WhatsApp sends only when Student.waOptedIn = true AND Student.isActive = true.
 
@@ -220,6 +220,7 @@ model Attendance {
   recordedBy Int
   recorder   User             @relation("AttendanceRecordedBy", fields: [recordedBy], references: [id])
   createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   // Parent-submitted reason for the absence (via the parent app). Submitting
   // a reason does NOT automatically change status to EXCUSED — it starts a
@@ -233,7 +234,7 @@ model Attendance {
   absenceAttachmentMime String?
   reasonSubmittedAt    DateTime?
   reasonStatus         AbsenceReasonStatus  @default(NONE)
-  reasonReviewedBy     Int?                 // must be a User with role = COUNSELOR (enforced at the application layer)
+  reasonReviewedBy     Int?                 // COUNSELOR or ADMIN (enforced at the application layer)
   reasonReviewer       User?                @relation("AbsenceReasonReviewedBy", fields: [reasonReviewedBy], references: [id])
   reasonReviewedAt     DateTime?
   /// Optional note left by the counselor when rejecting a parent excuse.
@@ -401,8 +402,8 @@ model ParentAccount {
   updatedAt    DateTime @updatedAt
 }
 
-// Legacy OTP table kept for optional future WhatsApp OTP recovery flows.
-// Primary parent login is ParentAccount (phone + password).
+// Legacy OTP table — unused by current phone+password parent auth.
+// Kept only so wipe/reset scripts stay compatible; safe to drop in a later migration.
 model ParentOtp {
   id        Int      @id @default(autoincrement())
   phone     String   // matched against Student.parentPhone

@@ -53,6 +53,16 @@ export function ExcuseUploadModal({ open, attendanceDate, submitting, onClose, o
     const picked = e.target.files?.[0]
     e.target.value = ''
     if (!picked) return
+    const allowed = new Set(['image/png', 'image/jpeg', 'image/webp', 'application/pdf'])
+    if (!allowed.has(picked.type)) {
+      setFormError('يُسمح بملفات PNG أو JPEG أو WebP أو PDF فقط')
+      return
+    }
+    if (picked.size > 2 * 1024 * 1024) {
+      setFormError('حجم الملف يجب ألا يتجاوز 2 ميجابايت')
+      return
+    }
+    setFormError(null)
     setPreviewUrl(isImageFile(picked) ? URL.createObjectURL(picked) : null)
     setFile(picked)
   }
@@ -115,7 +125,7 @@ export function ExcuseUploadModal({ open, attendanceDate, submitting, onClose, o
               <span>اختيار ملف</span>
               <input
                 type="file"
-                accept="image/*,application/pdf"
+                accept="image/png,image/jpeg,image/webp,application/pdf"
                 className="hidden"
                 onChange={pickFile}
               />

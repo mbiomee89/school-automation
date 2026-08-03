@@ -53,12 +53,15 @@ router.get(
       include: {
         student: { select: { id: true, nameAr: true, nameEn: true } },
       },
-      orderBy: { studentId: 'asc' },
+      orderBy: [{ updatedAt: 'desc' }, { studentId: 'asc' }],
     });
+
+    const savedAt = records[0]?.updatedAt?.toISOString() ?? records[0]?.createdAt?.toISOString() ?? null;
 
     res.json({
       date: dateOnlyIso(date),
       period: req.query.period ?? null,
+      savedAt,
       attendance: records.map((r) => ({
         id: r.id,
         studentId: r.studentId,
@@ -66,7 +69,7 @@ router.get(
         classId: r.classId,
         period: r.period,
         status: r.status,
-        recordedAt: r.createdAt.toISOString(),
+        recordedAt: (r.updatedAt ?? r.createdAt).toISOString(),
         reasonStatus: r.reasonStatus,
       })),
     });

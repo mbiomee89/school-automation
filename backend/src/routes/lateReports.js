@@ -10,7 +10,7 @@ import {
 } from '../middleware/validate.js';
 import { requireStaff, requireRole, requireTeacherAssignment } from '../middleware/auth.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
-import { toUtcMidnight } from '../utils/dates.js';
+import { toUtcMidnight, schoolHourRiyadh } from '../utils/dates.js';
 
 const router = Router();
 
@@ -75,7 +75,11 @@ router.post(
     const { studentId, classId, reason } = req.body;
     const date = toUtcMidnight(req.body.date);
     const time = req.body.time ? new Date(req.body.time) : new Date();
-    if (Number.isNaN(time.getTime())) throw badRequest('Invalid time');
+    if (Number.isNaN(time.getTime())) throw badRequest('وقت غير صالح');
+    const hour = schoolHourRiyadh(time);
+    if (hour < 5 || hour > 22) {
+      throw badRequest('وقت التأخر يجب أن يكون ضمن ساعات الدوام (5 صباحاً – 10 مساءً بتوقيت الرياض)');
+    }
 
     const student = await prisma.student.findUnique({ where: { id: studentId } });
     if (!student || !student.isActive) throw badRequest('Student not found or inactive');
@@ -122,7 +126,11 @@ router.patch(
     const data = {};
     if (req.body.time !== undefined) {
       const time = new Date(req.body.time);
-      if (Number.isNaN(time.getTime())) throw badRequest('Invalid time');
+      if (Number.isNaN(time.getTime())) throw badRequest('وقت غير صالح');
+      const hour = schoolHourRiyadh(time);
+      if (hour < 5 || hour > 22) {
+        throw badRequest('وقت التأخر يجب أن يكون ضمن ساعات الدوام (5 صباحاً – 10 مساءً بتوقيت الرياض)');
+      }
       data.time = time;
     }
     if (req.body.reason !== undefined) {

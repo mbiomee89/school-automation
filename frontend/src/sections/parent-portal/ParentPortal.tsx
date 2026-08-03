@@ -283,7 +283,7 @@ export function ParentPortal({
         open={confirmingLogout}
         onClose={() => setConfirmingLogout(false)}
         title="تسجيل الخروج؟"
-        description="سيتعين عليك إدخال رقم جوالك وطلب رمز تحقق جديد لتسجيل الدخول مرة أخرى."
+        description="سيتعين عليك إدخال رقم جوالك وكلمة المرور لتسجيل الدخول مرة أخرى."
         maxWidthClassName="max-w-sm"
       >
         <div className="mt-1 flex gap-2">

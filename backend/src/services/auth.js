@@ -103,7 +103,8 @@ export async function registerParent(rawPhone, password) {
 
   const existing = await prisma.parentAccount.findUnique({ where: { phone } });
   if (existing) {
-    throw conflict('تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً');
+    // Same status + message as "no students" to avoid phone enumeration.
+    throw badRequest('تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً');
   }
 
   const passwordHash = await hashPassword(password);

@@ -25,7 +25,8 @@ function guessMimeFromPath(relativePath) {
  */
 export function loadExcuseAttachment(attendance) {
   if (attendance.absenceAttachmentData) {
-    const mime = attendance.absenceAttachmentMime || guessMimeFromPath(attendance.absenceAttachmentUrl);
+    const rawMime = attendance.absenceAttachmentMime || guessMimeFromPath(attendance.absenceAttachmentUrl);
+    const mime = MIME_EXT[rawMime] ? rawMime : 'application/octet-stream';
     const ext = MIME_EXT[mime] || path.extname(attendance.absenceAttachmentUrl || '') || '';
     return {
       buffer: Buffer.from(attendance.absenceAttachmentData),
@@ -37,7 +38,8 @@ export function loadExcuseAttachment(attendance) {
   if (attendance.absenceAttachmentUrl) {
     const absolute = path.join(UPLOAD_ROOT, attendance.absenceAttachmentUrl);
     if (fs.existsSync(absolute)) {
-      const mime = attendance.absenceAttachmentMime || guessMimeFromPath(attendance.absenceAttachmentUrl);
+      const rawMime = attendance.absenceAttachmentMime || guessMimeFromPath(attendance.absenceAttachmentUrl);
+      const mime = MIME_EXT[rawMime] ? rawMime : 'application/octet-stream';
       return {
         buffer: fs.readFileSync(absolute),
         mime,
@@ -57,10 +59,13 @@ export function sendExcuseAttachment(res, attendance, { download = false } = {})
     );
   }
 
-  res.setHeader('Content-Type', file.mime);
+  const safeMime = MIME_EXT[file.mime] ? file.mime : 'application/octet-stream';
+  const forceDownload = download || safeMime === 'application/octet-stream';
+  res.setHeader('Content-Type', safeMime);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader(
     'Content-Disposition',
-    `${download ? 'attachment' : 'inline'}; filename="${file.fileName}"`
+    `${forceDownload ? 'attachment' : 'inline'}; filename="${file.fileName}"`
   );
   res.setHeader('Cache-Control', 'private, max-age=60');
   res.send(file.buffer);

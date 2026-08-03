@@ -142,8 +142,8 @@ router.patch(
     const now = new Date();
 
     const updated = await prisma.$transaction(async (tx) => {
-      return tx.attendance.update({
-        where: { id: existing.id },
+      const result = await tx.attendance.updateMany({
+        where: { id: existing.id, reasonStatus: 'PENDING_REVIEW' },
         data: {
           reasonStatus: decision,
           reasonReviewedBy: req.user.id,
@@ -151,6 +151,12 @@ router.patch(
           counselorNote: decision === 'REJECTED' ? note : null,
           ...(decision === 'APPROVED' ? { status: 'EXCUSED' } : {}),
         },
+      });
+      if (result.count === 0) {
+        throw conflict('تمت مراجعة هذا العذر مسبقاً');
+      }
+      return tx.attendance.findUnique({
+        where: { id: existing.id },
         include: {
           student: { select: { id: true, nameAr: true, nameEn: true } },
           class: { select: { id: true, name: true } },

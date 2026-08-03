@@ -68,13 +68,19 @@ export async function getAttendance(classId: number, date: string, period = 'DAY
     period,
   })
   const data = await apiRequest<{
+    savedAt?: string | null
     attendance: Array<{ studentId: string; status: AttendanceMark['status']; recordedAt: string }>
   }>(`/attendance?${qs}`)
   const marks: AttendanceMark[] = data.attendance.map((a) => ({
     studentId: a.studentId,
     status: a.status,
   }))
-  const savedAt = data.attendance[0]?.recordedAt ?? null
+  const savedAt =
+    data.savedAt ??
+    data.attendance.reduce<string | null>((best, a) => {
+      if (!best || a.recordedAt > best) return a.recordedAt
+      return best
+    }, null)
   return { marks, savedAt }
 }
 

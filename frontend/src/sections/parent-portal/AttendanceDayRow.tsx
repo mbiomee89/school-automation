@@ -17,7 +17,9 @@ export function AttendanceDayRow({ day, onUploadExcuse }: AttendanceDayRowProps)
   const status = ATTENDANCE_STATUS_META[day.status]
   const StatusIcon = status.icon
   const statusTone = TONE_CLASSES[status.tone]
-  const needsExcuse = day.status === 'ABSENT' && day.excuseStatus === 'NONE'
+  const needsExcuse =
+    day.status === 'ABSENT' &&
+    (day.excuseStatus === 'NONE' || day.excuseStatus === 'REJECTED')
 
   return (
     <li className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
@@ -64,7 +66,7 @@ export function AttendanceDayRow({ day, onUploadExcuse }: AttendanceDayRowProps)
           className="mt-3 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-xl border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors duration-150 hover:bg-blue-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 motion-reduce:transition-none dark:border-blue-500/30 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25"
         >
           <Camera className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
-          رفع عذر الغياب
+          {day.excuseStatus === 'REJECTED' ? 'إعادة رفع العذر' : 'رفع عذر الغياب'}
         </button>
       )}
     </li>

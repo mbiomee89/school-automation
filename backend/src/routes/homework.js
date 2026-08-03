@@ -31,7 +31,7 @@ const updateSchema = z.object({
 
 const listQuery = z.object({
   classId: z.coerce.number().int().positive(),
-  subjectId: z.coerce.number().int().positive().optional(),
+  subjectId: z.coerce.number().int().positive(),
   date: z.string().min(1),
 });
 
@@ -50,11 +50,14 @@ function serialize(h) {
 router.get(
   '/',
   validateQuery(listQuery),
-  requireTeacherAssignment({ classIdParam: 'classId' }),
+  requireTeacherAssignment({ classIdParam: 'classId', subjectIdParam: 'subjectId' }),
   asyncHandler(async (req, res) => {
     const date = toUtcMidnight(req.query.date);
-    const where = { classId: req.query.classId, date };
-    if (req.query.subjectId) where.subjectId = req.query.subjectId;
+    const where = {
+      classId: req.query.classId,
+      subjectId: req.query.subjectId,
+      date,
+    };
 
     const rows = await prisma.homework.findMany({
       where,
@@ -71,7 +74,13 @@ router.post(
   requireTeacherAssignment({ classIdParam: 'classId', subjectIdParam: 'subjectId' }),
   asyncHandler(async (req, res) => {
     const date = toUtcMidnight(req.body.date);
-    const dueDate = req.body.dueDate ? toUtcMidnight(req.body.dueDate) : null;
+    let dueDate = null;
+    if (req.body.dueDate) {
+      dueDate = toUtcMidnight(req.body.dueDate);
+      if (dueDate.getTime() < date.getTime()) {
+        throw badRequest('تاريخ الاستحقاق يجب أن يكون في يوم الواجب أو بعده');
+      }
+    }
 
     const row = await prisma.homework.create({
       data: {
@@ -110,7 +119,15 @@ router.patch(
     const data = {};
     if (req.body.description !== undefined) data.description = req.body.description.trim();
     if (req.body.dueDate !== undefined) {
-      data.dueDate = req.body.dueDate ? toUtcMidnight(req.body.dueDate) : null;
+      if (req.body.dueDate) {
+        const due = toUtcMidnight(req.body.dueDate);
+        if (due.getTime() < toUtcMidnight(existing.date).getTime()) {
+          throw badRequest('تاريخ الاستحقاق يجب أن يكون في يوم الواجب أو بعده');
+        }
+        data.dueDate = due;
+      } else {
+        data.dueDate = null;
+      }
     }
 
     const row = await prisma.homework.update({ where: { id: req.params.id }, data });

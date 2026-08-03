@@ -67,6 +67,7 @@ export function CounselorReview({
   onDownloadAttachment,
   onApprove,
   onReject,
+  reviewingId = null,
   onPrint,
   onOpenReportsHub,
 }: CounselorReviewProps) {
@@ -133,7 +134,12 @@ export function CounselorReview({
 
   function submitReject() {
     if (!rejectTarget) return
-    onReject?.(rejectTarget.id, rejectNote.trim() || undefined)
+    const note = rejectNote.trim()
+    if (!note) {
+      window.alert('سبب الرفض مطلوب')
+      return
+    }
+    void onReject?.(rejectTarget.id, note)
     setRejectTarget(null)
     setRejectNote('')
   }
@@ -307,16 +313,18 @@ export function CounselorReview({
               <div className="mt-6 flex gap-2 print:hidden">
                 <button
                   type="button"
-                  onClick={() => onApprove?.(selectedItem.id)}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                  disabled={reviewingId === selectedItem.id}
+                  onClick={() => void onApprove?.(selectedItem.id)}
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
                 >
                   <CheckCircle2 className="size-4" strokeWidth={1.5} />
                   قبول العذر
                 </button>
                 <button
                   type="button"
+                  disabled={reviewingId === selectedItem.id}
                   onClick={() => setRejectTarget(selectedItem)}
-                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
+                  className="inline-flex flex-1 items-center justify-center gap-2 rounded-md border border-red-300 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-300 dark:hover:bg-red-950/30"
                 >
                   <XCircle className="size-4" strokeWidth={1.5} />
                   رفض العذر
@@ -456,7 +464,8 @@ export function CounselorReview({
                             <button
                               type="button"
                               className="text-xs font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300"
-                              onClick={() => onApprove?.(item.id)}
+                              disabled={reviewingId === item.id}
+                              onClick={() => void onApprove?.(item.id)}
                             >
                               قبول
                             </button>
@@ -515,7 +524,8 @@ export function CounselorReview({
                       <button
                         type="button"
                         className="text-xs font-medium text-blue-700 underline dark:text-blue-300"
-                        onClick={() => onApprove?.(item.id)}
+                        disabled={reviewingId === item.id}
+                              onClick={() => void onApprove?.(item.id)}
                       >
                         قبول
                       </button>
@@ -554,7 +564,7 @@ export function CounselorReview({
       >
         <div className="space-y-3">
           <label className="block text-sm">
-            <span className="text-slate-600 dark:text-slate-400">ملاحظة (اختياري)</span>
+            <span className="text-slate-600 dark:text-slate-400">سبب الرفض (مطلوب)</span>
             <textarea
               value={rejectNote}
               onChange={(e) => setRejectNote(e.target.value)}
@@ -566,8 +576,9 @@ export function CounselorReview({
           <div className="flex gap-2 pt-1">
             <button
               type="button"
+              disabled={!rejectNote.trim() || (rejectTarget != null && reviewingId === rejectTarget.id)}
               onClick={submitReject}
-              className="flex-1 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500"
+              className="flex-1 rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-500 disabled:opacity-50"
             >
               تأكيد الرفض
             </button>

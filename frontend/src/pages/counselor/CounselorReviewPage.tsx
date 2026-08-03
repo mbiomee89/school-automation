@@ -53,6 +53,7 @@ export function CounselorReviewPage() {
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [range, setRange] = useState<DateRangeFilter>({ from: null, to: null })
+  const [reviewingId, setReviewingId] = useState<number | null>(null)
 
   const load = useCallback(async () => {
     setError(null)
@@ -125,20 +126,35 @@ export function CounselorReviewPage() {
       onTabChange={setTab}
       onSearchStudents={setQuery}
       onFilterDateRange={setRange}
+      reviewingId={reviewingId}
       onApprove={async (itemId) => {
+        setReviewingId(itemId)
         try {
           await reviewAbsenceReason(itemId, 'APPROVED')
-          await load()
+          try {
+            await load()
+          } catch {
+            window.alert('تم الاعتماد لكن فشل تحديث القائمة')
+          }
         } catch (err) {
           window.alert(err instanceof ApiError ? err.message : 'فشل الاعتماد')
+        } finally {
+          setReviewingId(null)
         }
       }}
       onReject={async (itemId, note) => {
+        setReviewingId(itemId)
         try {
           await reviewAbsenceReason(itemId, 'REJECTED', note)
-          await load()
+          try {
+            await load()
+          } catch {
+            window.alert('تم الرفض لكن فشل تحديث القائمة')
+          }
         } catch (err) {
           window.alert(err instanceof ApiError ? err.message : 'فشل الرفض')
+        } finally {
+          setReviewingId(null)
         }
       }}
       onResolveAttachment={async (apiPath) => {

@@ -98,7 +98,7 @@ export interface TeacherDailyWorkflowProps {
   /** Remove a late report logged today */
   onDeleteLateReport?: (id: number) => void
   /** Post a new homework entry for today */
-  onAddHomework?: (entry: { description: string; dueDate?: string | null }) => void
+  onAddHomework?: (entry: { description: string; dueDate?: string | null }) => void | Promise<void>
   /** Edit an existing homework entry posted today */
   onUpdateHomework?: (id: number, patch: { description?: string; dueDate?: string | null }) => void
   /** Remove a homework entry posted today */

@@ -51,10 +51,12 @@ export interface CounselorReviewProps {
   ) => Promise<{ objectUrl: string; mime: string; fileName: string }>
   /** Download an attachment file to the counselor's device */
   onDownloadAttachment?: (apiPath: string) => void | Promise<void>
+  /** Busy item id while approve/reject is in flight */
+  reviewingId?: number | null
   /** Approve a pending item — excuses the absence */
-  onApprove?: (itemId: number) => void
-  /** Reject a pending item, with an optional explanatory note */
-  onReject?: (itemId: number, note?: string) => void
+  onApprove?: (itemId: number) => void | Promise<void>
+  /** Reject a pending item — rejection note is required by the API */
+  onReject?: (itemId: number, note: string) => void | Promise<void>
   /** Print the current list/tab view, or a single case when itemId is provided */
   onPrint?: (view: 'list' | 'case', itemId?: number) => void
   /** Navigate to the shared "التقارير" Reports section */

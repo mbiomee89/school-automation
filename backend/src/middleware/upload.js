@@ -68,11 +68,56 @@ export const uploadAbsenceAttachment = multer({
   limits: { fileSize: MAX_ATTACHMENT_SIZE_BYTES },
   fileFilter: (_req, file, cb) => {
     if (!ALLOWED_ATTACHMENT_MIME.has(file.mimetype)) {
-      return cb(badRequest('Only PNG, JPEG, WebP, or PDF files are allowed'));
+      return cb(badRequest('يُسمح بملفات PNG أو JPEG أو WebP أو PDF فقط'));
     }
     cb(null, true);
   },
 }).single('attachment');
+
+/** Sniff PNG/JPEG/WebP/PDF from magic bytes; ignore client-claimed MIME. */
+export function sniffAttachmentMime(buffer) {
+  if (!buffer || buffer.length < 4) return null;
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return 'image/png';
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (
+    buffer.length >= 12 &&
+    buffer[0] === 0x52 &&
+    buffer[1] === 0x49 &&
+    buffer[2] === 0x46 &&
+    buffer[3] === 0x46 &&
+    buffer[8] === 0x57 &&
+    buffer[9] === 0x45 &&
+    buffer[10] === 0x42 &&
+    buffer[11] === 0x50
+  ) {
+    return 'image/webp';
+  }
+  if (buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+    return 'application/pdf';
+  }
+  return null;
+}
+
+/** After multer: verify magic bytes and overwrite file.mimetype with sniffed type. */
+export function assertSniffedAttachment(req, _res, next) {
+  if (!req.file) return next();
+  try {
+    const buf = fs.readFileSync(req.file.path);
+    const sniffed = sniffAttachmentMime(buf);
+    if (!sniffed || !ALLOWED_ATTACHMENT_MIME.has(sniffed)) {
+      fs.unlink(req.file.path, () => {});
+      return next(badRequest('محتوى الملف غير مسموح. استخدم PNG أو JPEG أو WebP أو PDF'));
+    }
+    req.file.mimetype = sniffed;
+    return next();
+  } catch (err) {
+    return next(err);
+  }
+}
 
 const ALLOWED_SPREADSHEET_MIME = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

@@ -4,7 +4,7 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, studentIdParam, idParam } from '../middleware/validate.js';
 import { requireParent } from '../middleware/auth.js';
-import { uploadAbsenceAttachment, deleteUploadFile } from '../middleware/upload.js';
+import { uploadAbsenceAttachment, assertSniffedAttachment, deleteUploadFile } from '../middleware/upload.js';
 import {
   hasExcuseAttachment,
   parentAttachmentApiPath,
@@ -12,7 +12,7 @@ import {
 } from '../services/excuseAttachment.js';
 import fs from 'fs';
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
-import { toUtcMidnight } from '../utils/dates.js';
+import { toUtcMidnight, schoolTodayUtcMidnight } from '../utils/dates.js';
 
 const router = Router();
 
@@ -132,7 +132,7 @@ router.get(
         period: a.period,
         lateMinutes: null,
         excuseStatus: a.reasonStatus,
-        excuseNote: null,
+        excuseNote: a.counselorNote ?? null,
         hasExcuseAttachment: hasExcuseAttachment(a),
         absenceReason: a.absenceReason,
         reasonSubmittedAt: a.reasonSubmittedAt?.toISOString() ?? null,
@@ -218,7 +218,7 @@ router.get(
   validateParams(studentIdParam),
   asyncHandler(async (req, res) => {
     const student = await assertOwnsStudent(req.parentPhone, req.params.id);
-    const today = toUtcMidnight(new Date());
+    const today = schoolTodayUtcMidnight();
     const todayStr = today.toISOString().slice(0, 10);
 
     const [att, late, homeworkDueCount, notifications] = await Promise.all([
@@ -353,6 +353,7 @@ router.post(
   '/attendance/:id/reason',
   validateParams(idParam),
   (req, res, next) => uploadAbsenceAttachment(req, res, next),
+  assertSniffedAttachment,
   asyncHandler(async (req, res) => {
     const attendance = await prisma.attendance.findUnique({
       where: { id: req.params.id },

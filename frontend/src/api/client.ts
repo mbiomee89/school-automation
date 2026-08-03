@@ -97,7 +97,27 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (!res.ok) {
     const err = data as { error?: string; details?: unknown } | null
-    throw new ApiError(res.status, err?.error || `Request failed (${res.status})`, err?.details)
+    if (res.status === 401) {
+      const path = typeof window !== 'undefined' ? window.location.pathname : ''
+      if (auth === 'parent') {
+        setParentToken(null)
+        if (!path.startsWith('/parent/login') && !path.startsWith('/parent/register')) {
+          window.location.assign('/parent/login')
+        }
+      } else if (auth === true || auth === 'staff') {
+        setToken(null)
+        if (!path.startsWith('/login')) {
+          window.location.assign('/login')
+        }
+      }
+    }
+    const message =
+      res.status === 401
+        ? auth === 'parent'
+          ? 'انتهت الجلسة. سجّل الدخول مرة أخرى.'
+          : err?.error || 'انتهت الجلسة. سجّل الدخول مرة أخرى.'
+        : err?.error || `Request failed (${res.status})`
+    throw new ApiError(res.status, message, err?.details)
   }
 
   return data as T

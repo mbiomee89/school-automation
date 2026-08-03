@@ -62,6 +62,7 @@ function cloneDays(source: WeeklyPlanDays | null | undefined): WeeklyPlanDays {
  */
 export function WeeklyPlanForm({ weekStart, plan, onNavigateWeek, onSave }: WeeklyPlanFormProps) {
   const [syncedWeekStart, setSyncedWeekStart] = useState(weekStart)
+  const [syncedPlanKey, setSyncedPlanKey] = useState(plan?.id ?? null)
   const [days, setDays] = useState<WeeklyPlanDays>(() => cloneDays(plan?.days))
   const [saving, setSaving] = useState(false)
   const [justSaved, setJustSaved] = useState(false)
@@ -70,6 +71,13 @@ export function WeeklyPlanForm({ weekStart, plan, onNavigateWeek, onSave }: Week
 
   if (syncedWeekStart !== weekStart) {
     setSyncedWeekStart(weekStart)
+    setSyncedPlanKey(plan?.id ?? null)
+    setDays(cloneDays(plan?.days))
+    setJustSaved(false)
+    setError(null)
+  } else if (syncedPlanKey !== (plan?.id ?? null)) {
+    // Plan payload arrived after week header changed
+    setSyncedPlanKey(plan?.id ?? null)
     setDays(cloneDays(plan?.days))
     setJustSaved(false)
     setError(null)
