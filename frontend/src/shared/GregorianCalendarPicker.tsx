@@ -53,13 +53,16 @@ export function GregorianCalendarPicker({
       const t = e.target as Node
       if (panelRef.current?.contains(t)) return
       if (anchorRef?.current?.contains(t)) return
+      // Native <select> menus render outside the panel in some browsers
+      if (t instanceof Element && t.closest('select, option')) return
       onClose()
     }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onPointer)
+    // click (not mousedown) so month/year <select> can open without closing the popup
+    document.addEventListener('click', onPointer)
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onPointer)
+      document.removeEventListener('click', onPointer)
     }
   }, [open, onClose, anchorRef])
 

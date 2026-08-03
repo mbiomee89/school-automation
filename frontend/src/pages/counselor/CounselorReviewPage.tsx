@@ -49,6 +49,7 @@ export function CounselorReviewPage() {
   const [tab, setTab] = useState<CounselorTab>('pending')
   const [items, setItems] = useState<AbsenceReasonItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [bootstrapped, setBootstrapped] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [range, setRange] = useState<DateRangeFilter>({ from: null, to: null })
@@ -67,7 +68,9 @@ export function CounselorReviewPage() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      setLoading(true)
+      // Full-page spinner only on first paint — never unmount the form while
+      // refining search/date filters (that was closing the calendar mid-pick).
+      if (!bootstrapped) setLoading(true)
       try {
         await load()
       } catch (err) {
@@ -75,15 +78,20 @@ export function CounselorReviewPage() {
           setError(err instanceof ApiError ? err.message : 'تعذّر تحميل قائمة الأعذار')
         }
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setBootstrapped(true)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
+    // bootstrapped intentionally omitted: including it would re-fetch right after first paint
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
   }, [load])
 
-  if (loading && items.length === 0 && !error) {
+  if (!bootstrapped && loading && !error) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <span className={SPINNER_CLASS} aria-label="جارٍ التحميل" />
@@ -91,7 +99,7 @@ export function CounselorReviewPage() {
     )
   }
 
-  if (error) {
+  if (error && !bootstrapped) {
     return (
       <EmptyState
         icon={AlertTriangle}
@@ -102,6 +110,7 @@ export function CounselorReviewPage() {
         onAction={() => {
           setLoading(true)
           load()
+            .then(() => setBootstrapped(true))
             .catch((err) => setError(err instanceof ApiError ? err.message : 'فشل'))
             .finally(() => setLoading(false))
         }}
