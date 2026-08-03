@@ -31,8 +31,6 @@ import type {
   StudentInput,
   Subject,
   SubjectInput,
-  NotificationStatus,
-  NotificationEventType,
   StaffRole,
 } from './types'
 import { cn } from '../../shared/utils'
@@ -60,21 +58,6 @@ const ROLE_AR: Record<StaffRole, string> = {
   COUNSELOR: 'مرشد طلابي',
 }
 
-const STATUS_AR: Record<NotificationStatus, string> = {
-  QUEUED: 'في الانتظار',
-  SENT: 'تم الإرسال',
-  DELIVERED: 'تم التسليم',
-  READ: 'تمت القراءة',
-  FAILED: 'فشل الإرسال',
-}
-
-const EVENT_AR: Record<NotificationEventType, string> = {
-  ABSENCE: 'غياب',
-  LATE: 'تأخر',
-  HOMEWORK_DIGEST: 'ملخص الواجبات',
-  WEEKLY_PLAN: 'الخطة الأسبوعية',
-}
-
 const EMPTY_STUDENT_FORM: StudentInput = {
   id: '',
   nameAr: '',
@@ -90,7 +73,7 @@ const EMPTY_SUBJECT_FORM: SubjectInput = { nameAr: '', nameEn: '' }
 const EMPTY_STAFF_FORM: StaffInput = {
   name: '',
   email: '',
-  password: 'Password123!',
+  password: '',
   role: 'TEACHER',
   langPref: 'AR',
   phone: '',
@@ -104,11 +87,13 @@ function StudentRowActions({
   onPromote,
   onUnassign,
   onRemove,
+  onRestore,
 }: {
   onEdit: () => void
   onPromote: () => void
   onUnassign?: () => void
   onRemove?: () => void
+  onRestore?: () => void
 }) {
   return (
     <details className="relative text-start">
@@ -144,6 +129,15 @@ function StudentRowActions({
             onClick={onUnassign}
           >
             إزالة من الفصل
+          </button>
+        )}
+        {onRestore && (
+          <button
+            type="button"
+            className="block w-full px-3 py-1.5 text-start text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
+            onClick={onRestore}
+          >
+            استعادة للطالب
           </button>
         )}
         {onRemove && (
@@ -184,17 +178,6 @@ function roleBadge(role: string) {
   return styles[role] ?? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
 }
 
-function statusBadge(status: NotificationStatus) {
-  const styles: Record<NotificationStatus, string> = {
-    QUEUED: 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200',
-    SENT: 'bg-sky-500/15 text-sky-800 dark:text-sky-300',
-    DELIVERED: 'bg-blue-500/15 text-blue-800 dark:text-blue-300',
-    READ: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
-    FAILED: 'bg-red-500/15 text-red-800 dark:text-red-300',
-  }
-  return styles[status]
-}
-
 export function AdminDashboard({
   overviewStats,
   schoolSettings,
@@ -207,7 +190,6 @@ export function AdminDashboard({
   enrollments,
   importBatches,
   importResult,
-  notifications,
   activeTab: controlledTab,
   academicYearFilter,
   onTabChange,
@@ -215,6 +197,8 @@ export function AdminDashboard({
   onSelectStudent,
   onSaveStudent,
   onSoftRemoveStudent,
+  onRestoreStudent,
+  onFilterStudentsActive,
   onPromoteStudent,
   onUnassignStudent,
   onSaveClass,
@@ -230,7 +214,6 @@ export function AdminDashboard({
   onImportStudents,
   onImportTeachers,
   teacherImportResult = null,
-  onFilterNotifications,
   onPrint,
   onSaveSchoolSettings,
   onUploadSchoolLogo,
@@ -244,6 +227,7 @@ export function AdminDashboard({
   const [promoteFor, setPromoteFor] = useState<Student | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<Student | null>(null)
   const [studentClassFilter, setStudentClassFilter] = useState<'ALL' | 'UNASSIGNED' | number>('ALL')
+  const [studentActiveFilter, setStudentActiveFilter] = useState<'true' | 'false' | 'all'>('true')
   const [studentPage, setStudentPage] = useState(0)
   /** Mount only desktop table OR mobile cards — both used to double DOM (~3.4k buttons). */
   const [isMdUp, setIsMdUp] = useState(() =>
@@ -279,8 +263,6 @@ export function AdminDashboard({
   const [yearFilter, setYearFilter] = useState(academicYearFilter ?? overviewStats.academicYear)
   const [importBusy, setImportBusy] = useState(false)
   const [teacherImportBusy, setTeacherImportBusy] = useState(false)
-  const [notifStatus, setNotifStatus] = useState<NotificationStatus | 'ALL'>('ALL')
-  const [notifEvent, setNotifEvent] = useState<NotificationEventType | 'ALL'>('ALL')
 
   const [settingsForm, setSettingsForm] = useState({
     name: schoolSettings.name,
@@ -388,12 +370,6 @@ export function AdminDashboard({
   const currentYearClasses = classes.filter((c) => c.academicYear === overviewStats.academicYear)
   const academicYears = [...new Set(classes.map((c) => c.academicYear))]
   const activeTeachers = staff.filter((u) => u.role === 'TEACHER' && u.isActive)
-
-  const filteredNotifications = notifications.filter((n) => {
-    if (notifStatus !== 'ALL' && n.status !== notifStatus) return false
-    if (notifEvent !== 'ALL' && n.eventType !== notifEvent) return false
-    return true
-  })
 
   function openAddStudent() {
     setStudentFormError(null)
@@ -691,13 +667,32 @@ export function AdminDashboard({
     setSettingsMessage(null)
     try {
       const result = await onRestoreFromBackup(file)
+      const skipped = Array.isArray(result?.restored?.skipped)
+        ? result.restored.skipped.length
+        : 0
+      const safety = result?.safetyBackupFileName
+        ? ` نُسخة ما قبل الاستعادة: ${result.safetyBackupFileName}.`
+        : ''
+      const skipNote =
+        skipped > 0 ? ` تُجاوز ${skipped} سجلًا (راجع التفاصيل في الاستجابة).` : ''
       setSettingsMessage({
-        type: 'ok',
-        text: `تمت استعادة البيانات من الملف. كلمة مرور الموظفين وأولياء الأمور المستعادين: ${result?.defaultPassword || 'Password123!'}`,
+        type: skipped > 0 ? 'err' : 'ok',
+        text: `تمت استعادة البيانات من الملف.${safety}${skipNote} كلمة مرور الحسابات المستعادة: ${result?.defaultPassword || 'Password123!'} — يجب تغييرها عند الدخول.`,
       })
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'فشل استعادة النسخة الاحتياطية'
-      setSettingsMessage({ type: 'err', text: message })
+      const details = err instanceof ApiError ? err.details : null
+      const safetyName =
+        details &&
+        typeof details === 'object' &&
+        details !== null &&
+        'safetyBackupFileName' in details
+          ? String((details as { safetyBackupFileName?: string }).safetyBackupFileName || '')
+          : ''
+      setSettingsMessage({
+        type: 'err',
+        text: safetyName ? `${message} (نسخة الأمان: ${safetyName})` : message,
+      })
     } finally {
       setRestoreBusy(false)
     }
@@ -894,6 +889,19 @@ export function AdminDashboard({
                 )}
               </div>
               <select
+                value={studentActiveFilter}
+                onChange={(e) => {
+                  const v = e.target.value as 'true' | 'false' | 'all'
+                  setStudentActiveFilter(v)
+                  onFilterStudentsActive?.(v)
+                }}
+                className="rounded-md border border-slate-300 bg-white px-2 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+              >
+                <option value="true">النشطون فقط</option>
+                <option value="false">المستبعدون فقط</option>
+                <option value="all">الكل</option>
+              </select>
+              <select
                 value={
                   studentClassFilter === 'ALL'
                     ? 'ALL'
@@ -987,9 +995,12 @@ export function AdminDashboard({
                             onEdit={() => openEditStudent(s)}
                             onPromote={() => setPromoteFor(s)}
                             onUnassign={
-                              s.classId != null ? () => onUnassignStudent?.(s.id) : undefined
+                              s.isActive && s.classId != null
+                                ? () => onUnassignStudent?.(s.id)
+                                : undefined
                             }
                             onRemove={s.isActive ? () => setConfirmRemove(s) : undefined}
+                            onRestore={!s.isActive ? () => onRestoreStudent?.(s.id) : undefined}
                           />
                         </td>
                       </tr>
@@ -1035,9 +1046,12 @@ export function AdminDashboard({
                         onEdit={() => openEditStudent(s)}
                         onPromote={() => setPromoteFor(s)}
                         onUnassign={
-                          s.classId != null ? () => onUnassignStudent?.(s.id) : undefined
+                          s.isActive && s.classId != null
+                            ? () => onUnassignStudent?.(s.id)
+                            : undefined
                         }
                         onRemove={s.isActive ? () => setConfirmRemove(s) : undefined}
+                        onRestore={!s.isActive ? () => onRestoreStudent?.(s.id) : undefined}
                       />
                     </div>
                   </div>
@@ -1547,84 +1561,6 @@ export function AdminDashboard({
                 {importBatches.length === 0 && (
                   <li className="rounded-lg border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-500 dark:border-slate-700">
                     لا توجد عمليات استيراد سابقة.
-                  </li>
-                )}
-              </ul>
-            </div>
-          </div>
-        )}
-
-        {currentTab === 'notifications' && (
-          <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
-              <select
-                value={notifStatus}
-                onChange={(e) => {
-                  const v = e.target.value as NotificationStatus | 'ALL'
-                  setNotifStatus(v)
-                  onFilterNotifications?.({ status: v, eventType: notifEvent })
-                }}
-                className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                <option value="ALL">كل الحالات</option>
-                {(['QUEUED', 'SENT', 'DELIVERED', 'READ', 'FAILED'] as const).map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_AR[s]}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={notifEvent}
-                onChange={(e) => {
-                  const v = e.target.value as NotificationEventType | 'ALL'
-                  setNotifEvent(v)
-                  onFilterNotifications?.({ status: notifStatus, eventType: v })
-                }}
-                className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
-              >
-                <option value="ALL">كل الأحداث</option>
-                {(['ABSENCE', 'LATE', 'HOMEWORK_DIGEST', 'WEEKLY_PLAN'] as const).map((s) => (
-                  <option key={s} value={s}>
-                    {EVENT_AR[s]}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
-              <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                {filteredNotifications.map((n) => (
-                  <li
-                    key={n.id}
-                    className={cn(
-                      'px-4 py-3 text-sm',
-                      n.status === 'FAILED' && 'bg-red-50/80 dark:bg-red-950/30'
-                    )}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <span className="font-semibold">{n.studentName}</span>
-                        <span className="mx-2 text-slate-400">·</span>
-                        <span className="text-slate-500">{EVENT_AR[n.eventType]}</span>
-                      </div>
-                      <span className={cn('rounded-full px-2 py-0.5 text-xs', statusBadge(n.status))}>
-                        {STATUS_AR[n.status]}
-                      </span>
-                    </div>
-                    <div className="mt-1 text-xs text-slate-500">
-                      <PhoneText value={n.parentPhone} />
-                      {n.sentAt
-                        ? ` · ${new Date(n.sentAt).toLocaleString('ar-SA')}`
-                        : ' · لم يُرسل'}
-                    </div>
-                    {n.errorMessage && (
-                      <p className="mt-1 text-xs text-red-700 dark:text-red-300">{n.errorMessage}</p>
-                    )}
-                  </li>
-                ))}
-                {filteredNotifications.length === 0 && (
-                  <li className="px-4 py-8 text-center text-slate-500">
-                    لا توجد رسائل مطابقة للتصفية.
                   </li>
                 )}
               </ul>
@@ -2301,10 +2237,10 @@ export function AdminDashboard({
                 className="mt-1 w-full rounded-md border border-blue-300 bg-white px-3 py-2.5 text-sm font-medium dark:border-blue-700 dark:bg-slate-900 dark:text-slate-100"
                 dir="ltr"
                 autoComplete="new-password"
-                placeholder="Password123!"
+                placeholder="أدخل كلمة مرور قوية"
               />
               <span className="mt-1 block text-xs text-blue-800/80 dark:text-blue-200/80">
-                مطلوبة — 8 أحرف على الأقل (الافتراضي: Password123!)
+                مطلوبة — 8 أحرف على الأقل. سيُطلب من الموظف تغييرها عند أول تسجيل دخول.
               </span>
             </label>
           </div>

@@ -37,15 +37,33 @@ function cellStr(row, key) {
   return String(v).trim();
 }
 
-/** Excel often stores IDs as numbers → "1160286453.0" or scientific notation. */
+/** Excel often stores IDs as numbers → "1160286453.0" or scientific notation.
+ * Avoid Number() for long IDs (precision loss past 15 digits). */
 function normalizeStudentId(raw) {
   let s = String(raw ?? '').trim();
   if (!s) return '';
-  if (/e/i.test(s)) {
-    const n = Number(s);
-    if (Number.isFinite(n)) s = String(Math.round(n));
-  } else if (/^\d+\.0+$/.test(s)) {
-    s = s.replace(/\.0+$/, '');
+  if (/^\d+\.0+$/.test(s)) {
+    return s.replace(/\.0+$/, '');
+  }
+  const sci = s.match(/^([+-]?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/);
+  if (sci) {
+    const digits = sci[2] + (sci[3] || '');
+    const exp = parseInt(sci[4], 10);
+    const intLen = sci[2].length;
+    const newPoint = intLen + exp;
+    let out;
+    if (newPoint <= 0) {
+      out = '0';
+    } else if (newPoint >= digits.length) {
+      out = digits + '0'.repeat(newPoint - digits.length);
+    } else {
+      out = digits.slice(0, newPoint);
+    }
+    return out.replace(/^0+(?=\d)/, '') || '0';
+  }
+  // Strip accidental thousand separators / spaces
+  if (/^[\d\s,]+$/.test(s)) {
+    return s.replace(/[\s,]/g, '');
   }
   return s;
 }

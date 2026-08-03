@@ -36,6 +36,7 @@ export const requireStaff = asyncHandler(async (req, _res, next) => {
       role: true,
       langPref: true,
       isActive: true,
+      mustChangePassword: true,
     },
   });
 

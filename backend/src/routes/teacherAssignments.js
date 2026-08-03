@@ -52,9 +52,14 @@ router.get(
     if (req.query.teacherId) where.teacherId = req.query.teacherId;
     if (req.query.classId) where.classId = req.query.classId;
 
-    // Teachers only see their own assignments unless admin
+    // Teachers only see their own assignments; counselors get an empty list
+    // unless filtering by teacherId/classId (admin sees school-wide).
     if (req.user.role === 'TEACHER') {
       where.teacherId = req.user.id;
+    } else if (req.user.role === 'COUNSELOR') {
+      if (!req.query.teacherId && !req.query.classId) {
+        return res.json({ assignments: [] });
+      }
     }
 
     const assignments = await prisma.teacherAssignment.findMany({
@@ -152,23 +157,27 @@ router.post(
       desired.set(pairKey(item.classId, item.subjectId), item);
     }
 
-    const existingForTeacher = await prisma.teacherAssignment.findMany({
-      where: { teacherId, classId: { in: classIds } },
-    });
-    const mineByKey = new Map(
-      existingForTeacher.map((a) => [pairKey(a.classId, a.subjectId), a])
-    );
-
-    const toCreate = [...desired.values()].filter(
-      (item) => !mineByKey.has(pairKey(item.classId, item.subjectId))
-    );
-    const toDelete = existingForTeacher.filter(
-      (a) => !desired.has(pairKey(a.classId, a.subjectId))
-    );
-
     let reassigned = 0;
+    let createdCount = 0;
+    let removedCount = 0;
 
     await prisma.$transaction(async (tx) => {
+      const existingForTeacher = await tx.teacherAssignment.findMany({
+        where: { teacherId, classId: { in: classIds } },
+      });
+      const mineByKey = new Map(
+        existingForTeacher.map((a) => [pairKey(a.classId, a.subjectId), a])
+      );
+
+      const toCreate = [...desired.values()].filter(
+        (item) => !mineByKey.has(pairKey(item.classId, item.subjectId))
+      );
+      const toDelete = existingForTeacher.filter(
+        (a) => !desired.has(pairKey(a.classId, a.subjectId))
+      );
+      createdCount = toCreate.length;
+      removedCount = toDelete.length;
+
       if (toDelete.length) {
         await tx.teacherAssignment.deleteMany({
           where: { id: { in: toDelete.map((a) => a.id) } },
@@ -199,9 +208,9 @@ router.post(
     });
 
     res.json({
-      created: toCreate.length - reassigned,
+      created: createdCount - reassigned,
       reassigned,
-      removed: toDelete.length,
+      removed: removedCount,
       assignments,
     });
   })

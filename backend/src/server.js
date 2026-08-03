@@ -27,6 +27,19 @@ if (process.env.DATABASE_URL?.startsWith('file:')) {
 }
 
 const { createApp } = await import('./app.js');
+const { prisma } = await import('./utils/prisma.js');
+const { backfillOpenMarkers } = await import('./services/enrollment.js');
+
+try {
+  const result = await backfillOpenMarkers(prisma);
+  if (result.scanned > 0) {
+    console.log(
+      `[enrollment] openMarker backfill: fixed=${result.fixed} conflicts=${result.conflicts}`
+    );
+  }
+} catch (err) {
+  console.warn('[enrollment] openMarker backfill skipped:', err?.message || err);
+}
 
 const app = createApp();
 const port = Number(process.env.PORT || 3001);

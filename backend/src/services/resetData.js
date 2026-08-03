@@ -152,12 +152,38 @@ export async function createDataBackup(prisma) {
   };
 }
 
+const MAX_BACKUP_FILES = 15;
+
+/** Delete older ZIP backups, keeping the newest MAX_BACKUP_FILES. */
+export function pruneBackupFiles() {
+  const dir = path.join(UPLOAD_ROOT, 'backups');
+  if (!fs.existsSync(dir)) return { deleted: 0 };
+  const files = fs
+    .readdirSync(dir)
+    .filter((f) => f.endsWith('.zip'))
+    .map((f) => {
+      const absolute = path.join(dir, f);
+      return { name: f, absolute, mtime: fs.statSync(absolute).mtimeMs };
+    })
+    .sort((a, b) => b.mtime - a.mtime);
+  let deleted = 0;
+  for (const old of files.slice(MAX_BACKUP_FILES)) {
+    try {
+      fs.unlinkSync(old.absolute);
+      deleted += 1;
+    } catch {
+      /* ignore */
+    }
+  }
+  return { deleted };
+}
+
 /** Persist backup as a compressed ZIP under /uploads/backups. */
-export async function writeBackupFile(backup) {
+export async function writeBackupFile(backup, { prefix = 'school-backup' } = {}) {
   const dir = path.join(UPLOAD_ROOT, 'backups');
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const fileName = `school-backup-${stamp}.zip`;
+  const fileName = `${prefix}-${stamp}.zip`;
   const absolute = path.join(dir, fileName);
 
   const zip = new JSZip();
@@ -168,6 +194,7 @@ export async function writeBackupFile(backup) {
     compressionOptions: { level: 9 },
   });
   fs.writeFileSync(absolute, buffer);
+  pruneBackupFiles();
 
   return {
     fileName,
@@ -220,8 +247,15 @@ export async function parseBackupUpload(buffer, originalName = '') {
  * Uses short per-table transactions instead of one long interactive
  * $transaction — free Render Postgres often closes interactive txs mid-wipe
  * ("Transaction not found" on later deleteMany calls).
+ *
+ * NOTE: This intentionally hard-deletes Students and non-ADMIN Users,
+ * which is an explicit exception to the schema "never hard-delete" invariant.
+ * Callers must write a ZIP safety backup first (see backupAndResetData /
+ * restoreFromBackup).
+ *
+ * @param {import('@prisma/client').PrismaClient | import('@prisma/client').Prisma.TransactionClient} db
  */
-export async function resetDataKeepAdmin(prisma) {
+export async function resetDataKeepAdmin(db) {
   const summary = {};
 
   async function wipe(label, run) {
@@ -230,35 +264,36 @@ export async function resetDataKeepAdmin(prisma) {
     return count;
   }
 
-  // FK-safe order (children → parents). Each step is its own short transaction.
-  await wipe('notifications', async () => (await prisma.notification.deleteMany()).count);
-  await wipe('attendance', async () => (await prisma.attendance.deleteMany()).count);
-  await wipe('lateReports', async () => (await prisma.lateReport.deleteMany()).count);
-  await wipe('homework', async () => (await prisma.homework.deleteMany()).count);
-  await wipe('weeklyPlans', async () => (await prisma.weeklyPlan.deleteMany()).count);
+  // FK-safe order (children → parents). Each step is its own short transaction
+  // when `db` is the root client; inside an interactive tx they share that tx.
+  await wipe('notifications', async () => (await db.notification.deleteMany()).count);
+  await wipe('attendance', async () => (await db.attendance.deleteMany()).count);
+  await wipe('lateReports', async () => (await db.lateReport.deleteMany()).count);
+  await wipe('homework', async () => (await db.homework.deleteMany()).count);
+  await wipe('weeklyPlans', async () => (await db.weeklyPlan.deleteMany()).count);
   await wipe(
     'classEnrollments',
-    async () => (await prisma.classEnrollment.deleteMany()).count
+    async () => (await db.classEnrollment.deleteMany()).count
   );
   await wipe(
     'teacherAssignments',
-    async () => (await prisma.teacherAssignment.deleteMany()).count
+    async () => (await db.teacherAssignment.deleteMany()).count
   );
-  await wipe('students', async () => (await prisma.student.deleteMany()).count);
+  await wipe('students', async () => (await db.student.deleteMany()).count);
   await wipe(
     'importBatches',
-    async () => (await prisma.studentImportBatch.deleteMany()).count
+    async () => (await db.studentImportBatch.deleteMany()).count
   );
-  await wipe('classes', async () => (await prisma.class.deleteMany()).count);
-  await wipe('subjects', async () => (await prisma.subject.deleteMany()).count);
-  await wipe('parentOtps', async () => (await prisma.parentOtp.deleteMany()).count);
-  await wipe('parentAccounts', async () => (await prisma.parentAccount.deleteMany()).count);
+  await wipe('classes', async () => (await db.class.deleteMany()).count);
+  await wipe('subjects', async () => (await db.subject.deleteMany()).count);
+  await wipe('parentOtps', async () => (await db.parentOtp.deleteMany()).count);
+  await wipe('parentAccounts', async () => (await db.parentAccount.deleteMany()).count);
   await wipe(
     'nonAdminUsers',
-    async () => (await prisma.user.deleteMany({ where: { role: { not: 'ADMIN' } } })).count
+    async () => (await db.user.deleteMany({ where: { role: { not: 'ADMIN' } } })).count
   );
 
-  const admins = await prisma.user.findMany({
+  const admins = await db.user.findMany({
     where: { role: 'ADMIN' },
     select: { id: true, email: true, name: true },
   });
@@ -268,9 +303,9 @@ export async function resetDataKeepAdmin(prisma) {
     throw new Error('No ADMIN user left after reset — aborting');
   }
 
-  const settings = await prisma.schoolSettings.findUnique({ where: { id: 1 } });
+  const settings = await db.schoolSettings.findUnique({ where: { id: 1 } });
   if (!settings) {
-    await prisma.schoolSettings.create({
+    await db.schoolSettings.create({
       data: {
         id: 1,
         name: 'المدرسة',
@@ -311,373 +346,485 @@ function assertBackup(backup) {
 /**
  * Wipe current operational data, then recreate from a backup JSON.
  * Restored staff/parent passwords become Password123! (hashes are not stored in backups).
+ *
+ * Safety: always writes a pre-restore ZIP of the live DB first. Wipe+restore run inside
+ * one interactive transaction so a mid-restore failure rolls back instead of leaving a
+ * half-wiped database. If the process crashes hard (OOM/kill), use the pre-restore ZIP.
  */
 export async function restoreFromBackup(prisma, backup) {
   assertBackup(backup);
 
+  const safetyBackup = await createDataBackup(prisma);
+  const safetyStored = await writeBackupFile(safetyBackup, { prefix: 'pre-restore' });
+
   const passwordHash = await hashPassword(DEFAULT_RESTORED_PASSWORD);
-  const wipeSummary = await resetDataKeepAdmin(prisma);
 
-  const subjectIdMap = new Map();
-  const classIdMap = new Map();
-  const userIdMap = new Map();
-  const batchIdMap = new Map();
-  const attendanceIdMap = new Map();
-  const lateIdMap = new Map();
+  try {
+    const result = await prisma.$transaction(
+      async (tx) => {
+        const wipeSummary = await resetDataKeepAdmin(tx);
 
-  const counts = {
-    subjects: 0,
-    classes: 0,
-    users: 0,
-    importBatches: 0,
-    students: 0,
-    teacherAssignments: 0,
-    classEnrollments: 0,
-    homework: 0,
-    weeklyPlans: 0,
-    lateReports: 0,
-    attendance: 0,
-    notifications: 0,
-    parentAccounts: 0,
-    skipped: [],
-  };
+        const subjectIdMap = new Map();
+        const classIdMap = new Map();
+        const userIdMap = new Map();
+        const batchIdMap = new Map();
+        const attendanceIdMap = new Map();
+        const lateIdMap = new Map();
 
-  const settingsRow = Array.isArray(backup.schoolSettings)
-    ? backup.schoolSettings[0]
-    : backup.schoolSettings;
-  if (settingsRow) {
-    const logoData = restoreLogoBytes(settingsRow);
-    const logoFields = {
-      logoPath: settingsRow.logoPath ?? null,
-      logoMime: settingsRow.logoMime ?? null,
-      logoData,
+        const counts = {
+          subjects: 0,
+          classes: 0,
+          users: 0,
+          inactiveAdminsRestored: 0,
+          importBatches: 0,
+          students: 0,
+          teacherAssignments: 0,
+          classEnrollments: 0,
+          homework: 0,
+          weeklyPlans: 0,
+          lateReports: 0,
+          attendance: 0,
+          notifications: 0,
+          parentAccounts: 0,
+          skipped: [],
+        };
+
+        const settingsRow = Array.isArray(backup.schoolSettings)
+          ? backup.schoolSettings[0]
+          : backup.schoolSettings;
+        if (settingsRow) {
+          const logoData = restoreLogoBytes(settingsRow);
+          const logoFields = {
+            logoPath: settingsRow.logoPath ?? null,
+            logoMime: settingsRow.logoMime ?? null,
+            logoData,
+          };
+          await tx.schoolSettings.upsert({
+            where: { id: 1 },
+            update: {
+              name: settingsRow.name || 'المدرسة',
+              academicYear: settingsRow.academicYear || '2026-2027',
+              principalName: settingsRow.principalName ?? null,
+              educationAdminName: settingsRow.educationAdminName ?? null,
+              address: settingsRow.address ?? null,
+              ...logoFields,
+            },
+            create: {
+              id: 1,
+              name: settingsRow.name || 'المدرسة',
+              academicYear: settingsRow.academicYear || '2026-2027',
+              principalName: settingsRow.principalName ?? null,
+              educationAdminName: settingsRow.educationAdminName ?? null,
+              address: settingsRow.address ?? null,
+              ...logoFields,
+            },
+          });
+        }
+
+        for (const s of backup.subjects || []) {
+          try {
+            const created = await tx.subject.create({
+              data: { nameAr: s.nameAr, nameEn: s.nameEn },
+            });
+            subjectIdMap.set(s.id, created.id);
+            counts.subjects += 1;
+          } catch (err) {
+            counts.skipped.push(`subject:${s.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const c of backup.classes || []) {
+          try {
+            const created = await tx.class.create({
+              data: {
+                name: c.name,
+                gradeLevel: c.gradeLevel,
+                section: c.section ?? null,
+                academicYear: c.academicYear,
+              },
+            });
+            classIdMap.set(c.id, created.id);
+            counts.classes += 1;
+          } catch (err) {
+            counts.skipped.push(`class:${c.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const existingAdmins = await tx.user.findMany({
+          where: { role: 'ADMIN' },
+          select: { id: true, email: true },
+        });
+        const adminByEmail = new Map(
+          existingAdmins.map((a) => [a.email.toLowerCase(), a.id])
+        );
+        if (existingAdmins.length === 0) {
+          throw new Error('No ADMIN available for restore');
+        }
+
+        for (const u of backup.users || []) {
+          const email = String(u.email || '')
+            .trim()
+            .toLowerCase();
+
+          if (u.role === 'ADMIN') {
+            if (email && adminByEmail.has(email)) {
+              userIdMap.set(u.id, adminByEmail.get(email));
+              continue;
+            }
+            // Recreate unmatched backup admins as inactive so historical FKs
+            // (recordedBy / reasonReviewedBy) keep pointing at the right person —
+            // never silently remap to an arbitrary live admin.
+            if (!email) {
+              counts.skipped.push(`admin:${u.id}:missing-email`);
+              continue;
+            }
+            const existing = await tx.user.findUnique({ where: { email } });
+            if (existing) {
+              userIdMap.set(u.id, existing.id);
+              continue;
+            }
+            const created = await tx.user.create({
+              data: {
+                name: u.name || email,
+                email,
+                phone: u.phone ?? null,
+                role: 'ADMIN',
+                langPref: u.langPref === 'EN' ? 'EN' : 'AR',
+                isActive: false,
+                mustChangePassword: true,
+                passwordHash,
+              },
+            });
+            userIdMap.set(u.id, created.id);
+            counts.inactiveAdminsRestored += 1;
+            continue;
+          }
+
+          if (!email) {
+            counts.skipped.push(`user:${u.id}:missing-email`);
+            continue;
+          }
+
+          const existing = await tx.user.findUnique({ where: { email } });
+          if (existing) {
+            userIdMap.set(u.id, existing.id);
+            continue;
+          }
+
+          try {
+            const created = await tx.user.create({
+              data: {
+                name: u.name || email,
+                email,
+                phone: u.phone ?? null,
+                role: u.role === 'COUNSELOR' ? 'COUNSELOR' : 'TEACHER',
+                langPref: u.langPref === 'EN' ? 'EN' : 'AR',
+                isActive: u.isActive !== false,
+                mustChangePassword: true,
+                passwordHash,
+              },
+            });
+            userIdMap.set(u.id, created.id);
+            counts.users += 1;
+          } catch (err) {
+            counts.skipped.push(`user:${u.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const mapUser = (oldId) => {
+          if (oldId == null) return null;
+          return userIdMap.has(oldId) ? userIdMap.get(oldId) : null;
+        };
+
+        for (const b of backup.importBatches || []) {
+          const importedBy = mapUser(b.importedBy);
+          if (importedBy == null) {
+            counts.skipped.push(`batch:${b.id}:unmapped-importer`);
+            continue;
+          }
+          const created = await tx.studentImportBatch.create({
+            data: {
+              importedBy,
+              fileName: b.fileName ?? null,
+              rowCount: b.rowCount ?? 0,
+              importedAt: asDate(b.importedAt) ?? new Date(),
+            },
+          });
+          batchIdMap.set(b.id, created.id);
+          counts.importBatches += 1;
+        }
+
+        for (const s of backup.students || []) {
+          try {
+            const classId = s.classId == null ? null : classIdMap.get(s.classId) ?? null;
+            const importBatchId =
+              s.importBatchId == null ? null : batchIdMap.get(s.importBatchId) ?? null;
+            await tx.student.create({
+              data: {
+                id: s.id,
+                nameAr: s.nameAr,
+                nameEn: s.nameEn,
+                classId,
+                parentPhone: s.parentPhone,
+                parentEmail: s.parentEmail ?? null,
+                waOptedIn: !!s.waOptedIn,
+                isActive: s.isActive !== false,
+                deletedAt: asDate(s.deletedAt),
+                importBatchId,
+                createdAt: asDate(s.createdAt) ?? undefined,
+              },
+            });
+            counts.students += 1;
+          } catch (err) {
+            counts.skipped.push(`student:${s.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const a of backup.teacherAssignments || []) {
+          const teacherId = mapUser(a.teacherId);
+          const classId = classIdMap.get(a.classId);
+          const subjectId = subjectIdMap.get(a.subjectId);
+          if (!teacherId || !classId || !subjectId) {
+            counts.skipped.push(
+              `assignment:${a.id}:${!teacherId ? 'unmapped-teacher' : 'missing-class-or-subject'}`
+            );
+            continue;
+          }
+          try {
+            await tx.teacherAssignment.create({
+              data: { teacherId, classId, subjectId },
+            });
+            counts.teacherAssignments += 1;
+          } catch (err) {
+            counts.skipped.push(`assignment:${a.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const e of backup.classEnrollments || []) {
+          const classId = classIdMap.get(e.classId);
+          if (!classId) {
+            counts.skipped.push(`enrollment:${e.id}:missing-class`);
+            continue;
+          }
+          const endDate = asDate(e.endDate);
+          const isOpen = endDate == null;
+          try {
+            await tx.classEnrollment.create({
+              data: {
+                studentId: e.studentId,
+                classId,
+                academicYear: e.academicYear,
+                startDate: asDate(e.startDate) ?? new Date(),
+                endDate,
+                openMarker: isOpen ? e.studentId : null,
+                changedBy: mapUser(e.changedBy),
+              },
+            });
+            counts.classEnrollments += 1;
+          } catch (err) {
+            counts.skipped.push(`enrollment:${e.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const homeworkRows = backup.homework || backup.reports?.homeworkLog || [];
+        for (const h of homeworkRows) {
+          const classId = classIdMap.get(h.classId);
+          const subjectId = subjectIdMap.get(h.subjectId);
+          const teacherId = mapUser(h.teacherId);
+          const date = asDate(h.date);
+          if (!classId || !subjectId || !teacherId || !date) {
+            counts.skipped.push(
+              `homework:${h.id}:${!teacherId ? 'unmapped-teacher' : 'missing-fields'}`
+            );
+            continue;
+          }
+          try {
+            await tx.homework.create({
+              data: {
+                classId,
+                subjectId,
+                teacherId,
+                date,
+                description: h.description || '',
+                dueDate: asDate(h.dueDate),
+                createdAt: asDate(h.createdAt) ?? undefined,
+                updatedAt: asDate(h.updatedAt) ?? undefined,
+              },
+            });
+            counts.homework += 1;
+          } catch (err) {
+            counts.skipped.push(`homework:${h.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const weeklyRows = backup.weeklyPlans || backup.reports?.weeklyPlans || [];
+        for (const w of weeklyRows) {
+          const classId = classIdMap.get(w.classId);
+          const subjectId = subjectIdMap.get(w.subjectId);
+          const teacherId = mapUser(w.teacherId);
+          const weekStart = asDate(w.weekStart);
+          if (!classId || !subjectId || !teacherId || !weekStart) {
+            counts.skipped.push(
+              `weekly:${w.id}:${!teacherId ? 'unmapped-teacher' : 'missing-fields'}`
+            );
+            continue;
+          }
+          try {
+            await tx.weeklyPlan.create({
+              data: {
+                classId,
+                subjectId,
+                teacherId,
+                weekStart,
+                topics: w.topics || '',
+                objectives: w.objectives ?? null,
+                notes: w.notes ?? null,
+                createdAt: asDate(w.createdAt) ?? undefined,
+                updatedAt: asDate(w.updatedAt) ?? undefined,
+              },
+            });
+            counts.weeklyPlans += 1;
+          } catch (err) {
+            counts.skipped.push(`weekly:${w.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const lateRows = backup.lateReports || backup.reports?.lateArrivals || [];
+        for (const r of lateRows) {
+          const classId = classIdMap.get(r.classId);
+          const date = asDate(r.date);
+          const recordedBy = mapUser(r.recordedBy);
+          if (!classId || !date || !r.studentId || recordedBy == null) {
+            counts.skipped.push(
+              `late:${r.id}:${recordedBy == null ? 'unmapped-recorder' : 'missing-fields'}`
+            );
+            continue;
+          }
+          try {
+            const created = await tx.lateReport.create({
+              data: {
+                studentId: r.studentId,
+                classId,
+                date,
+                time: asDate(r.time) ?? new Date(),
+                reason: r.reason ?? null,
+                recordedBy,
+              },
+            });
+            lateIdMap.set(r.id, created.id);
+            counts.lateReports += 1;
+          } catch (err) {
+            counts.skipped.push(`late:${r.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const attendanceRows = backup.attendance || backup.reports?.attendance || [];
+        for (const r of attendanceRows) {
+          const classId = classIdMap.get(r.classId);
+          const date = asDate(r.date);
+          const recordedBy = mapUser(r.recordedBy);
+          if (!classId || !date || !r.studentId || recordedBy == null) {
+            counts.skipped.push(
+              `attendance:${r.id}:${recordedBy == null ? 'unmapped-recorder' : 'missing-fields'}`
+            );
+            continue;
+          }
+          try {
+            const created = await tx.attendance.create({
+              data: {
+                studentId: r.studentId,
+                classId,
+                date,
+                period: r.period || 'DAY',
+                status: r.status,
+                recordedBy,
+                createdAt: asDate(r.createdAt) ?? undefined,
+                absenceReason: r.absenceReason ?? null,
+                absenceAttachmentUrl: r.absenceAttachmentUrl ?? null,
+                absenceAttachmentData: restoreAttachmentBytes(r),
+                absenceAttachmentMime: r.absenceAttachmentMime ?? null,
+                reasonSubmittedAt: asDate(r.reasonSubmittedAt),
+                reasonStatus: r.reasonStatus || 'NONE',
+                reasonReviewedBy: mapUser(r.reasonReviewedBy),
+                reasonReviewedAt: asDate(r.reasonReviewedAt),
+                counselorNote: r.counselorNote ?? null,
+              },
+            });
+            attendanceIdMap.set(r.id, created.id);
+            counts.attendance += 1;
+          } catch (err) {
+            counts.skipped.push(`attendance:${r.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        const notifRows = backup.notifications || backup.reports?.notifications || [];
+        for (const n of notifRows) {
+          try {
+            await tx.notification.create({
+              data: {
+                eventType: n.eventType,
+                studentId: n.studentId ?? null,
+                parentPhone: n.parentPhone,
+                templateName: n.templateName || 'unknown',
+                status: n.status || 'QUEUED',
+                providerMessageId: n.providerMessageId ?? null,
+                attendanceId:
+                  n.attendanceId == null ? null : attendanceIdMap.get(n.attendanceId) ?? null,
+                lateReportId:
+                  n.lateReportId == null ? null : lateIdMap.get(n.lateReportId) ?? null,
+                forDate: asDate(n.forDate),
+                sentAt: asDate(n.sentAt),
+                createdAt: asDate(n.createdAt) ?? undefined,
+                errorMessage: n.errorMessage ?? null,
+              },
+            });
+            counts.notifications += 1;
+          } catch (err) {
+            counts.skipped.push(`notification:${n.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const p of backup.parentAccounts || []) {
+          if (!p.phone) continue;
+          try {
+            await tx.parentAccount.create({
+              data: {
+                phone: p.phone,
+                passwordHash,
+                isActive: p.isActive !== false,
+                createdAt: asDate(p.createdAt) ?? undefined,
+                updatedAt: asDate(p.updatedAt) ?? undefined,
+              },
+            });
+            counts.parentAccounts += 1;
+          } catch (err) {
+            counts.skipped.push(`parent:${p.phone}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        return {
+          wipeSummary,
+          restored: counts,
+          defaultPassword: DEFAULT_RESTORED_PASSWORD,
+        };
+      },
+      { timeout: 300_000, maxWait: 60_000 }
+    );
+
+    return {
+      ...result,
+      safetyBackupFileName: safetyStored.fileName,
+      safetyBackupDownloadUrl: safetyStored.downloadUrl,
     };
-    await prisma.schoolSettings.upsert({
-      where: { id: 1 },
-      update: {
-        name: settingsRow.name || 'المدرسة',
-        academicYear: settingsRow.academicYear || '2026-2027',
-        principalName: settingsRow.principalName ?? null,
-        educationAdminName: settingsRow.educationAdminName ?? null,
-        address: settingsRow.address ?? null,
-        ...logoFields,
-      },
-      create: {
-        id: 1,
-        name: settingsRow.name || 'المدرسة',
-        academicYear: settingsRow.academicYear || '2026-2027',
-        principalName: settingsRow.principalName ?? null,
-        educationAdminName: settingsRow.educationAdminName ?? null,
-        address: settingsRow.address ?? null,
-        ...logoFields,
-      },
+  } catch (err) {
+    const message =
+      err?.message ||
+      'فشلت الاستعادة — لم تُغيَّر قاعدة البيانات (أو أُلغيت المعاملة). استخدم النسخة السابقة للاسترداد إن لزم.';
+    const wrapped = badRequest(message, {
+      safetyBackupFileName: safetyStored.fileName,
+      safetyBackupDownloadUrl: safetyStored.downloadUrl,
     });
+    throw wrapped;
   }
-
-  for (const s of backup.subjects || []) {
-    const created = await prisma.subject.create({
-      data: { nameAr: s.nameAr, nameEn: s.nameEn },
-    });
-    subjectIdMap.set(s.id, created.id);
-    counts.subjects += 1;
-  }
-
-  for (const c of backup.classes || []) {
-    const created = await prisma.class.create({
-      data: {
-        name: c.name,
-        gradeLevel: c.gradeLevel,
-        section: c.section ?? null,
-        academicYear: c.academicYear,
-      },
-    });
-    classIdMap.set(c.id, created.id);
-    counts.classes += 1;
-  }
-
-  const existingAdmins = await prisma.user.findMany({
-    where: { role: 'ADMIN' },
-    select: { id: true, email: true },
-  });
-  const adminByEmail = new Map(existingAdmins.map((a) => [a.email.toLowerCase(), a.id]));
-  const fallbackAdminId = existingAdmins[0]?.id;
-  if (!fallbackAdminId) throw new Error('No ADMIN available for restore');
-
-  for (const u of backup.users || []) {
-    if (u.role === 'ADMIN') {
-      const mapped = adminByEmail.get(String(u.email || '').toLowerCase()) ?? fallbackAdminId;
-      userIdMap.set(u.id, mapped);
-      continue;
-    }
-
-    const email = String(u.email || '').trim().toLowerCase();
-    if (!email) {
-      counts.skipped.push(`user:${u.id}:missing-email`);
-      continue;
-    }
-
-    const existing = await prisma.user.findUnique({ where: { email } });
-    if (existing) {
-      userIdMap.set(u.id, existing.id);
-      continue;
-    }
-
-    const created = await prisma.user.create({
-      data: {
-        name: u.name || email,
-        email,
-        phone: u.phone ?? null,
-        role: u.role === 'COUNSELOR' ? 'COUNSELOR' : 'TEACHER',
-        langPref: u.langPref === 'EN' ? 'EN' : 'AR',
-        isActive: u.isActive !== false,
-        passwordHash,
-      },
-    });
-    userIdMap.set(u.id, created.id);
-    counts.users += 1;
-  }
-
-  const mapUser = (oldId) => {
-    if (oldId == null) return null;
-    return userIdMap.get(oldId) ?? fallbackAdminId;
-  };
-
-  for (const b of backup.importBatches || []) {
-    const created = await prisma.studentImportBatch.create({
-      data: {
-        importedBy: mapUser(b.importedBy),
-        fileName: b.fileName ?? null,
-        rowCount: b.rowCount ?? 0,
-        importedAt: asDate(b.importedAt) ?? new Date(),
-      },
-    });
-    batchIdMap.set(b.id, created.id);
-    counts.importBatches += 1;
-  }
-
-  for (const s of backup.students || []) {
-    const classId = s.classId == null ? null : classIdMap.get(s.classId) ?? null;
-    const importBatchId =
-      s.importBatchId == null ? null : batchIdMap.get(s.importBatchId) ?? null;
-    await prisma.student.create({
-      data: {
-        id: s.id,
-        nameAr: s.nameAr,
-        nameEn: s.nameEn,
-        classId,
-        parentPhone: s.parentPhone,
-        parentEmail: s.parentEmail ?? null,
-        waOptedIn: !!s.waOptedIn,
-        isActive: s.isActive !== false,
-        deletedAt: asDate(s.deletedAt),
-        importBatchId,
-        createdAt: asDate(s.createdAt) ?? undefined,
-      },
-    });
-    counts.students += 1;
-  }
-
-  for (const a of backup.teacherAssignments || []) {
-    const teacherId = mapUser(a.teacherId);
-    const classId = classIdMap.get(a.classId);
-    const subjectId = subjectIdMap.get(a.subjectId);
-    if (!teacherId || !classId || !subjectId) {
-      counts.skipped.push(`assignment:${a.id}`);
-      continue;
-    }
-    try {
-      await prisma.teacherAssignment.create({
-        data: { teacherId, classId, subjectId },
-      });
-      counts.teacherAssignments += 1;
-    } catch {
-      counts.skipped.push(`assignment-dup:${a.id}`);
-    }
-  }
-
-  for (const e of backup.classEnrollments || []) {
-    const classId = classIdMap.get(e.classId);
-    if (!classId) {
-      counts.skipped.push(`enrollment:${e.id}`);
-      continue;
-    }
-    await prisma.classEnrollment.create({
-      data: {
-        studentId: e.studentId,
-        classId,
-        academicYear: e.academicYear,
-        startDate: asDate(e.startDate) ?? new Date(),
-        endDate: asDate(e.endDate),
-        changedBy: mapUser(e.changedBy),
-      },
-    });
-    counts.classEnrollments += 1;
-  }
-
-  const homeworkRows = backup.homework || backup.reports?.homeworkLog || [];
-  for (const h of homeworkRows) {
-    const classId = classIdMap.get(h.classId);
-    const subjectId = subjectIdMap.get(h.subjectId);
-    const teacherId = mapUser(h.teacherId);
-    const date = asDate(h.date);
-    if (!classId || !subjectId || !teacherId || !date) {
-      counts.skipped.push(`homework:${h.id}`);
-      continue;
-    }
-    await prisma.homework.create({
-      data: {
-        classId,
-        subjectId,
-        teacherId,
-        date,
-        description: h.description || '',
-        dueDate: asDate(h.dueDate),
-        createdAt: asDate(h.createdAt) ?? undefined,
-        updatedAt: asDate(h.updatedAt) ?? undefined,
-      },
-    });
-    counts.homework += 1;
-  }
-
-  const weeklyRows = backup.weeklyPlans || backup.reports?.weeklyPlans || [];
-  for (const w of weeklyRows) {
-    const classId = classIdMap.get(w.classId);
-    const subjectId = subjectIdMap.get(w.subjectId);
-    const teacherId = mapUser(w.teacherId);
-    const weekStart = asDate(w.weekStart);
-    if (!classId || !subjectId || !teacherId || !weekStart) {
-      counts.skipped.push(`weekly:${w.id}`);
-      continue;
-    }
-    try {
-      await prisma.weeklyPlan.create({
-        data: {
-          classId,
-          subjectId,
-          teacherId,
-          weekStart,
-          topics: w.topics || '',
-          objectives: w.objectives ?? null,
-          notes: w.notes ?? null,
-          createdAt: asDate(w.createdAt) ?? undefined,
-          updatedAt: asDate(w.updatedAt) ?? undefined,
-        },
-      });
-      counts.weeklyPlans += 1;
-    } catch {
-      counts.skipped.push(`weekly-dup:${w.id}`);
-    }
-  }
-
-  const lateRows = backup.lateReports || backup.reports?.lateArrivals || [];
-  for (const r of lateRows) {
-    const classId = classIdMap.get(r.classId);
-    const date = asDate(r.date);
-    if (!classId || !date || !r.studentId) {
-      counts.skipped.push(`late:${r.id}`);
-      continue;
-    }
-    try {
-      const created = await prisma.lateReport.create({
-        data: {
-          studentId: r.studentId,
-          classId,
-          date,
-          time: asDate(r.time) ?? new Date(),
-          reason: r.reason ?? null,
-          recordedBy: mapUser(r.recordedBy),
-        },
-      });
-      lateIdMap.set(r.id, created.id);
-      counts.lateReports += 1;
-    } catch {
-      counts.skipped.push(`late-dup:${r.id}`);
-    }
-  }
-
-  const attendanceRows = backup.attendance || backup.reports?.attendance || [];
-  for (const r of attendanceRows) {
-    const classId = classIdMap.get(r.classId);
-    const date = asDate(r.date);
-    if (!classId || !date || !r.studentId) {
-      counts.skipped.push(`attendance:${r.id}`);
-      continue;
-    }
-    try {
-      const created = await prisma.attendance.create({
-        data: {
-          studentId: r.studentId,
-          classId,
-          date,
-          period: r.period || 'DAY',
-          status: r.status,
-          recordedBy: mapUser(r.recordedBy),
-          createdAt: asDate(r.createdAt) ?? undefined,
-          absenceReason: r.absenceReason ?? null,
-          absenceAttachmentUrl: r.absenceAttachmentUrl ?? null,
-          absenceAttachmentData: restoreAttachmentBytes(r),
-          absenceAttachmentMime: r.absenceAttachmentMime ?? null,
-          reasonSubmittedAt: asDate(r.reasonSubmittedAt),
-          reasonStatus: r.reasonStatus || 'NONE',
-          reasonReviewedBy: mapUser(r.reasonReviewedBy),
-          reasonReviewedAt: asDate(r.reasonReviewedAt),
-          counselorNote: r.counselorNote ?? null,
-        },
-      });
-      attendanceIdMap.set(r.id, created.id);
-      counts.attendance += 1;
-    } catch {
-      counts.skipped.push(`attendance-dup:${r.id}`);
-    }
-  }
-
-  const notifRows = backup.notifications || backup.reports?.notifications || [];
-  for (const n of notifRows) {
-    try {
-      await prisma.notification.create({
-        data: {
-          eventType: n.eventType,
-          studentId: n.studentId ?? null,
-          parentPhone: n.parentPhone,
-          templateName: n.templateName || 'unknown',
-          status: n.status || 'QUEUED',
-          providerMessageId: n.providerMessageId ?? null,
-          attendanceId:
-            n.attendanceId == null ? null : attendanceIdMap.get(n.attendanceId) ?? null,
-          lateReportId: n.lateReportId == null ? null : lateIdMap.get(n.lateReportId) ?? null,
-          forDate: asDate(n.forDate),
-          sentAt: asDate(n.sentAt),
-          createdAt: asDate(n.createdAt) ?? undefined,
-          errorMessage: n.errorMessage ?? null,
-        },
-      });
-      counts.notifications += 1;
-    } catch {
-      counts.skipped.push(`notification:${n.id}`);
-    }
-  }
-
-  for (const p of backup.parentAccounts || []) {
-    if (!p.phone) continue;
-    try {
-      await prisma.parentAccount.create({
-        data: {
-          phone: p.phone,
-          passwordHash,
-          isActive: p.isActive !== false,
-          createdAt: asDate(p.createdAt) ?? undefined,
-          updatedAt: asDate(p.updatedAt) ?? undefined,
-        },
-      });
-      counts.parentAccounts += 1;
-    } catch {
-      counts.skipped.push(`parent:${p.phone}`);
-    }
-  }
-
-  return {
-    wipeSummary,
-    restored: counts,
-    defaultPassword: DEFAULT_RESTORED_PASSWORD,
-  };
 }
+

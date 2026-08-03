@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma.js';
 import { normalizePhone } from '../utils/phone.js';
-import { badRequest, conflict, unauthorized } from '../utils/errors.js';
+import { badRequest, unauthorized } from '../utils/errors.js';
 
 const SALT_ROUNDS = 10;
 const MIN_PARENT_PASSWORD = 8;

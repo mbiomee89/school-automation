@@ -7,11 +7,12 @@ import { validateBody } from '../middleware/validate.js';
 import { requireStaff } from '../middleware/auth.js';
 import {
   verifyPassword,
+  hashPassword,
   signStaffToken,
   loginParent,
   registerParent,
 } from '../services/auth.js';
-import { unauthorized } from '../utils/errors.js';
+import { unauthorized, badRequest } from '../utils/errors.js';
 
 const router = Router();
 
@@ -72,6 +73,7 @@ router.post(
         email: user.email,
         role: user.role,
         langPref: user.langPref,
+        mustChangePassword: !!user.mustChangePassword,
       },
     });
   })
@@ -108,6 +110,44 @@ router.get(
   requireStaff,
   asyncHandler(async (req, res) => {
     res.json({ user: req.user });
+  })
+);
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+/** POST /auth/change-password — staff must know current password */
+router.post(
+  '/change-password',
+  requireStaff,
+  validateBody(changePasswordSchema),
+  asyncHandler(async (req, res) => {
+    const full = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!full || !full.isActive) throw unauthorized('Invalid session');
+
+    const ok = await verifyPassword(req.body.currentPassword, full.passwordHash);
+    if (!ok) throw badRequest('كلمة المرور الحالية غير صحيحة');
+
+    if (req.body.newPassword === req.body.currentPassword) {
+      throw badRequest('اختر كلمة مرور جديدة مختلفة');
+    }
+
+    const passwordHash = await hashPassword(req.body.newPassword);
+    const user = await prisma.user.update({
+      where: { id: full.id },
+      data: { passwordHash, mustChangePassword: false },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        langPref: true,
+        mustChangePassword: true,
+      },
+    });
+    res.json({ user });
   })
 );
 

@@ -53,12 +53,17 @@ router.get(
   '/:id',
   validateParams(idParam),
   asyncHandler(async (req, res) => {
+    const teacherSelect =
+      req.user.role === 'ADMIN'
+        ? { id: true, name: true, email: true }
+        : { id: true, name: true };
+
     const cls = await prisma.class.findUnique({
       where: { id: req.params.id },
       include: {
         assignments: {
           include: {
-            teacher: { select: { id: true, name: true, email: true } },
+            teacher: { select: teacherSelect },
             subject: true,
           },
         },
@@ -124,6 +129,7 @@ router.delete(
             lateReports: true,
             weeklyPlans: true,
             enrollments: true,
+            assignments: true,
           },
         },
       },
@@ -137,14 +143,16 @@ router.delete(
     if (counts._count.homework > 0) blockers.push(`${counts._count.homework} واجب`);
     if (counts._count.lateReports > 0) blockers.push(`${counts._count.lateReports} تأخر`);
     if (counts._count.weeklyPlans > 0) blockers.push(`${counts._count.weeklyPlans} خطة أسبوعية`);
+    if (counts._count.assignments > 0) {
+      blockers.push(`${counts._count.assignments} توزيع معلم`);
+    }
 
     if (blockers.length > 0) {
       throw conflict(
-        `لا يمكن حذف هذا الفصل لوجود سجلات مرتبطة به: ${blockers.join('، ')}. إن وُجد طلاب حالياً فأزلهم أولاً من الفصل. السجلات التاريخية تُحفظ عمداً ولا يُحذف الفصل.`
+        `لا يمكن حذف هذا الفصل لوجود سجلات مرتبطة به: ${blockers.join('، ')}. إن وُجد طلاب حالياً فأزلهم أولاً من الفصل. أزل توزيع المعلمين من تبويب التوزيع. السجلات التاريخية تُحفظ عمداً ولا يُحذف الفصل.`
       );
     }
 
-    await prisma.teacherAssignment.deleteMany({ where: { classId: id } });
     await prisma.class.delete({ where: { id } });
     res.status(204).send();
   })
@@ -180,7 +188,7 @@ router.post(
       const now = new Date();
       await tx.classEnrollment.updateMany({
         where: { classId: id, endDate: null },
-        data: { endDate: now },
+        data: { endDate: now, openMarker: null },
       });
 
       await tx.student.updateMany({

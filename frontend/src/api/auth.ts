@@ -10,6 +10,7 @@ export interface StaffUser {
   langPref: 'AR' | 'EN'
   phone?: string | null
   isActive?: boolean
+  mustChangePassword?: boolean
 }
 
 export async function loginStaff(email: string, password: string) {
@@ -22,4 +23,11 @@ export async function loginStaff(email: string, password: string) {
 
 export async function fetchMe() {
   return apiRequest<{ user: StaffUser }>('/auth/me')
+}
+
+export async function changeStaffPassword(currentPassword: string, newPassword: string) {
+  return apiRequest<{ user: StaffUser }>('/auth/change-password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  })
 }

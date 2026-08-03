@@ -138,6 +138,7 @@ async function main() {
         classId: cls.id,
         academicYear: YEAR,
         changedBy: admin.id,
+        openMarker: s.id,
       },
     });
   }

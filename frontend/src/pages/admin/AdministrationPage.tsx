@@ -26,6 +26,7 @@ import {
   removeAssignment,
   resetAllDataWithBackup,
   restoreDataFromBackupFile,
+  restoreStudent,
   saveClass,
   saveSchoolSettings,
   saveSubject,
@@ -92,6 +93,9 @@ export function AdministrationPage() {
   const [teacherImportResult, setTeacherImportResult] = useState<ImportResult | null>(null)
   const studentsLoadGen = useRef(0)
 
+  const studentsActiveFilter = useRef<'true' | 'false' | 'all'>('true')
+  const enrollmentLoadGen = useRef(0)
+
   const refreshStudentStats = useCallback(async () => {
     const stats = await getStudentStats()
     setActiveStudentCount(stats.activeCount)
@@ -101,11 +105,16 @@ export function AdministrationPage() {
     const gen = ++studentsLoadGen.current
     setStudentsLoading(true)
     try {
-      const list = await listStudents({ q: query || undefined })
+      const list = await listStudents({
+        q: query || undefined,
+        active: studentsActiveFilter.current,
+      })
       if (gen !== studentsLoadGen.current) return
       setStudents(list)
       setStudentsLoaded(true)
-      if (!query) setActiveStudentCount(list.filter((s) => s.isActive).length)
+      if (!query && studentsActiveFilter.current === 'true') {
+        setActiveStudentCount(list.filter((s) => s.isActive).length)
+      }
     } finally {
       if (gen === studentsLoadGen.current) setStudentsLoading(false)
     }
@@ -241,10 +250,30 @@ export function AdministrationPage() {
         }
       }}
       onSelectStudent={async (studentId) => {
+        const gen = ++enrollmentLoadGen.current
         try {
-          setEnrollments(await listEnrollments(studentId))
+          const rows = await listEnrollments(studentId)
+          if (gen !== enrollmentLoadGen.current) return
+          setEnrollments(rows)
         } catch (err) {
+          if (gen !== enrollmentLoadGen.current) return
           alertError(err, 'فشل جلب سجل الفصول')
+        }
+      }}
+      onFilterStudentsActive={async (active) => {
+        studentsActiveFilter.current = active
+        try {
+          await loadStudents()
+        } catch (err) {
+          alertError(err, 'فشل تحميل الطلاب')
+        }
+      }}
+      onRestoreStudent={async (studentId) => {
+        try {
+          await restoreStudent(studentId)
+          await Promise.all([loadStudents(), refreshStudentStats()])
+        } catch (err) {
+          alertError(err, 'فشل استعادة الطالب')
         }
       }}
       onSaveStudent={async (input: StudentInput) => {
@@ -443,8 +472,14 @@ export function AdministrationPage() {
         setTeacherImportResult(null)
         setEnrollments([])
         setActiveTab('overview')
+        setStudentsLoaded(false)
+        setAssignmentsLoaded(false)
         await loadShell()
-        return { defaultPassword: result.defaultPassword }
+        return {
+          defaultPassword: result.defaultPassword,
+          restored: result.restored,
+          safetyBackupFileName: result.safetyBackupFileName,
+        }
       }}
     />
   )

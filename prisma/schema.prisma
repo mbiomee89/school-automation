@@ -5,11 +5,14 @@
 // INVARIANTS enforced in application code (SQLite cannot express these):
 // 1. Date-only fields (Attendance.date, Notification.forDate, WeeklyPlan.weekStart)
 //    MUST be stored as UTC midnight. Otherwise @@unique constraints fail to dedupe.
-// 2. ClassEnrollment: at most one row per student with endDate = null.
-//    Promote/move MUST run inside prisma.$transaction.
+// 2. ClassEnrollment: at most one open enrollment per student (enforced by
+//    ClassEnrollment.openMarker @unique — openMarker = studentId when endDate is null).
+//    Promote/move MUST run inside prisma.$transaction and keep openMarker in sync.
 // 3. ClassEnrollment.academicYear MUST always equal Class.academicYear of classId.
 // 4. reasonReviewedBy MUST be a User with role = COUNSELOR or ADMIN (check in service layer).
-// 5. Never hard-delete User or Student — set isActive=false (and deletedAt for students).
+// 5. Never hard-delete User or Student in normal APIs — set isActive=false (and deletedAt
+//    for students). EXCEPTION: full reset/restore (resetData.js) intentionally hard-deletes
+//    operational rows after writing a ZIP safety backup.
 // 6. WhatsApp sends only when Student.waOptedIn = true AND Student.isActive = true.
 
 generator client {
@@ -37,15 +40,16 @@ enum Language {
 }
 
 model User {
-  id           Int      @id @default(autoincrement())
-  name         String
-  email        String   @unique
-  phone        String?
-  passwordHash String
-  role         Role
-  langPref     Language @default(AR)
-  isActive     Boolean  @default(true) // deactivate instead of delete — historical records reference staff
-  createdAt    DateTime @default(now())
+  id                 Int      @id @default(autoincrement())
+  name               String
+  email              String   @unique
+  phone              String?
+  passwordHash       String
+  role               Role
+  langPref           Language @default(AR)
+  isActive           Boolean  @default(true) // deactivate instead of delete — historical records reference staff
+  mustChangePassword Boolean  @default(false) // true after admin/Noor/restore default password
+  createdAt          DateTime @default(now())
 
   assignments    TeacherAssignment[]
   attendance     Attendance[]          @relation("AttendanceRecordedBy")
@@ -78,7 +82,7 @@ model Class {
 
 model Subject {
   id      Int    @id @default(autoincrement())
-  nameAr  String
+  nameAr  String @unique
   nameEn  String
 
   assignments TeacherAssignment[]
@@ -168,6 +172,10 @@ model ClassEnrollment {
   academicYear String
   startDate    DateTime  @default(now())
   endDate      DateTime? // null = this is the student's current, active class
+  // DB-level "at most one open enrollment": set to studentId while endDate is null;
+  // set to null when the enrollment is closed. SQLite treats NULL as distinct in UNIQUE,
+  // so many closed rows may share openMarker=null, but only one open row per student.
+  openMarker   String?   @unique
   changedBy    Int?      // admin who made the change (null for the initial enrollment on creation)
   changer      User?     @relation("ClassEnrollmentChangedBy", fields: [changedBy], references: [id])
 

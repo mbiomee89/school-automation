@@ -13,6 +13,7 @@ import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { normalizePhone } from '../utils/phone.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.js';
+import { closeOpenEnrollments, openEnrollment } from '../services/enrollment.js';
 
 const router = Router();
 
@@ -115,7 +116,8 @@ const listQuery = z.object({
   classId: z.coerce.number().int().positive().optional(),
   // Filter to students with no current class (classId = null).
   unassigned: z.enum(['true']).optional(),
-  active: z.enum(['true', 'false']).optional(),
+  // true (default) | false (inactive only) | all
+  active: z.enum(['true', 'false', 'all']).optional(),
   q: z.string().optional(),
 });
 
@@ -131,7 +133,7 @@ router.get(
     }
     if (req.query.active === 'false') {
       where.isActive = false;
-    } else {
+    } else if (req.query.active !== 'all') {
       where.isActive = true;
     }
     if (req.query.q) {
@@ -250,13 +252,11 @@ router.post(
       // Only open an enrollment when the student actually has a class —
       // unassigned students deliberately have no open ClassEnrollment.
       if (classId != null) {
-        await tx.classEnrollment.create({
-          data: {
-            studentId: created.id,
-            classId,
-            academicYear: cls.academicYear,
-            changedBy: req.user.id,
-          },
+        await openEnrollment(tx, {
+          studentId: created.id,
+          classId,
+          academicYear: cls.academicYear,
+          changedBy: req.user.id,
         });
       }
 
@@ -298,7 +298,7 @@ router.patch(
   })
 );
 
-/** Soft delete */
+/** Soft delete — closes open enrollment and clears current class pointer. */
 router.delete(
   '/:id',
   requireRole('ADMIN'),
@@ -307,9 +307,31 @@ router.delete(
     const existing = await prisma.student.findUnique({ where: { id: req.params.id } });
     if (!existing) throw notFound('Student not found');
 
+    const student = await prisma.$transaction(async (tx) => {
+      await closeOpenEnrollments(tx, req.params.id);
+      return tx.student.update({
+        where: { id: req.params.id },
+        data: { isActive: false, deletedAt: new Date(), classId: null },
+        select: studentSelect,
+      });
+    });
+    res.json({ student });
+  })
+);
+
+/** Restore a soft-deleted student (does not re-assign a class). */
+router.patch(
+  '/:id/restore',
+  requireRole('ADMIN'),
+  validateParams(studentIdParam),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.student.findUnique({ where: { id: req.params.id } });
+    if (!existing) throw notFound('Student not found');
+    if (existing.isActive) throw badRequest('الطالب نشط بالفعل');
+
     const student = await prisma.student.update({
       where: { id: req.params.id },
-      data: { isActive: false, deletedAt: new Date() },
+      data: { isActive: true, deletedAt: null },
       select: studentSelect,
     });
     res.json({ student });
@@ -356,42 +378,39 @@ router.post(
     }
 
     const studentUpdated = await prisma.$transaction(async (tx) => {
-      const open = await tx.classEnrollment.findMany({
-        where: { studentId, endDate: null },
-      });
+      // Re-read inside the transaction to shrink the race window.
+      const fresh = await tx.student.findUnique({ where: { id: studentId } });
+      if (!fresh || !fresh.isActive) throw notFound('Student not found');
+      if (fresh.classId === targetClassId) {
+        throw badRequest('Student is already in this class');
+      }
 
-      // A student with classId = null (unassigned) is expected to have zero open
-      // enrollments — nothing to close before opening the new one. A student who
-      // DOES have a current class must have exactly one open enrollment; zero or
-      // multiple in that case means the enrollment history is out of sync.
-      if (student.classId != null) {
-        if (open.length === 0) {
-          throw badRequest('Student has no open enrollment — fix data before promoting');
-        }
-        if (open.length > 1) {
-          throw badRequest('Student has multiple open enrollments — fix data before promoting');
-        }
-      } else if (open.length > 0) {
+      const closed = await closeOpenEnrollments(tx, studentId);
+      // A student with classId set must have had exactly one open enrollment.
+      if (fresh.classId != null && closed.count !== 1) {
+        throw badRequest(
+          closed.count === 0
+            ? 'Student has no open enrollment — fix data before promoting'
+            : 'Student has multiple open enrollments — fix data before promoting'
+        );
+      }
+      if (fresh.classId == null && closed.count > 0) {
         throw badRequest('Unassigned student has a stale open enrollment — fix data before promoting');
       }
 
-      const now = new Date();
-      if (open.length === 1) {
-        await tx.classEnrollment.update({
-          where: { id: open[0].id },
-          data: { endDate: now },
-        });
-      }
-
-      await tx.classEnrollment.create({
-        data: {
+      try {
+        await openEnrollment(tx, {
           studentId,
           classId: targetClassId,
           academicYear: targetClass.academicYear,
-          startDate: now,
           changedBy: req.user.id,
-        },
-      });
+        });
+      } catch (err) {
+        if (err?.code === 'P2002') {
+          throw badRequest('تعذّر النقل — يوجد التحاق مفتوح للطالب (محاولة مزدوجة؟)');
+        }
+        throw err;
+      }
 
       return tx.student.update({
         where: { id: studentId },
@@ -423,17 +442,9 @@ router.post(
     }
 
     const studentUpdated = await prisma.$transaction(async (tx) => {
-      const open = await tx.classEnrollment.findMany({
-        where: { studentId, endDate: null },
-      });
-      if (open.length > 1) {
+      const closed = await closeOpenEnrollments(tx, studentId);
+      if (closed.count > 1) {
         throw badRequest('Student has multiple open enrollments — fix data before unassigning');
-      }
-      if (open.length === 1) {
-        await tx.classEnrollment.update({
-          where: { id: open[0].id },
-          data: { endDate: new Date() },
-        });
       }
 
       return tx.student.update({
@@ -548,96 +559,111 @@ router.post(
     let updated = 0;
     let reactivated = 0;
     const BATCH = 40;
+    let importFailed = null;
 
-    for (let offset = 0; offset < parsed.rows.length; offset += BATCH) {
-      const slice = parsed.rows.slice(offset, offset + BATCH);
-      const counts = await prisma.$transaction(
-        async (tx) => {
-          let c = 0;
-          let u = 0;
-          let r = 0;
+    try {
+      for (let offset = 0; offset < parsed.rows.length; offset += BATCH) {
+        const slice = parsed.rows.slice(offset, offset + BATCH);
+        const counts = await prisma.$transaction(
+          async (tx) => {
+            let c = 0;
+            let u = 0;
+            let r = 0;
 
-          for (const row of slice) {
-            const cls = classByKey.get(classKey(row.gradeLevel, row.section));
-            if (!cls) {
-              errors.push({ index: row.index, id: row.id, error: 'Class resolution failed' });
-              continue;
-            }
-
-            const existing = await tx.student.findUnique({ where: { id: row.id } });
-
-            if (!existing) {
-              await tx.student.create({
-                data: {
-                  id: row.id,
-                  nameAr: row.nameAr,
-                  nameEn: row.nameEn,
-                  classId: cls.id,
-                  parentPhone: row.parentPhone,
-                  importBatchId: batch.id,
-                },
-              });
-              await tx.classEnrollment.create({
-                data: {
-                  studentId: row.id,
-                  classId: cls.id,
-                  academicYear: cls.academicYear,
-                  changedBy: req.user.id,
-                },
-              });
-              c += 1;
-              continue;
-            }
-
-            const data = {
-              nameAr: row.nameAr,
-              nameEn: row.nameEn,
-              parentPhone: row.parentPhone,
-              importBatchId: batch.id,
-            };
-
-            if (!existing.isActive) {
-              data.isActive = true;
-              data.deletedAt = null;
-              r += 1;
-            } else {
-              u += 1;
-            }
-
-            if (existing.classId !== cls.id) {
-              const open = await tx.classEnrollment.findMany({
-                where: { studentId: row.id, endDate: null },
-              });
-              const now = new Date();
-              for (const enr of open) {
-                await tx.classEnrollment.update({
-                  where: { id: enr.id },
-                  data: { endDate: now },
-                });
+            for (const row of slice) {
+              const cls = classByKey.get(classKey(row.gradeLevel, row.section));
+              if (!cls) {
+                errors.push({ index: row.index, id: row.id, error: 'Class resolution failed' });
+                continue;
               }
-              await tx.classEnrollment.create({
-                data: {
+
+              const existing = await tx.student.findUnique({ where: { id: row.id } });
+
+              if (!existing) {
+                await tx.student.create({
+                  data: {
+                    id: row.id,
+                    nameAr: row.nameAr,
+                    nameEn: row.nameEn,
+                    classId: cls.id,
+                    parentPhone: row.parentPhone,
+                    importBatchId: batch.id,
+                  },
+                });
+                await openEnrollment(tx, {
                   studentId: row.id,
                   classId: cls.id,
                   academicYear: cls.academicYear,
-                  startDate: now,
                   changedBy: req.user.id,
-                },
-              });
-              data.classId = cls.id;
+                });
+                c += 1;
+                continue;
+              }
+
+              // Re-import: do NOT overwrite name/phone on active students (preserves
+              // manual corrections). Only reactivate + refresh identity fields when inactive.
+              const data = { importBatchId: batch.id };
+
+              if (!existing.isActive) {
+                data.nameAr = row.nameAr;
+                data.nameEn = row.nameEn;
+                data.parentPhone = row.parentPhone;
+                data.isActive = true;
+                data.deletedAt = null;
+                r += 1;
+              } else {
+                u += 1;
+              }
+
+              if (existing.classId !== cls.id) {
+                await closeOpenEnrollments(tx, row.id);
+                await openEnrollment(tx, {
+                  studentId: row.id,
+                  classId: cls.id,
+                  academicYear: cls.academicYear,
+                  changedBy: req.user.id,
+                });
+                data.classId = cls.id;
+              }
+
+              await tx.student.update({ where: { id: row.id }, data });
             }
 
-            await tx.student.update({ where: { id: row.id }, data });
-          }
+            return { c, u, r };
+          },
+          { timeout: 60_000 }
+        );
 
-          return { c, u, r };
-        },
-        { timeout: 60_000 }
-      );
+        created += counts.c;
+        updated += counts.u;
+        reactivated += counts.r;
+      }
+    } catch (err) {
+      importFailed = err;
+    }
 
-      created += counts.c;
-      updated += counts.u;
-      reactivated += counts.r;
+    const landed = created + updated + reactivated;
+    await prisma.studentImportBatch.update({
+      where: { id: batch.id },
+      data: { rowCount: landed },
+    });
+    batch.rowCount = landed;
+
+    if (importFailed) {
+      return res.status(500).json({
+        error: importFailed.message || 'فشل الاستيراد جزئياً',
+        fileName,
+        academicYear,
+        created,
+        updated,
+        reactivated,
+        skipped: errors.length,
+        classesCreated,
+        classesReused,
+        errors,
+        batch,
+        partial: true,
+      });
     }
 
     res.status(201).json({
@@ -716,27 +742,24 @@ router.post(
               importBatchId: batch.id,
             },
           });
-          await tx.classEnrollment.create({
-            data: {
-              studentId: row.id,
-              classId,
-              academicYear: cls.academicYear,
-              changedBy: req.user.id,
-            },
+          await openEnrollment(tx, {
+            studentId: row.id,
+            classId,
+            academicYear: cls.academicYear,
+            changedBy: req.user.id,
           });
           created += 1;
           continue;
         }
 
-        const data = {
-          nameAr: row.nameAr,
-          nameEn: row.nameEn,
-          parentPhone: row.parentPhone,
-          parentEmail: row.parentEmail,
-          importBatchId: batch.id,
-        };
+        // Preserve manually corrected name/phone on active students.
+        const data = { importBatchId: batch.id };
+        if (row.parentEmail !== undefined) data.parentEmail = row.parentEmail;
 
         if (!existing.isActive) {
+          data.nameAr = row.nameAr;
+          data.nameEn = row.nameEn;
+          data.parentPhone = row.parentPhone;
           data.isActive = true;
           data.deletedAt = null;
           reactivated += 1;
@@ -745,24 +768,12 @@ router.post(
         }
 
         if (existing.classId !== classId) {
-          const open = await tx.classEnrollment.findMany({
-            where: { studentId: row.id, endDate: null },
-          });
-          const now = new Date();
-          for (const enr of open) {
-            await tx.classEnrollment.update({
-              where: { id: enr.id },
-              data: { endDate: now },
-            });
-          }
-          await tx.classEnrollment.create({
-            data: {
-              studentId: row.id,
-              classId,
-              academicYear: cls.academicYear,
-              startDate: now,
-              changedBy: req.user.id,
-            },
+          await closeOpenEnrollments(tx, row.id);
+          await openEnrollment(tx, {
+            studentId: row.id,
+            classId,
+            academicYear: cls.academicYear,
+            changedBy: req.user.id,
           });
           data.classId = classId;
         }

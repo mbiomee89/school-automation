@@ -56,13 +56,16 @@ type RequestOptions = Omit<RequestInit, 'body'> & {
    * - false → no Authorization header
    */
   auth?: boolean | 'staff' | 'parent'
+  /** Abort / fail the request after this many ms (e.g. large restore uploads). */
+  timeoutMs?: number
 }
 
 /**
  * JSON API helper. Dev requests go through Vite `/api` → Express (no CORS issues).
  */
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { body, auth = 'staff', headers: extraHeaders, ...rest } = options
+  const { body, auth = 'staff', headers: extraHeaders, timeoutMs, signal: outerSignal, ...rest } =
+    options
   const headers = new Headers(extraHeaders)
 
   if (body !== undefined && !(body instanceof FormData)) {
@@ -77,11 +80,33 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     if (token) headers.set('Authorization', `Bearer ${token}`)
   }
 
-  const res = await fetch(`/api${path}`, {
-    ...rest,
-    headers,
-    body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
-  })
+  const controller = timeoutMs ? new AbortController() : null
+  const timer =
+    controller && timeoutMs
+      ? window.setTimeout(() => controller.abort(), timeoutMs)
+      : null
+  if (controller && outerSignal) {
+    if (outerSignal.aborted) controller.abort()
+    else outerSignal.addEventListener('abort', () => controller.abort(), { once: true })
+  }
+  const signal = controller?.signal ?? outerSignal
+
+  let res: Response
+  try {
+    res = await fetch(`/api${path}`, {
+      ...rest,
+      signal,
+      headers,
+      body: body instanceof FormData ? body : body !== undefined ? JSON.stringify(body) : undefined,
+    })
+  } catch (err) {
+    if (timer) window.clearTimeout(timer)
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiError(408, 'انتهت مهلة الطلب — تحقق من الاتصال وحاول مجدداً')
+    }
+    throw err
+  }
+  if (timer) window.clearTimeout(timer)
 
   if (res.status === 204) return undefined as T
 

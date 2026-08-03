@@ -71,6 +71,7 @@ const staffSelect = {
   role: true,
   langPref: true,
   isActive: true,
+  mustChangePassword: true,
   createdAt: true,
 };
 
@@ -124,6 +125,7 @@ router.post(
               passwordHash,
               role: 'TEACHER',
               langPref: 'AR',
+              mustChangePassword: true,
             },
           });
           created += 1;
@@ -192,6 +194,7 @@ router.post(
         passwordHash,
         role: req.body.role,
         langPref: req.body.langPref ?? 'AR',
+        mustChangePassword: true,
       },
       select: staffSelect,
     });
@@ -211,7 +214,28 @@ router.patch(
     const data = {};
     if (req.body.name !== undefined) data.name = req.body.name.trim();
     if (req.body.email !== undefined) data.email = req.body.email.trim().toLowerCase();
-    if (req.body.role !== undefined) data.role = req.body.role;
+    if (req.body.role !== undefined) {
+      if (id === req.user.id && req.body.role !== existing.role) {
+        throw badRequest('لا يمكنك تغيير دور حسابك بنفسك');
+      }
+      if (
+        id === req.user.id &&
+        existing.role === 'ADMIN' &&
+        req.body.role !== 'ADMIN'
+      ) {
+        throw badRequest('لا يمكنك تخفيض صلاحية حسابك الإداري');
+      }
+      // Prevent demoting the last active admin
+      if (existing.role === 'ADMIN' && req.body.role !== 'ADMIN' && existing.isActive) {
+        const otherAdmins = await prisma.user.count({
+          where: { role: 'ADMIN', isActive: true, id: { not: id } },
+        });
+        if (otherAdmins === 0) {
+          throw badRequest('لا يمكن تخفيض صلاحية آخر مسؤول نشط');
+        }
+      }
+      data.role = req.body.role;
+    }
     if (req.body.langPref !== undefined) data.langPref = req.body.langPref;
     if (req.body.phone !== undefined) {
       if (req.body.phone === null || req.body.phone === '') {
@@ -224,6 +248,7 @@ router.patch(
     }
     if (req.body.password) {
       data.passwordHash = await hashPassword(req.body.password);
+      data.mustChangePassword = true;
     }
 
     const user = await prisma.user.update({
@@ -309,8 +334,8 @@ router.post(
   (req, res, next) => uploadBackupFile(req, res, next),
   asyncHandler(async (req, res) => {
     if (!req.file) throw badRequest('أرفق ملف النسخة الاحتياطية (ZIP أو JSON)');
-    if (req.body?.confirm && req.body.confirm !== 'RESTORE_FROM_BACKUP') {
-      throw badRequest('Confirmation required');
+    if (req.body?.confirm !== 'RESTORE_FROM_BACKUP') {
+      throw badRequest('Confirmation required — send confirm=RESTORE_FROM_BACKUP');
     }
     const backup = await parseBackupUpload(req.file.buffer, req.file.originalname);
     const result = await restoreFromBackup(prisma, backup);

@@ -1,4 +1,4 @@
-import { apiRequest } from './client'
+import { apiRequest, ApiError } from './client'
 import type {
   AssignmentInput,
   ClassEnrollment,
@@ -206,7 +206,10 @@ export async function listUsers() {
 }
 
 export async function createUser(input: StaffInput) {
-  const password = input.password?.trim() || 'Password123!'
+  const password = input.password?.trim()
+  if (!password || password.length < 8) {
+    throw new ApiError(400, 'كلمة المرور مطلوبة (8 أحرف على الأقل)')
+  }
   const data = await apiRequest<{ user: ApiUser }>('/users', {
     method: 'POST',
     body: {
@@ -331,11 +334,17 @@ export async function removeAssignment(id: number) {
   await apiRequest(`/teacher-assignments/${id}`, { method: 'DELETE' })
 }
 
-export async function listStudents(params?: { q?: string; classId?: number; unassigned?: boolean }) {
+export async function listStudents(params?: {
+  q?: string
+  classId?: number
+  unassigned?: boolean
+  active?: 'true' | 'false' | 'all'
+}) {
   const search = new URLSearchParams()
   if (params?.q) search.set('q', params.q)
   if (params?.classId) search.set('classId', String(params.classId))
   if (params?.unassigned) search.set('unassigned', 'true')
+  if (params?.active) search.set('active', params.active)
   const qs = search.toString() ? `?${search}` : ''
   const data = await apiRequest<{ students: ApiStudent[] }>(`/students${qs}`)
   return data.students.map(mapStudent)
@@ -380,6 +389,13 @@ export async function updateStudent(id: string, input: Omit<StudentInput, 'id' |
 
 export async function softRemoveStudent(id: string) {
   const data = await apiRequest<{ student: ApiStudent }>(`/students/${id}`, { method: 'DELETE' })
+  return mapStudent(data.student)
+}
+
+export async function restoreStudent(id: string) {
+  const data = await apiRequest<{ student: ApiStudent }>(`/students/${id}/restore`, {
+    method: 'PATCH',
+  })
   return mapStudent(data.student)
 }
 
@@ -584,8 +600,15 @@ export async function resetAllDataWithBackup() {
 export type RestoreDataResult = {
   ok: boolean
   wipeSummary: Record<string, unknown>
-  restored: Record<string, unknown>
+  restored: {
+    skipped?: string[]
+    students?: number
+    users?: number
+    [key: string]: unknown
+  }
   defaultPassword: string
+  safetyBackupFileName?: string
+  safetyBackupDownloadUrl?: string
 }
 
 /** Upload a previously downloaded backup ZIP/JSON and restore it. */
@@ -596,6 +619,7 @@ export async function restoreDataFromBackupFile(file: File) {
   return apiRequest<RestoreDataResult>('/users/restore-data', {
     method: 'POST',
     body: form,
+    timeoutMs: 10 * 60 * 1000,
   })
 }
 

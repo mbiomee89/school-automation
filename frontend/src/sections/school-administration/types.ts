@@ -287,5 +287,13 @@ export interface SchoolAdministrationProps {
    */
   onResetAllData?: () => void | Promise<{ backupFileName: string }>
   /** Restore platform data from a previously downloaded backup ZIP/JSON file. */
-  onRestoreFromBackup?: (file: File) => void | Promise<{ defaultPassword: string }>
+  onRestoreFromBackup?: (file: File) => void | Promise<{
+    defaultPassword: string
+    restored?: { skipped?: string[]; [key: string]: unknown }
+    safetyBackupFileName?: string
+  }>
+  /** Soft-restore an inactive student */
+  onRestoreStudent?: (studentId: string) => void
+  /** Roster activity filter for deferred student load */
+  onFilterStudentsActive?: (active: 'true' | 'false' | 'all') => void
 }
