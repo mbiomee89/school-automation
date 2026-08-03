@@ -380,6 +380,8 @@ router.get(
       logoUrl: header.logoUrl,
       principalName: header.principalName,
       generatedAt: new Date().toISOString(),
+      from: req.query.from || null,
+      to: req.query.to || null,
       student: {
         id: student.id,
         nameAr: student.nameAr,
@@ -392,6 +394,10 @@ router.get(
       attendance: attendanceRows,
       lateArrivals: lateRows,
       enrollments: enrollmentRows,
+      attendanceLimit: 200,
+      lateLimit: 100,
+      attendanceTruncated: attendanceRows.length >= 200,
+      lateTruncated: lateRows.length >= 100,
       count: attendanceRows.length + lateRows.length + enrollmentRows.length,
     });
   })

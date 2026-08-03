@@ -62,17 +62,26 @@ body {
   transition: background-color 99999s ease-out;
 }
 
-/* Reports / staff print: only the open report body, not the hub cards or shell chrome */
+/* Reports / staff print: force light output even when the app is in dark mode.
+ * window.print() also temporarily strips html.dark so Tailwind dark: utilities do not apply. */
 @media print {
   html,
   body,
   #root {
     background: white !important;
     color: black !important;
+    color-scheme: light !important;
+  }
+
+  html.dark,
+  .dark {
+    color-scheme: light !important;
   }
 
   .report-print-area {
     max-width: none !important;
     padding: 0 !important;
+    background: white !important;
+    color: black !important;
   }
 }

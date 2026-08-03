@@ -114,6 +114,8 @@ export interface WeeklyPlanReportDetail extends ReportBrandFields {
 
 export interface StudentHistoryReportDetail extends ReportBrandFields {
   generatedAt?: string
+  from?: string | null
+  to?: string | null
   student: {
     id: string
     nameAr: string
@@ -147,6 +149,10 @@ export interface StudentHistoryReportDetail extends ReportBrandFields {
     endDate: string | null
     isCurrent: boolean
   }>
+  attendanceLimit?: number
+  lateLimit?: number
+  attendanceTruncated?: boolean
+  lateTruncated?: boolean
   count: number
 }
 
@@ -187,6 +193,6 @@ export interface ReportsProps {
   onFilterByWeek?: (type: ReportType, weekStart: string) => void
   /** Search students for the student-history report */
   onSearchStudent?: (query: string) => void
-  /** Load student history for a selected student id */
-  onSelectStudent?: (studentId: string) => void
+  /** Load student history for a selected student id (optional date range) */
+  onSelectStudent?: (studentId: string, range?: { from?: string; to?: string }) => void
 }

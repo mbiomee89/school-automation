@@ -198,19 +198,6 @@ export function StaffLogin({
             {isSubmitting && <span className={SPINNER_CLASS} aria-hidden="true" />}
             {isSubmitting ? 'جارٍ الدخول…' : 'تسجيل الدخول'}
           </button>
-
-          <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100/60 dark:text-slate-300">
-            <p className="font-semibold text-slate-800 dark:text-slate-100">حساب تجريبي</p>
-            <p className="mt-1" dir="ltr" style={fontMono}>
-              admin@school.local
-            </p>
-            <p dir="ltr" style={fontMono}>
-              Password123!
-            </p>
-            <p className="mt-1 text-slate-500 dark:text-slate-400">
-              حرف P كبير وعلامة ! في النهاية — كلمة المرور حساسة لحالة الأحرف
-            </p>
-          </div>
         </form>
 
         <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">

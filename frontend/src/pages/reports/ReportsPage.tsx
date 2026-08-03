@@ -201,11 +201,11 @@ export function ReportsPage() {
     }, 300)
   }
 
-  async function handleSelectStudent(studentId: string) {
+  async function handleSelectStudent(studentId: string, range?: { from?: string; to?: string }) {
     setStudentSearchLoading(true)
     setActionError(null)
     try {
-      const detail = await getStudentHistoryReport(studentId)
+      const detail = await getStudentHistoryReport(studentId, range)
       setStudentHistoryDetail(detail)
       setStudentSearchResults([])
       setStudentSearchQuery(detail.student.nameAr)

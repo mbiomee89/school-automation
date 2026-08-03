@@ -29,7 +29,6 @@ export function StaffLoginPage() {
     <StaffLogin
       errorCode={errorCode}
       isSubmitting={isSubmitting}
-      initialEmail="admin@school.local"
       onLogin={async ({ email, password }) => {
         setErrorCode(null)
         setIsSubmitting(true)

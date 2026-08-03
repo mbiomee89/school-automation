@@ -64,8 +64,14 @@ export async function getWeeklyPlanReport(date: string): Promise<WeeklyPlanRepor
   return apiRequest(`/reports/weekly-plan?date=${encodeURIComponent(date)}`)
 }
 
-export async function getStudentHistoryReport(studentId: string): Promise<StudentHistoryReportDetail> {
-  return apiRequest(`/reports/student-history?studentId=${encodeURIComponent(studentId)}`)
+export async function getStudentHistoryReport(
+  studentId: string,
+  range?: { from?: string; to?: string }
+): Promise<StudentHistoryReportDetail> {
+  const params = new URLSearchParams({ studentId })
+  if (range?.from) params.set('from', range.from)
+  if (range?.to) params.set('to', range.to)
+  return apiRequest(`/reports/student-history?${params}`)
 }
 
 export async function searchStudentsForReport(q: string) {

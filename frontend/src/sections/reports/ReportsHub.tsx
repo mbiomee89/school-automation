@@ -171,7 +171,19 @@ export function ReportsHub({
 
     const timer = window.setTimeout(() => {
       printStartedFor.current = pendingPrint
+      const root = document.documentElement
+      const wasDark = root.classList.contains('dark')
+      if (wasDark) root.classList.remove('dark')
+      let restored = false
+      const restore = () => {
+        if (restored) return
+        restored = true
+        if (wasDark) root.classList.add('dark')
+        window.removeEventListener('afterprint', restore)
+      }
+      window.addEventListener('afterprint', restore)
       window.print()
+      window.setTimeout(restore, 1000)
       setPendingPrint(null)
     }, 250)
 
@@ -602,6 +614,9 @@ function WeeklyPlanDetailView({
       : groupFlatByClass(detail.rows)
   const classes = filterClassesBySelection(allClasses, classFilter)
   const weekEnd = detail.weekEnd ?? detail.weekStart
+  // Storage weekStart is Saturday; lesson columns are Sunday–Thursday only.
+  const schoolWeekStart = addDaysToDateOnly(detail.weekStart, 1)
+  const schoolWeekEnd = weekEnd
 
   if (allClasses.length === 0) {
     return (
@@ -631,7 +646,7 @@ function WeeklyPlanDetailView({
           principalName={detail.principalName}
           metaLines={[
             `العام الدراسي ${detail.academicYear}`,
-            formatReportDateRange(detail.weekStart, weekEnd),
+            formatReportDateRange(schoolWeekStart, schoolWeekEnd),
             `الفصل: ${cls.className}`,
           ]}
           title={`الخطة الدراسية الأسبوعية — ${cls.className}`}
@@ -868,8 +883,19 @@ function StudentHistoryDetailView({
   searchResults: Array<{ id: string; nameAr: string; className: string | null }>
   searchLoading: boolean
   onSearchStudent?: (query: string) => void
-  onSelectStudent?: (studentId: string) => void
+  onSelectStudent?: (studentId: string, range?: { from?: string; to?: string }) => void
 }) {
+  const [fromDate, setFromDate] = useState(detail?.from ?? '')
+  const [toDate, setToDate] = useState(detail?.to ?? '')
+
+  useEffect(() => {
+    setFromDate(detail?.from ?? '')
+    setToDate(detail?.to ?? '')
+  }, [detail?.student.id, detail?.from, detail?.to])
+
+  const truncated =
+    !!detail && (detail.attendanceTruncated || detail.lateTruncated)
+
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 print:hidden dark:border-slate-800 dark:bg-slate-900">
@@ -907,6 +933,56 @@ function StudentHistoryDetailView({
             ))}
           </ul>
         )}
+
+        {detail && (
+          <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4 dark:border-slate-800">
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              من تاريخ
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="mt-1 block rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+              />
+            </label>
+            <label className="text-xs font-medium text-slate-600 dark:text-slate-300">
+              إلى تاريخ
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="mt-1 block rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-950"
+              />
+            </label>
+            <button
+              type="button"
+              disabled={searchLoading}
+              onClick={() =>
+                onSelectStudent?.(detail.student.id, {
+                  from: fromDate || undefined,
+                  to: toDate || undefined,
+                })
+              }
+              className="rounded-md bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50 dark:bg-slate-200 dark:text-slate-900 dark:hover:bg-white"
+            >
+              تطبيق الفترة
+            </button>
+            {(fromDate || toDate) && (
+              <button
+                type="button"
+                disabled={searchLoading}
+                onClick={() => {
+                  setFromDate('')
+                  setToDate('')
+                  onSelectStudent?.(detail.student.id)
+                }}
+                className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                مسح الفترة
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {!detail ? (
@@ -929,9 +1005,34 @@ function StudentHistoryDetailView({
             educationAdminName={detail.educationAdminName}
             logoUrl={detail.logoUrl}
             subtitle={`سجل الطالب · ${detail.student.nameAr}`}
-            dateLabel={detail.student.id}
+            dateLabel={
+              detail.from || detail.to
+                ? formatReportDateRange(detail.from, detail.to)
+                : detail.student.id
+            }
             generatedAt={detail.generatedAt}
           />
+
+          {truncated && (
+            <div
+              className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 print:border-amber-400 print:bg-white dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+              role="status"
+            >
+              {detail.attendanceTruncated && (
+                <p>
+                  يُعرض أحدث {detail.attendanceLimit ?? 200} سجل حضور فقط
+                  {detail.from || detail.to ? ' ضمن الفترة المحددة' : ''} — ضيّق نطاق التاريخ أعلاه لعرض الباقي.
+                </p>
+              )}
+              {detail.lateTruncated && (
+                <p className={detail.attendanceTruncated ? 'mt-1' : undefined}>
+                  يُعرض أحدث {detail.lateLimit ?? 100} سجل تأخر فقط
+                  {detail.from || detail.to ? ' ضمن الفترة المحددة' : ''} — ضيّق نطاق التاريخ أعلاه لعرض الباقي.
+                </p>
+              )}
+            </div>
+          )}
+
           <dl className="mb-6 grid gap-3 sm:grid-cols-3">
             <div className="rounded-md bg-slate-100 p-3 dark:bg-slate-800">
               <dt className="text-xs text-slate-500">الفصل الحالي</dt>
