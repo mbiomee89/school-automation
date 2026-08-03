@@ -102,10 +102,11 @@ export interface ParentPortalProps {
   attendanceHistory: AttendanceDay[]
   homeworkItems: HomeworkItem[]
   weeklyPlans: WeeklyPlanItem[]
-  notifications: NotificationItem[]
+  /** WhatsApp notification log — hidden in UI for now (manual messaging). */
+  notifications?: NotificationItem[]
   excuseSubmissions: ExcuseSubmission[]
-  /** Current WhatsApp opt-in state for the active child. */
-  waOptedIn: boolean
+  /** WhatsApp opt-in — hidden in UI for now. */
+  waOptedIn?: boolean
   /** Active bottom-nav tab for controlled preview */
   activeTab?: ParentTab
 
@@ -117,7 +118,7 @@ export interface ParentPortalProps {
   onSelectAttendanceDay?: (attendanceDayId: number) => void
   /** Submit an absence excuse — file comes from either "Take Photo" (camera capture) or "Choose File" */
   onSubmitExcuse?: (input: ExcuseSubmissionInput) => void
-  /** Toggle WhatsApp notifications for the active child */
+  /** Toggle WhatsApp notifications — unused while messaging is manual. */
   onToggleWaOptIn?: (optedIn: boolean) => void
   /** Log out of the parent portal */
   onLogout?: () => void

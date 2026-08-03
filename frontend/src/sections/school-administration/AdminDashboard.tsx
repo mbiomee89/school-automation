@@ -12,9 +12,7 @@ import {
   X,
   AlertTriangle,
   CheckCircle2,
-  Ban,
   GraduationCap,
-  Bell,
   BookOpen,
   RotateCcw,
   Download,
@@ -52,7 +50,7 @@ const TABS: { id: AdminTab; label: string }[] = [
   { id: 'staff', label: 'الموظفون' },
   { id: 'assignments', label: 'توزيع المعلمين' },
   { id: 'import', label: 'استيراد نور' },
-  { id: 'notifications', label: 'سجل واتساب' },
+  // WhatsApp log tab hidden — messaging handled manually for now
   { id: 'settings', label: 'إعدادات المدرسة' },
 ]
 
@@ -346,11 +344,14 @@ export function AdminDashboard({
 
   const displayLogo = logoPreview || schoolSettings.logoUrl
 
-  const currentTab = controlledTab ?? tab
+  const currentTabRaw = controlledTab ?? tab
+  const currentTab: AdminTab =
+    currentTabRaw === 'notifications' ? 'overview' : currentTabRaw
 
   const switchTab = (next: AdminTab) => {
-    setTab(next)
-    onTabChange?.(next)
+    const resolved = next === 'notifications' ? 'overview' : next
+    setTab(resolved)
+    onTabChange?.(resolved)
   }
 
   const filteredStudents = useMemo(() => {
@@ -816,27 +817,16 @@ export function AdminDashboard({
                     tone: 'purple' as Tone,
                     icon: BookOpen,
                   },
-                  {
-                    label: 'رسائل فاشلة اليوم',
-                    value: overviewStats.notificationsFailedToday,
-                    tone: 'red' as Tone,
-                    icon: Bell,
-                    alert: overviewStats.notificationsFailedToday > 0,
-                  },
                 ] as const
               ).map((stat) => {
                 const tone = TONE_CLASSES[stat.tone]
                 const Icon = stat.icon
                 const accentBorder =
-                  'alert' in stat && stat.alert
-                    ? 'border-s-red-500'
-                    : stat.tone === 'blue'
-                      ? 'border-s-blue-600'
-                      : stat.tone === 'emerald'
-                        ? 'border-s-emerald-600'
-                        : stat.tone === 'purple'
-                          ? 'border-s-purple-600'
-                          : 'border-s-red-500'
+                  stat.tone === 'blue'
+                    ? 'border-s-blue-600'
+                    : stat.tone === 'emerald'
+                      ? 'border-s-emerald-600'
+                      : 'border-s-purple-600'
                 return (
                   <div
                     key={stat.label}
@@ -869,8 +859,8 @@ export function AdminDashboard({
               })}
             </div>
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50/80 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100/40 dark:text-slate-400">
-              استخدم التبويبات أعلاه لإدارة الطلاب والفصول والموظفين وتوزيع المعلمين واستيراد نور
-              وسجل رسائل واتساب. يمكنك الطباعة من «نظرة عامة» أو «الطلاب».
+              استخدم التبويبات أعلاه لإدارة الطلاب والفصول والموظفين وتوزيع المعلمين واستيراد نور.
+              يمكنك الطباعة من «نظرة عامة» أو «الطلاب».
             </div>
           </div>
         )}
@@ -948,7 +938,6 @@ export function AdminDashboard({
                       <th className="px-3 py-2 font-medium">رقم الهوية/الإقامة</th>
                       <th className="px-3 py-2 font-medium">الفصل</th>
                       <th className="px-3 py-2 font-medium">ولي الأمر</th>
-                      <th className="px-3 py-2 font-medium">واتساب</th>
                       <th className="px-3 py-2 font-medium">الحالة</th>
                       <th className="px-3 py-2 font-medium" />
                     </tr>
@@ -980,13 +969,6 @@ export function AdminDashboard({
                         </td>
                         <td className="px-3 py-2">
                           <PhoneText value={s.parentPhone} />
-                        </td>
-                        <td className="px-3 py-2">
-                          {s.waOptedIn ? (
-                            <CheckCircle2 className="size-4 text-blue-600" />
-                          ) : (
-                            <Ban className="size-4 text-slate-400" />
-                          )}
                         </td>
                         <td className="px-3 py-2">
                           <span
@@ -1966,15 +1948,6 @@ export function AdminDashboard({
               placeholder="+9665…"
               dir="ltr"
             />
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={!!studentForm.waOptedIn}
-              onChange={(e) => setStudentForm((s) => ({ ...s, waOptedIn: e.target.checked }))}
-              className="size-4 rounded border-slate-300 text-blue-600"
-            />
-            <span>الموافقة على رسائل واتساب</span>
           </label>
           {studentFormError && (
             <p className="rounded border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

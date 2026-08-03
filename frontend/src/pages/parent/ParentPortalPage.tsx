@@ -5,10 +5,8 @@ import {
   getParentAttendance,
   getParentExcuses,
   getParentHomework,
-  getParentNotifications,
   getParentSummary,
   getParentWeeklyPlans,
-  setParentWaOptIn,
   submitExcuse,
   type ParentChild,
 } from '../../api/parent'
@@ -19,7 +17,6 @@ import type {
   AttendanceDay,
   ExcuseSubmission,
   HomeworkItem,
-  NotificationItem,
   TodaySummary,
   WeeklyPlanItem,
 } from '../../sections/parent-portal/types'
@@ -37,7 +34,7 @@ function toChild(s: ParentChild) {
 }
 
 export function ParentPortalPage() {
-  const { students, isAuthenticated, bootstrapping, logout, setStudents } = useParentAuth()
+  const { students, isAuthenticated, bootstrapping, logout } = useParentAuth()
   const navigate = useNavigate()
 
   const [activeChildId, setActiveChildId] = useState<string>('')
@@ -52,9 +49,7 @@ export function ParentPortalPage() {
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceDay[]>([])
   const [homeworkItems, setHomeworkItems] = useState<HomeworkItem[]>([])
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlanItem[]>([])
-  const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [excuseSubmissions, setExcuseSubmissions] = useState<ExcuseSubmission[]>([])
-  const [waOptedIn, setWaOptedIn] = useState(false)
 
   useEffect(() => {
     if (students.length === 0) return
@@ -68,12 +63,11 @@ export function ParentPortalPage() {
   const loadChild = useCallback(async (studentId: string) => {
     const gen = ++loadGen.current
     setError(null)
-    const [summary, attendance, homework, plans, notifs, excuses] = await Promise.all([
+    const [summary, attendance, homework, plans, excuses] = await Promise.all([
       getParentSummary(studentId),
       getParentAttendance(studentId),
       getParentHomework(studentId),
       getParentWeeklyPlans(studentId),
-      getParentNotifications(studentId),
       getParentExcuses(studentId),
     ])
     if (gen !== loadGen.current) return
@@ -83,11 +77,9 @@ export function ParentPortalPage() {
       homeworkDueCount: summary.homeworkDueCount,
       newAlertsCount: summary.newAlertsCount,
     })
-    setWaOptedIn(summary.waOptedIn)
     setAttendanceHistory(attendance)
     setHomeworkItems(homework)
     setWeeklyPlans(plans)
-    setNotifications(notifs)
     setExcuseSubmissions(excuses)
   }, [])
 
@@ -191,9 +183,7 @@ export function ParentPortalPage() {
       attendanceHistory={attendanceHistory}
       homeworkItems={homeworkItems}
       weeklyPlans={weeklyPlans}
-      notifications={notifications}
       excuseSubmissions={excuseSubmissions}
-      waOptedIn={waOptedIn}
       onSelectChild={setActiveChildId}
       onSubmitExcuse={async (input) => {
         const day = attendanceHistory.find(
@@ -208,15 +198,6 @@ export function ParentPortalPage() {
           await loadChild(activeChildId)
         } catch (err) {
           window.alert(err instanceof ApiError ? err.message : 'فشل إرسال العذر')
-        }
-      }}
-      onToggleWaOptIn={async (optedIn) => {
-        try {
-          const updated = await setParentWaOptIn(optedIn, activeChildId)
-          setStudents(updated)
-          setWaOptedIn(optedIn)
-        } catch (err) {
-          window.alert(err instanceof ApiError ? err.message : 'فشل تحديث موافقة واتساب')
         }
       }}
       onLogout={() => {

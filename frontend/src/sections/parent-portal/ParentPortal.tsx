@@ -1,9 +1,7 @@
 ﻿import { useEffect, useRef, useState } from 'react'
 import {
   BookOpenCheck,
-  Bell,
   ChevronLeft,
-  MessageCircleMore,
   LogOut,
   ClipboardList,
   Inbox,
@@ -27,7 +25,6 @@ import { ExcuseUploadModal } from './ExcuseUploadModal'
 import { ExcuseSubmissionsList } from './ExcuseSubmissionsList'
 import { HomeworkList } from './HomeworkList'
 import { WeeklyPlanList } from './WeeklyPlanList'
-import { NotificationsList } from './NotificationsList'
 import { SegmentedTabs } from './SegmentedTabs'
 import { ATTENDANCE_STATUS_META, formatLongDate } from './statusMeta'
 
@@ -41,15 +38,12 @@ export function ParentPortal({
   attendanceHistory,
   homeworkItems,
   weeklyPlans,
-  notifications,
   excuseSubmissions,
-  waOptedIn,
   activeTab: controlledTab,
   onTabChange,
   onSelectChild,
   onSelectAttendanceDay,
   onSubmitExcuse,
-  onToggleWaOptIn,
   onLogout,
 }: ParentPortalProps) {
   const [tab, setTab] = useState<ParentTab>(controlledTab ?? 'home')
@@ -67,11 +61,14 @@ export function ParentPortal({
   }, [])
 
   const currentTab = controlledTab ?? tab
+  const safeTab: ParentTab =
+    currentTab === 'notifications' ? 'home' : currentTab
   const activeChild = children.find((c) => c.id === activeChildId) ?? children[0]
 
   function switchTab(next: ParentTab) {
-    setTab(next)
-    onTabChange?.(next)
+    const resolved = next === 'notifications' ? 'home' : next
+    setTab(resolved)
+    onTabChange?.(resolved)
   }
 
   function openExcuseFlow(day: AttendanceDay) {
@@ -113,7 +110,7 @@ export function ParentPortal({
         </header>
 
         <main className="flex-1 overflow-y-auto px-4 py-5">
-          {currentTab === 'home' && (
+          {safeTab === 'home' && (
             <div className="space-y-5 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
               <HomeHero
                 date={todaySummary.date}
@@ -122,22 +119,13 @@ export function ParentPortal({
                 className={activeChild?.className}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <StatCard
-                  label="الواجبات المستحقة"
-                  value={todaySummary.homeworkDueCount}
-                  icon={BookOpenCheck}
-                  tone="blue"
-                  onClick={() => switchTab('homework')}
-                />
-                <StatCard
-                  label="تنبيهات جديدة"
-                  value={todaySummary.newAlertsCount}
-                  icon={Bell}
-                  tone="purple"
-                  onClick={() => switchTab('notifications')}
-                />
-              </div>
+              <StatCard
+                label="الواجبات المستحقة"
+                value={todaySummary.homeworkDueCount}
+                icon={BookOpenCheck}
+                tone="blue"
+                onClick={() => switchTab('homework')}
+              />
 
               <section>
                 {homeworkItems.length > 0 && (
@@ -160,7 +148,7 @@ export function ParentPortal({
             </div>
           )}
 
-          {currentTab === 'attendance' && (
+          {safeTab === 'attendance' && (
             <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
               <SegmentedTabs
                 label="عرض الحضور"
@@ -188,7 +176,7 @@ export function ParentPortal({
             </div>
           )}
 
-          {currentTab === 'homework' && (
+          {safeTab === 'homework' && (
             <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
               <SegmentedTabs
                 label="الواجبات والخطط"
@@ -207,46 +195,8 @@ export function ParentPortal({
             </div>
           )}
 
-          {currentTab === 'notifications' && (
-            <div className="animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-              <NotificationsList notifications={notifications} />
-            </div>
-          )}
-
-          {currentTab === 'settings' && (
+          {safeTab === 'settings' && (
             <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-              <section className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800">
-                <div className="flex items-start gap-3">
-                  <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                    <MessageCircleMore className="size-5" strokeWidth={1.75} aria-hidden="true" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-50">إشعارات واتساب</p>
-                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      استلام رسائل الغياب والتأخر وملخص الواجبات والخطة الأسبوعية عبر واتساب
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={waOptedIn}
-                    aria-label="تفعيل إشعارات واتساب"
-                    onClick={() => onToggleWaOptIn?.(!waOptedIn)}
-                    className={cn(
-                      'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 motion-reduce:transition-none dark:focus-visible:ring-offset-slate-800',
-                      waOptedIn ? 'bg-blue-600' : 'bg-slate-300 dark:bg-slate-600'
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        'inline-block size-5 rounded-full bg-white shadow transition-transform duration-150 motion-reduce:transition-none',
-                        waOptedIn ? '-translate-x-5' : 'translate-x-0'
-                      )}
-                    />
-                  </button>
-                </div>
-              </section>
-
               <section className="rounded-2xl border border-red-200 bg-red-50/60 p-4 dark:border-red-900/60 dark:bg-red-950/20">
                 <p className="text-xs text-slate-600 dark:text-slate-400">
                   سيتم تسجيل خروجك من بوابة ولي الأمر على هذا الجهاز.
@@ -264,11 +214,7 @@ export function ParentPortal({
           )}
         </main>
 
-        <BottomTabBar
-          activeTab={currentTab}
-          onSelect={switchTab}
-          hasNewAlerts={todaySummary.newAlertsCount > 0}
-        />
+        <BottomTabBar activeTab={safeTab} onSelect={switchTab} />
       </div>
 
       <ExcuseUploadModal
