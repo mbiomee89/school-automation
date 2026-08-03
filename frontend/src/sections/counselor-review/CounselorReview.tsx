@@ -19,6 +19,7 @@ import type {
 } from './types'
 import { cn } from '../../shared/utils'
 import { Modal } from '../../shared/Modal'
+import { GregorianDateField } from '../../shared/GregorianDateField'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
 
 const TABS: { id: CounselorTab; label: string; status: AbsenceReasonStatus }[] = [
@@ -364,33 +365,25 @@ export function CounselorReview({
                   className="w-full rounded-md border border-stone-300 bg-white py-2 pe-3 ps-10 text-sm dark:border-stone-700 dark:bg-stone-900"
                 />
               </div>
-              <div className="flex items-center gap-2 text-sm">
-                <label className="flex items-center gap-1.5 text-stone-600 dark:text-stone-400">
-                  من
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value)
-                      onFilterDateRange?.({ from: e.target.value || null, to: dateTo || null })
-                    }}
-                    className="rounded border border-stone-300 bg-white px-2 py-1.5 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                    style={fontMono}
-                  />
-                </label>
-                <label className="flex items-center gap-1.5 text-stone-600 dark:text-stone-400">
-                  إلى
-                  <input
-                    type="date"
-                    value={dateTo}
-                    onChange={(e) => {
-                      setDateTo(e.target.value)
-                      onFilterDateRange?.({ from: dateFrom || null, to: e.target.value || null })
-                    }}
-                    className="rounded border border-stone-300 bg-white px-2 py-1.5 dark:border-stone-600 dark:bg-stone-800 dark:text-stone-100"
-                    style={fontMono}
-                  />
-                </label>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <GregorianDateField
+                  label="من"
+                  value={dateFrom}
+                  placeholder="من تاريخ"
+                  onChange={(next) => {
+                    setDateFrom(next)
+                    onFilterDateRange?.({ from: next || null, to: dateTo || null })
+                  }}
+                />
+                <GregorianDateField
+                  label="إلى"
+                  value={dateTo}
+                  placeholder="إلى تاريخ"
+                  onChange={(next) => {
+                    setDateTo(next)
+                    onFilterDateRange?.({ from: dateFrom || null, to: next || null })
+                  }}
+                />
                 {(dateFrom || dateTo) && (
                   <button
                     type="button"
