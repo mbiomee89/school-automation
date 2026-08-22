@@ -551,11 +551,26 @@ function HomeworkLogDetailView({
       ? detail.classes
       : groupFlatByClass(detail.rows)
   const classes = filterClassesBySelection(allClasses, classFilter)
+  const periods = detail.periods?.length ? detail.periods : ['1', '2', '3', '4', '5', '6']
+  const days =
+    detail.days?.length && detail.days.length > 0
+      ? detail.days
+      : [
+          { dayKey: 'sunday', dayLabel: 'الأحد', date: detail.date },
+          { dayKey: 'monday', dayLabel: 'الاثنين', date: '' },
+          { dayKey: 'tuesday', dayLabel: 'الثلاثاء', date: '' },
+          { dayKey: 'wednesday', dayLabel: 'الأربعاء', date: '' },
+          { dayKey: 'thursday', dayLabel: 'الخميس', date: '' },
+        ]
+  const weekLabel =
+    detail.weekStart && detail.weekEnd
+      ? `${formatReportDate(detail.weekStart)} — ${formatReportDate(detail.weekEnd)}`
+      : formatReportDate(detail.date)
 
   if (allClasses.length === 0) {
     return (
       <p className="rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900">
-        لا توجد واجبات مسجّلة لهذا اليوم.
+        لا توجد واجبات مسجّلة لهذا الأسبوع.
       </p>
     )
   }
@@ -578,25 +593,93 @@ function HomeworkLogDetailView({
           educationAdminName={detail.educationAdminName}
           logoUrl={detail.logoUrl}
           principalName={detail.principalName}
-          metaLines={[
-            `تاريخ الواجبات: ${formatReportDate(detail.date)}`,
-            `الفصل: ${cls.className}`,
-          ]}
+          metaLines={[`أسبوع الواجبات: ${weekLabel}`, `الفصل: ${cls.className}`]}
           title={`سجل الواجبات — ${cls.className}`}
         >
-          <FormalTable
-            headers={['المادة', 'المعلم', 'الوصف', 'الاستحقاق']}
-            colWidths={['18%', '16%', '48%', '18%']}
-            empty="لا توجد واجبات لهذا الفصل."
-            rows={cls.rows.map((r) => [
-              r.subjectName,
-              r.teacherName,
-              r.description,
-              r.dueDate ? formatReportDate(r.dueDate) : '—',
-            ])}
-          />
+          <HomeworkDayPeriodGrid days={days} periods={periods} rows={cls.rows} />
         </FormalClassSheet>
       ))}
+    </div>
+  )
+}
+
+function HomeworkDayPeriodGrid({
+  days,
+  periods,
+  rows,
+}: {
+  days: Array<{ dayKey: string; dayLabel: string; date: string }>
+  periods: string[]
+  rows: HomeworkLogReportDetail['rows']
+}) {
+  const cellMap = new Map<string, HomeworkLogReportDetail['rows']>()
+  for (const r of rows) {
+    const period = r.period || ''
+    if (!period || !r.date) continue
+    const key = `${r.date}|${period}`
+    const list = cellMap.get(key) ?? []
+    list.push(r)
+    cellMap.set(key, list)
+  }
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-teal-600/40">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[40rem] border-collapse text-sm">
+          <thead>
+            <tr className="bg-teal-600 text-white">
+              <th className="w-[14%] border border-teal-700 px-2 py-2.5 font-bold">اليوم</th>
+              {periods.map((p) => (
+                <th key={p} className="border border-teal-700 px-2 py-2.5 font-bold tabular-nums">
+                  ح{p}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((day) => (
+              <tr key={day.dayKey} className="bg-white dark:bg-slate-950">
+                <td className="border border-slate-200 px-2 py-2 text-center font-bold align-middle text-slate-800 dark:border-slate-700 dark:text-slate-100">
+                  <div>{day.dayLabel}</div>
+                  {day.date ? (
+                    <div className="mt-0.5 text-xs font-normal tabular-nums text-slate-500" dir="ltr">
+                      {day.date.slice(5)}
+                    </div>
+                  ) : null}
+                </td>
+                {periods.map((period) => {
+                  const cellRows = cellMap.get(`${day.date}|${period}`) ?? []
+                  return (
+                    <td
+                      key={period}
+                      className="border border-slate-200 px-1.5 py-1.5 align-top text-slate-800 dark:border-slate-700 dark:text-slate-100"
+                    >
+                      {cellRows.length === 0 ? (
+                        <span className="text-slate-400">—</span>
+                      ) : (
+                        <ul className="space-y-1.5">
+                          {cellRows.map((r) => (
+                            <li key={r.id} className="text-xs leading-snug">
+                              <p className="font-bold">{r.subjectName}</p>
+                              <p className={r.noHomework ? 'text-slate-500' : ''}>{r.description}</p>
+                              {r.teacherName ? (
+                                <p className="text-[10px] text-slate-500">{r.teacherName}</p>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </td>
+                  )
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {rows.length === 0 && (
+        <p className="p-6 text-center text-sm text-slate-500">لا توجد واجبات لهذا الفصل.</p>
+      )}
     </div>
   )
 }

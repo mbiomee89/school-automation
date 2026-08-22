@@ -6,6 +6,7 @@ import { validateQuery } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { notFound } from '../utils/errors.js';
 import { toUtcMidnight, weekStartSaturdayUtc } from '../utils/dates.js';
+import { weekStartSunday } from '../services/timetableImport.js';
 import { schoolLogoUrl } from '../services/schoolLogo.js';
 
 const router = Router();
@@ -215,39 +216,72 @@ router.get(
   })
 );
 
-/** GET /reports/homework-log?date=YYYY-MM-DD */
+/** GET /reports/homework-log?date=YYYY-MM-DD — week grid (Sun–Thu × periods) containing date */
 router.get(
   '/homework-log',
   validateQuery(dateQuery),
   asyncHandler(async (req, res) => {
     const date = toUtcMidnight(req.query.date);
+    const dateStr = date.toISOString().slice(0, 10);
+    const weekStartStr = weekStartSunday(dateStr);
+    const weekStart = toUtcMidnight(weekStartStr);
+    const weekEndStr = (() => {
+      const [y, m, d] = weekStartStr.split('-').map(Number);
+      return new Date(Date.UTC(y, m - 1, d + 4)).toISOString().slice(0, 10);
+    })();
+    const weekEnd = toUtcMidnight(weekEndStr);
     const header = await schoolHeader();
 
+    const DAY_META = [
+      { key: 'sunday', label: 'الأحد', offset: 0 },
+      { key: 'monday', label: 'الاثنين', offset: 1 },
+      { key: 'tuesday', label: 'الثلاثاء', offset: 2 },
+      { key: 'wednesday', label: 'الأربعاء', offset: 3 },
+      { key: 'thursday', label: 'الخميس', offset: 4 },
+    ];
+    const days = DAY_META.map(({ key, label, offset }) => {
+      const [y, m, d] = weekStartStr.split('-').map(Number);
+      const ds = new Date(Date.UTC(y, m - 1, d + offset)).toISOString().slice(0, 10);
+      return { dayKey: key, dayLabel: label, date: ds };
+    });
+
     const found = await prisma.homework.findMany({
-      where: { date },
+      where: {
+        date: { gte: weekStart, lte: weekEnd },
+      },
       include: {
         class: { select: { id: true, name: true } },
         subject: { select: { nameAr: true, nameEn: true } },
         teacher: { select: { name: true } },
       },
-      orderBy: [{ classId: 'asc' }, { subjectId: 'asc' }],
+      orderBy: [{ date: 'asc' }, { period: 'asc' }, { classId: 'asc' }, { subjectId: 'asc' }],
     });
 
-    const dateStr = date.toISOString().slice(0, 10);
-    const rows = found.map((r) => ({
-      id: r.id,
-      classId: r.classId,
-      className: r.class.name,
-      subjectName: r.subject.nameAr,
-      teacherName: r.teacher.name,
-      period: r.period || null,
-      noHomework: Boolean(r.noHomework),
-      description: r.noHomework ? 'لا يوجد واجب' : r.description,
-      dueDate: r.dueDate ? toUtcMidnight(r.dueDate).toISOString().slice(0, 10) : null,
-    }));
+    const rows = found.map((r) => {
+      const rowDate = toUtcMidnight(r.date).toISOString().slice(0, 10);
+      const day = days.find((d) => d.date === rowDate);
+      return {
+        id: r.id,
+        classId: r.classId,
+        className: r.class.name,
+        subjectName: r.subject.nameAr,
+        teacherName: r.teacher.name,
+        date: rowDate,
+        dayKey: day?.dayKey ?? null,
+        dayLabel: day?.dayLabel ?? null,
+        period: r.period || null,
+        noHomework: Boolean(r.noHomework),
+        description: r.noHomework ? 'لا يوجد واجب' : r.description,
+        dueDate: r.dueDate ? toUtcMidnight(r.dueDate).toISOString().slice(0, 10) : null,
+      };
+    });
 
     res.json({
       date: dateStr,
+      weekStart: weekStartStr,
+      weekEnd: weekEndStr,
+      days,
+      periods: ['1', '2', '3', '4', '5', '6'],
       schoolName: header.schoolName,
       academicYear: header.academicYear,
       educationAdminName: header.educationAdminName,
