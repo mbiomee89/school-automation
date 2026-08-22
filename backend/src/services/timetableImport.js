@@ -536,63 +536,63 @@ export async function applyTimetableImport(
   const year = preview.academicYear;
   const slots = preview.matchedSlots;
 
-  const result = await prisma.$transaction(async (tx) => {
-    await tx.timetableSlot.deleteMany({ where: { academicYear: year } });
+  // Neon serverless + pooler drops long interactive Prisma transactions
+  // ("Transaction not found"). Prefer short sequential ops + createMany.
+  const byClassSlot = new Map();
+  for (const s of slots) {
+    byClassSlot.set(`${s.classId}|${s.dayOfWeek}|${s.period}`, s);
+  }
+  const finalSlots = [...byClassSlot.values()];
 
-    let slotsCreated = 0;
-    const byClassSlot = new Map();
-    for (const s of slots) {
-      byClassSlot.set(`${s.classId}|${s.dayOfWeek}|${s.period}`, s);
-    }
-    const finalSlots = [...byClassSlot.values()];
+  await prisma.timetableSlot.deleteMany({ where: { academicYear: year } });
 
-    for (const s of finalSlots) {
-      await tx.timetableSlot.create({
+  const slotRows = finalSlots.map((s) => ({
+    teacherId: s.teacherId,
+    classId: s.classId,
+    subjectId: s.subjectId,
+    dayOfWeek: s.dayOfWeek,
+    period: String(s.period),
+    academicYear: year,
+  }));
+
+  const CHUNK = 100;
+  let slotsCreated = 0;
+  for (let i = 0; i < slotRows.length; i += CHUNK) {
+    const chunk = slotRows.slice(i, i + CHUNK);
+    const created = await prisma.timetableSlot.createMany({ data: chunk });
+    slotsCreated += created.count;
+  }
+
+  const pairs = new Map();
+  for (const s of finalSlots) {
+    pairs.set(`${s.classId}:${s.subjectId}`, s);
+  }
+
+  let assignmentsCreated = 0;
+  let assignmentsReassigned = 0;
+  for (const s of pairs.values()) {
+    const existing = await prisma.teacherAssignment.findUnique({
+      where: { classId_subjectId: { classId: s.classId, subjectId: s.subjectId } },
+    });
+    if (existing) {
+      if (existing.teacherId !== s.teacherId) {
+        await prisma.teacherAssignment.update({
+          where: { id: existing.id },
+          data: { teacherId: s.teacherId },
+        });
+        assignmentsReassigned += 1;
+      }
+    } else {
+      await prisma.teacherAssignment.create({
         data: {
           teacherId: s.teacherId,
           classId: s.classId,
           subjectId: s.subjectId,
-          dayOfWeek: s.dayOfWeek,
-          period: String(s.period),
-          academicYear: year,
         },
       });
-      slotsCreated += 1;
+      assignmentsCreated += 1;
     }
-
-    const pairs = new Map();
-    for (const s of finalSlots) {
-      pairs.set(`${s.classId}:${s.subjectId}`, s);
-    }
-
-    let assignmentsCreated = 0;
-    let assignmentsReassigned = 0;
-    for (const s of pairs.values()) {
-      const existing = await tx.teacherAssignment.findUnique({
-        where: { classId_subjectId: { classId: s.classId, subjectId: s.subjectId } },
-      });
-      if (existing) {
-        if (existing.teacherId !== s.teacherId) {
-          await tx.teacherAssignment.update({
-            where: { id: existing.id },
-            data: { teacherId: s.teacherId },
-          });
-          assignmentsReassigned += 1;
-        }
-      } else {
-        await tx.teacherAssignment.create({
-          data: {
-            teacherId: s.teacherId,
-            classId: s.classId,
-            subjectId: s.subjectId,
-          },
-        });
-        assignmentsCreated += 1;
-      }
-    }
-
-    return { slotsCreated, assignmentsCreated, assignmentsReassigned };
-  });
+  }
 
   return {
     academicYear: year,
@@ -604,7 +604,9 @@ export async function applyTimetableImport(
     unmatchedSubjects: preview.unmatchedSubjects,
     teachersCreated,
     defaultPassword,
-    ...result,
+    slotsCreated,
+    assignmentsCreated,
+    assignmentsReassigned,
   };
 }
 
