@@ -19,12 +19,18 @@ from pathlib import Path
 try:
     import fitz
 except ImportError:
-    Path(sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else "/dev/stdout").write_text(
-        json.dumps({"error": "pymupdf missing: pip install pymupdf", "slots": [], "errors": []}),
-        encoding="utf-8",
-    ) if "--out" in sys.argv else print(
-        json.dumps({"error": "pymupdf missing: pip install pymupdf", "slots": [], "errors": []})
-    )
+    _err = {
+        "error": "محلل PDF غير جاهز (pymupdf). استخدم صورة Docker أو ارفع Excel.",
+        "slots": [],
+        "errors": [],
+    }
+    if "--out" in sys.argv:
+        Path(sys.argv[sys.argv.index("--out") + 1]).write_text(
+            json.dumps(_err, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    else:
+        print(json.dumps(_err, ensure_ascii=False))
     sys.exit(2)
 
 

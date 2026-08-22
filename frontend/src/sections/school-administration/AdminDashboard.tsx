@@ -1332,8 +1332,9 @@ export function AdminDashboard({
             <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-500/30 dark:bg-blue-950/30">
               <h3 className="font-bold text-slate-900 dark:text-slate-50">استيراد الجدول الدراسي (aSc)</h3>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
-                ارفع <span className="font-semibold">teachers table.pdf</span> ثم طابق أسماء الجدول
-                القصيرة مع الأسماء الكاملة في النظام، ثم احفظ.
+                ارفع <span className="font-semibold">teachers table.pdf</span> مباشرة (المفضّل). يُقبل أيضاً
+                Excel/CSV. رموز الفصول مثل أول-1 تُطابق أول أ، وأول-2 تُطابق أول ب. ثم طابق أسماء الجدول
+                مع المعلمين والفصول والمواد قبل الحفظ.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <label

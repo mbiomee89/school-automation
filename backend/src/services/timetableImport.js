@@ -49,16 +49,49 @@ export function collapseSpaces(s) {
   return out.replace(/\s+/g, ' ').trim();
 }
 
+const SECTION_FROM_DIGIT = {
+  1: 'أ',
+  2: 'ب',
+  3: 'ج',
+  4: 'د',
+  5: 'ه',
+  6: 'و',
+  7: 'ز',
+  8: 'ح',
+};
+
+const SECTION_FROM_LATIN = {
+  a: 'أ',
+  b: 'ب',
+  c: 'ج',
+  d: 'د',
+};
+
+/**
+ * Parse aSc / school class labels.
+ * Letters: أول-أ · Digits (school rule): أول-1 → أول أ, أول-2 → أول ب
+ */
 export function parseClassLabel(label) {
   const raw = collapseSpaces(label);
-  const m = raw.match(
-    /^(أول|اول|ثاني|ثان|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع)\s*[-–]?\s*([أبجدهوA-Da-d])$/
-  );
+  const gradeRe = 'أول|اول|ثاني|ثان|ثالث|رابع|خامس|سادس|سابع|ثامن|تاسع';
+
+  const mNum = raw.match(new RegExp(`^(${gradeRe})\\s*[-–]?\\s*([1-8])$`));
+  if (mNum) {
+    let grade = mNum[1];
+    if (grade === 'اول') grade = 'أول';
+    if (grade === 'ثاني') grade = 'ثان';
+    return { gradeLevel: grade, section: SECTION_FROM_DIGIT[Number(mNum[2])] };
+  }
+
+  const m = raw.match(new RegExp(`^(${gradeRe})\\s*[-–]?\\s*([أبجدهوزحA-Da-d])$`));
   if (!m) return null;
   let grade = m[1];
   if (grade === 'اول') grade = 'أول';
   if (grade === 'ثاني') grade = 'ثان';
-  return { gradeLevel: grade, section: m[2] };
+  let section = m[2];
+  const latin = SECTION_FROM_LATIN[section.toLowerCase()];
+  if (latin) section = latin;
+  return { gradeLevel: grade, section };
 }
 
 function nameTokens(name) {

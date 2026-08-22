@@ -1,0 +1,15 @@
+node_modules
+**/node_modules
+frontend/dist
+backend/uploads
+.git
+.cursor
+.env
+*.pdf
+*.pptx
+*.docx
+assets
+fonts
+__pycache__
+scripts/_*
+*.pyc

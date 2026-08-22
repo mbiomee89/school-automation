@@ -19,7 +19,8 @@ export function parseAscTimetablePdf(buffer, originalName = 'timetable.pdf') {
     const outPath = path.join(tmpDir, 'out.json');
     fs.writeFileSync(pdfPath, buffer);
 
-    const py = process.env.PYTHON || process.env.PYTHON_PATH || 'python';
+    const py =
+      process.env.PYTHON || process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
     const child = spawn(py, [PARSER_SCRIPT, pdfPath, '--out', outPath], {
       windowsHide: true,
     });
@@ -33,7 +34,7 @@ export function parseAscTimetablePdf(buffer, originalName = 'timetable.pdf') {
       cleanup(tmpDir);
       reject(
         badRequest(
-          `تعذّر تشغيل محلل PDF (Python). ثبّت Python وpymupdf أو ارفع ملف Excel. ${err.message}`
+          `تعذّر تشغيل محلل PDF (Python غير متاح). على السيرفر يجب توفر Python وpymupdf، أو ارفع Excel مؤقتاً. ${err.message}`
         )
       );
     });
@@ -44,7 +45,7 @@ export function parseAscTimetablePdf(buffer, originalName = 'timetable.pdf') {
           cleanup(tmpDir);
           return reject(
             badRequest(
-              `فشل تحليل PDF (رمز ${code}). تأكد من تثبيت pymupdf: pip install pymupdf. ${stderr.slice(0, 200)}`
+              `فشل تحليل PDF (رمز ${code}). ثبّت pymupdf على السيرفر أو ارفع Excel. ${stderr.slice(0, 200)}`
             )
           );
         }
@@ -52,7 +53,15 @@ export function parseAscTimetablePdf(buffer, originalName = 'timetable.pdf') {
         const data = JSON.parse(raw);
         cleanup(tmpDir);
         if (data.error && (!data.slots || data.slots.length === 0)) {
-          return reject(badRequest(data.error));
+          const err = String(data.error);
+          if (/pymupdf/i.test(err)) {
+            return reject(
+              badRequest(
+                'محلل PDF غير جاهز على السيرفر (مكتبة pymupdf). أعد النشر بصورة Docker، أو ارفع ملف Excel من aSc مؤقتاً.'
+              )
+            );
+          }
+          return reject(badRequest(err));
         }
         resolve({
           view: data.view || 'unknown',
