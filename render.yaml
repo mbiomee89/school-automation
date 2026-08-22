@@ -1,10 +1,8 @@
-# Render Blueprint — Docker web service (Node + Python/pymupdf) + optional free Postgres.
-# Dashboard: https://dashboard.render.com
+# Render Blueprint — Node web service + optional free Postgres.
+# Live DB is often Neon (set DATABASE_URL in the dashboard).
 #
-# Live DB may be Neon (set DATABASE_URL in the dashboard). Blueprint Postgres is optional.
-#
-# IMPORTANT: web service + Postgres must be in the SAME region if using Render DB.
-# Prefer External / Neon DATABASE_URL if internal host fails (P1001).
+# Native Node images include python3-pip — build installs pymupdf for aSc PDF import.
+# Prefer External / Neon DATABASE_URL if Render internal Postgres host fails (P1001).
 
 databases:
   - name: school-db
@@ -15,11 +13,11 @@ databases:
 services:
   - type: web
     name: school-automation
-    runtime: docker
+    runtime: node
     plan: free
     region: oregon
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    buildCommand: pip3 install --user --no-cache-dir pymupdf && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npm install --include=dev && npx prisma generate --schema=prisma/schema.prisma && npm run build -w frontend
+    startCommand: node scripts/start.js
     healthCheckPath: /health
     envVars:
       - key: NODE_ENV
@@ -36,3 +34,5 @@ services:
         value: ./backend/uploads
       - key: PYTHON
         value: python3
+      - key: NODE_VERSION
+        value: "22.16.0"

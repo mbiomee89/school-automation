@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Local / legacy Node build. Production on Render should use ./Dockerfile
-# (includes Python + pymupdf for aSc PDF timetable import).
+# Build for Render Node runtime (see render.yaml buildCommand — keep in sync).
+# Native images include python3-pip; pymupdf enables aSc teachers table.pdf import.
 set -euo pipefail
+
+echo "==> Installing pymupdf for aSc PDF timetable import"
+pip3 install --user --no-cache-dir pymupdf
 
 echo "==> Switching Prisma provider to PostgreSQL for this build"
 sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma
@@ -15,4 +18,4 @@ npx prisma generate --schema=prisma/schema.prisma
 echo "==> Building frontend"
 npm run build -w frontend
 
-echo "==> Node-only build complete (use Dockerfile on Render for PDF import)"
+echo "==> Render build complete"
