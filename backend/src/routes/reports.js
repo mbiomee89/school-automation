@@ -68,6 +68,30 @@ function parseWeeklyDays(topics) {
 }
 
 function expandWeeklyLessonRows(plan) {
+  // Cell-based plan (عنوان الدرس per period)
+  if (plan.date && plan.period && (plan.title || '').trim()) {
+    const dateStr = toUtcMidnight(plan.date).toISOString().slice(0, 10);
+    const dayIdx = new Date(`${dateStr}T00:00:00.000Z`).getUTCDay(); // 0=Sun
+    const keyByIdx = { 0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday' };
+    const dayKey = keyByIdx[dayIdx];
+    if (!dayKey) return [];
+    return [
+      {
+        planId: plan.id,
+        classId: plan.classId,
+        className: plan.class.name,
+        dayKey,
+        dayLabel: WEEKDAY_LABELS[dayKey],
+        period: plan.period,
+        subjectName: plan.subject.nameAr,
+        teacherName: plan.teacher.name,
+        lessonTopic: plan.title.trim(),
+        notes: null,
+      },
+    ];
+  }
+
+  // Legacy Saturday-week JSON
   const days = parseWeeklyDays(plan.topics);
   const rows = [];
   for (const key of WEEKDAY_KEYS) {
@@ -86,6 +110,7 @@ function expandWeeklyLessonRows(plan) {
       className: plan.class.name,
       dayKey: key,
       dayLabel: WEEKDAY_LABELS[key],
+      period: null,
       subjectName: plan.subject.nameAr,
       teacherName: plan.teacher.name,
       lessonTopic,
@@ -267,6 +292,8 @@ router.get(
       if (a.classId !== b.classId) return a.classId - b.classId;
       const dayDiff = (dayOrder[a.dayKey] ?? 99) - (dayOrder[b.dayKey] ?? 99);
       if (dayDiff !== 0) return dayDiff;
+      const periodDiff = Number(a.period || 0) - Number(b.period || 0);
+      if (periodDiff !== 0) return periodDiff;
       return a.subjectName.localeCompare(b.subjectName, 'ar');
     });
 
@@ -422,7 +449,17 @@ router.get(
       prisma.homework.count({ where: { date } }),
       prisma.weeklyPlan.findMany({
         where: { weekStart },
-        select: { topics: true, classId: true, class: { select: { name: true } }, subject: { select: { nameAr: true } }, teacher: { select: { name: true } }, id: true },
+        select: {
+          id: true,
+          classId: true,
+          topics: true,
+          date: true,
+          period: true,
+          title: true,
+          class: { select: { name: true } },
+          subject: { select: { nameAr: true } },
+          teacher: { select: { name: true } },
+        },
       }),
     ]);
 

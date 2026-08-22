@@ -198,19 +198,52 @@ router.get(
     const rows = await prisma.weeklyPlan.findMany({
       where: { classId: student.classId },
       include: { subject: true },
-      orderBy: { weekStart: 'desc' },
-      take: 8,
+      orderBy: [{ date: 'desc' }, { weekStart: 'desc' }, { period: 'asc' }],
+      take: 40,
     });
 
-    res.json({
-      weeklyPlans: rows.map((p) => ({
+    const DAY_LABELS = {
+      0: 'الأحد',
+      1: 'الاثنين',
+      2: 'الثلاثاء',
+      3: 'الأربعاء',
+      4: 'الخميس',
+    };
+
+    const weeklyPlans = [];
+    for (const p of rows) {
+      if (p.date && p.period && (p.title || '').trim()) {
+        const dateStr = toUtcMidnight(p.date).toISOString().slice(0, 10);
+        const dayIdx = new Date(`${dateStr}T00:00:00.000Z`).getUTCDay();
+        weeklyPlans.push({
+          id: p.id,
+          weekStart: toUtcMidnight(p.weekStart).toISOString().slice(0, 10),
+          date: dateStr,
+          period: p.period,
+          dayLabel: DAY_LABELS[dayIdx] || '',
+          title: p.title.trim(),
+          subjectNameAr: p.subject.nameAr,
+          subjectNameEn: p.subject.nameEn,
+          days: null,
+        });
+        continue;
+      }
+
+      // Legacy week JSON → keep days shape for older parent UI
+      weeklyPlans.push({
         id: p.id,
         weekStart: toUtcMidnight(p.weekStart).toISOString().slice(0, 10),
+        date: null,
+        period: null,
+        dayLabel: null,
+        title: null,
         subjectNameAr: p.subject.nameAr,
         subjectNameEn: p.subject.nameEn,
         days: parseDays(p.topics),
-      })),
-    });
+      });
+    }
+
+    res.json({ weeklyPlans });
   })
 );
 

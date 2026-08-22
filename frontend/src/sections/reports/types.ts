@@ -92,6 +92,7 @@ export interface WeeklyPlanLessonRow {
   className: string
   dayKey: string
   dayLabel: string
+  period?: string | null
   subjectName: string
   teacherName: string
   lessonTopic: string

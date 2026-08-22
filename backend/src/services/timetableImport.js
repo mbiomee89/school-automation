@@ -678,10 +678,17 @@ function addUtcDays(dateStr, days) {
   return utc.toISOString().slice(0, 10);
 }
 
+/** Saturday before the Sunday week containing dateStr (digest / report key). */
+export function weekStartSaturdayFromDate(dateStr) {
+  return addUtcDays(weekStartSunday(dateStr), -1);
+}
+
+export { addUtcDays };
+
 const DAY_ORDER = ['SUN', 'MON', 'TUE', 'WED', 'THU'];
 
 /**
- * Full Sun–Thu week grid for a teacher, plus homework status per cell for that week.
+ * Full Sun–Thu week grid for a teacher, plus homework + weekly-plan status per cell.
  */
 export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicYear) {
   const settings = await prisma.schoolSettings.findFirst();
@@ -736,6 +743,23 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
     hwByKey.set(key, h);
   }
 
+  const planRows =
+    classIds.length === 0
+      ? []
+      : await prisma.weeklyPlan.findMany({
+          where: {
+            classId: { in: classIds },
+            date: { gte: from, lte: to },
+            period: { not: '' },
+          },
+        });
+  const planByKey = new Map();
+  for (const p of planRows) {
+    if (!p.date) continue;
+    const key = `${p.date.toISOString().slice(0, 10)}|${p.period}|${p.classId}|${p.subjectId}`;
+    planByKey.set(key, p);
+  }
+
   const days = DAY_ORDER.map((dayOfWeek, i) => {
     const date = addUtcDays(weekStart, i);
     const daySlots = slots
@@ -743,6 +767,7 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
       .map((s) => {
         const assignment = assignByPair.get(`${s.classId}:${s.subjectId}`);
         const hw = hwByKey.get(`${date}|${s.period}|${s.classId}|${s.subjectId}`);
+        const plan = planByKey.get(`${date}|${s.period}|${s.classId}|${s.subjectId}`);
         return {
           id: s.id,
           period: s.period,
@@ -760,6 +785,9 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
           handled: Boolean(hw),
           description: hw && !hw.noHomework ? hw.description : null,
           dueDate: hw?.dueDate ? hw.dueDate.toISOString().slice(0, 10) : null,
+          planId: plan?.id ?? null,
+          planTitle: plan?.title || null,
+          hasPlan: Boolean(plan?.title),
         };
       })
       .sort((a, b) => Number(a.period) - Number(b.period));

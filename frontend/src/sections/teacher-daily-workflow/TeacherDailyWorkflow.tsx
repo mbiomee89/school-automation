@@ -25,7 +25,7 @@ import { AttendanceRosterList } from './AttendanceRosterList'
 import { LateReportForm } from './LateReportForm'
 import { LateReportRow } from './LateReportRow'
 import { TeacherHomeworkGrid } from './TeacherHomeworkGrid'
-import { WeeklyPlanForm } from './WeeklyPlanForm'
+import { TeacherWeeklyPlanGrid } from './TeacherWeeklyPlanGrid'
 import { formatLongDate } from './statusMeta'
 
 function buildInitialMarks(roster: RosterStudent[], marks: AttendanceMark[]): Record<string, AttendanceStatus> {
@@ -70,12 +70,16 @@ export function TeacherDailyWorkflow({
   onAddHomework: _onAddHomework,
   onUpdateHomework: _onUpdateHomework,
   onDeleteHomework: _onDeleteHomework,
-  onNavigateWeek,
-  onSaveWeeklyPlan,
+  onNavigateWeek: _onNavigateWeek,
+  onSaveWeeklyPlan: _onSaveWeeklyPlan,
 }: TeacherDailyWorkflowProps) {
   void _onAddHomework
   void _onUpdateHomework
   void _onDeleteHomework
+  void _onNavigateWeek
+  void _onSaveWeeklyPlan
+  void currentWeekStart
+  void weeklyPlan
   const [tab, setTab] = useState<TeacherTab>(controlledTab ?? 'attendance')
   const currentTab = controlledTab ?? tab
 
@@ -96,25 +100,9 @@ export function TeacherDailyWorkflow({
     setJustSavedAt(null)
   }
 
-  // Weekly plan is only demonstrated for `currentWeekStart` in the sample
-  // data, so viewing a different (adjacent) week shows the correct "no plan
-  // yet" empty state rather than a stale plan bleeding across weeks.
-  const [viewedWeekStart, setViewedWeekStart] = useState(currentWeekStart)
-  const [syncedBaseWeekStart, setSyncedBaseWeekStart] = useState(currentWeekStart)
-  if (syncedBaseWeekStart !== currentWeekStart) {
-    setSyncedBaseWeekStart(currentWeekStart)
-    setViewedWeekStart(currentWeekStart)
-  }
-  const planForViewedWeek = viewedWeekStart === currentWeekStart ? weeklyPlan : null
-
   function switchTab(next: TeacherTab) {
     setTab(next)
     onTabChange?.(next)
-  }
-
-  function handleNavigateWeek(nextWeekStart: string) {
-    setViewedWeekStart(nextWeekStart)
-    onNavigateWeek?.(nextWeekStart)
   }
 
   function handleSetStatus(studentId: string, status: AttendanceStatus) {
@@ -183,10 +171,14 @@ export function TeacherDailyWorkflow({
                 اليوم · {formatLongDate(todayDate)}
               </p>
               <h1 className="mt-1 text-xl font-bold text-slate-900 dark:text-slate-50 sm:text-2xl">
-                {currentTab === 'homework' ? 'الواجبات' : 'أعمال المعلم اليومية'}
+                {currentTab === 'homework'
+                  ? 'الواجبات'
+                  : currentTab === 'weekly-plan'
+                    ? 'الخطة الأسبوعية'
+                    : 'أعمال المعلم اليومية'}
               </h1>
             </div>
-            {currentTab !== 'homework' && (
+            {currentTab !== 'homework' && currentTab !== 'weekly-plan' && (
               <AssignmentSelector
                 assignments={assignments}
                 activeAssignmentId={activeAssignmentId}
@@ -194,7 +186,7 @@ export function TeacherDailyWorkflow({
               />
             )}
           </div>
-          {currentTab !== 'homework' && todaySlots.length > 0 && (
+          {currentTab !== 'homework' && currentTab !== 'weekly-plan' && todaySlots.length > 0 && (
             <div className="relative mt-3 flex flex-wrap gap-2">
               <span className="w-full text-xs font-medium text-slate-500 dark:text-slate-400">
                 حصص اليوم — اضغط للانتقال مباشرة
@@ -252,7 +244,7 @@ export function TeacherDailyWorkflow({
                   attendanceSaved={effectiveSavedAt != null}
                   lateCount={lateReportsToday.length}
                   homeworkCount={homeworkToday.length}
-                  hasWeeklyPlan={planForViewedWeek != null}
+                  hasWeeklyPlan={false}
                 />
               </button>
             )
@@ -308,16 +300,7 @@ export function TeacherDailyWorkflow({
 
         {currentTab === 'homework' && <TeacherHomeworkGrid />}
 
-        {currentTab === 'weekly-plan' && (
-          <div className="animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-            <WeeklyPlanForm
-              weekStart={viewedWeekStart}
-              plan={planForViewedWeek}
-              onNavigateWeek={handleNavigateWeek}
-              onSave={(entry) => onSaveWeeklyPlan?.(entry)}
-            />
-          </div>
-        )}
+        {currentTab === 'weekly-plan' && <TeacherWeeklyPlanGrid />}
       </div>
 
       {currentTab === 'attendance' && roster.length > 0 && (

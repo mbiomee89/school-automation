@@ -67,8 +67,13 @@ export interface WeeklyPlanItem {
   weekStart: string
   subjectNameAr: string
   subjectNameEn: string
-  /** Per-day plan for Sun–Thu. Each day is either a lesson or null (no lesson). */
-  days: WeeklyPlanDays
+  /** Cell-based plan fields (new). */
+  date?: string | null
+  period?: string | null
+  dayLabel?: string | null
+  title?: string | null
+  /** Legacy per-day JSON. Null for new cell rows. */
+  days?: WeeklyPlanDays | null
 }
 
 export interface NotificationItem {

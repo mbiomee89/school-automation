@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Inbox } from 'lucide-react'
 import {
@@ -9,12 +9,10 @@ import {
   getAttendance,
   getHomework,
   getLateReports,
-  getWeeklyPlan,
   listRoster,
   listTeacherAssignments,
   getTeacherToday,
   saveAttendance,
-  saveWeeklyPlan,
   todayDateStr,
   updateHomework,
   updateLateReport,
@@ -29,7 +27,6 @@ import type {
   RosterStudent,
   TeacherAssignmentOption,
   TeacherTab,
-  WeeklyPlanEntry,
 } from '../../sections/teacher-daily-workflow/types'
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
@@ -64,27 +61,24 @@ export function TeacherDailyPage() {
   const [attendanceSavedAt, setAttendanceSavedAt] = useState<string | null>(null)
   const [lateReportsToday, setLateReportsToday] = useState<LateReportEntry[]>([])
   const [homeworkToday, setHomeworkToday] = useState<HomeworkEntry[]>([])
-  const [currentWeekStart, setCurrentWeekStart] = useState(weekStartSaturday(today))
-  const [weeklyPlan, setWeeklyPlan] = useState<WeeklyPlanEntry | null>(null)
-  const weekNavSeq = useRef(0)
+  const [currentWeekStart] = useState(weekStartSaturday(today))
+  const weeklyPlan = null
 
   const active = assignments.find((a) => a.id === activeAssignmentId) ?? null
 
   const loadAssignmentData = useCallback(
-    async (assignment: TeacherAssignmentOption, weekStart: string) => {
-      const [students, attendance, late, homework, plan] = await Promise.all([
+    async (assignment: TeacherAssignmentOption) => {
+      const [students, attendance, late, homework] = await Promise.all([
         listRoster(assignment.classId),
         getAttendance(assignment.classId, today),
         getLateReports(assignment.classId, today),
         getHomework(assignment.classId, assignment.subjectId, today),
-        getWeeklyPlan(assignment.classId, assignment.subjectId, weekStart),
       ])
       setRoster(students)
       setAttendanceMarks(attendance.marks)
       setAttendanceSavedAt(attendance.savedAt)
       setLateReportsToday(late)
       setHomeworkToday(homework)
-      setWeeklyPlan(plan)
     },
     [today]
   )
@@ -101,13 +95,13 @@ export function TeacherDailyPage() {
       const next = assignments.find((a) => a.id === assignmentId)
       if (!next) return
       try {
-        await loadAssignmentData(next, currentWeekStart)
+        await loadAssignmentData(next)
         setActiveAssignmentId(assignmentId)
       } catch (err) {
         alertError(err, 'فشل تحميل بيانات الصف')
       }
     },
-    [assignments, currentWeekStart, loadAssignmentData]
+    [assignments, loadAssignmentData]
   )
 
   function handleTabChange(tab: TeacherTab) {
@@ -157,7 +151,7 @@ export function TeacherDailyPage() {
           list[0].id
         const initial = list.find((a) => a.id === fromSchedule) ?? list[0]
         setActiveAssignmentId(initial.id)
-        await loadAssignmentData(initial, weekStartSaturday(today))
+        await loadAssignmentData(initial)
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : 'تعذّر تحميل أعمال المعلم')
@@ -291,33 +285,8 @@ export function TeacherDailyPage() {
           alertError(err, 'فشل حذف الواجب')
         }
       }}
-      onNavigateWeek={async (weekStart) => {
-        const seq = ++weekNavSeq.current
-        setCurrentWeekStart(weekStart)
-        setWeeklyPlan(null)
-        if (!active) return
-        try {
-          const plan = await getWeeklyPlan(active.classId, active.subjectId, weekStart)
-          if (seq === weekNavSeq.current) setWeeklyPlan(plan)
-        } catch (err) {
-          if (seq === weekNavSeq.current) alertError(err, 'فشل تحميل الخطة الأسبوعية')
-        }
-      }}
-      onSaveWeeklyPlan={async (entry) => {
-        if (!active) return
-        try {
-          const plan = await saveWeeklyPlan({
-            classId: active.classId,
-            subjectId: active.subjectId,
-            weekStart: entry.weekStart,
-            days: entry.days,
-          })
-          setCurrentWeekStart(entry.weekStart)
-          setWeeklyPlan(plan)
-        } catch (err) {
-          alertError(err, 'فشل حفظ الخطة الأسبوعية')
-        }
-      }}
+      onNavigateWeek={() => {}}
+      onSaveWeeklyPlan={async () => {}}
     />
   )
 }

@@ -336,15 +336,25 @@ model WeeklyPlan {
   subject    Subject  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   teacherId  Int
   teacher    User     @relation("WeeklyPlanCreatedBy", fields: [teacherId], references: [id], onDelete: Restrict)
-  weekStart  DateTime // always a Saturday at UTC midnight — the digest send date / forDate key
-  topics     String
+  /// Lesson calendar day (UTC midnight). Null = legacy Saturday-week JSON row.
+  date       DateTime?
+  /// Timetable period "1".."6". Empty string = legacy week JSON rows.
+  period     String   @default("")
+  /// عنوان الدرس for cell-based plans.
+  title      String   @default("")
+  /// Saturday UTC midnight — digest / report week key (also set on new cell rows).
+  weekStart  DateTime
+  /// Legacy: JSON days or plain text. Unused for new cell rows (empty string).
+  topics     String   @default("")
   objectives String?
   notes      String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  @@unique([classId, subjectId, weekStart])
+  @@index([classId, subjectId, date, period])
+  @@index([classId, date])
   @@index([classId, weekStart])
+  @@index([teacherId, date])
 }
 
 // ---------- WhatsApp notification log ----------

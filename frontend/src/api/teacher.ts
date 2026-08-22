@@ -5,8 +5,6 @@ import type {
   LateReportEntry,
   RosterStudent,
   TeacherAssignmentOption,
-  WeeklyPlanDays,
-  WeeklyPlanEntry,
 } from '../sections/teacher-daily-workflow/types'
 
 export function todayDateStr() {
@@ -70,6 +68,9 @@ export type TeacherWeekSlot = TeacherDaySlot & {
   handled: boolean
   description: string | null
   dueDate: string | null
+  planId?: number | null
+  planTitle?: string | null
+  hasPlan?: boolean
 }
 
 export type TeacherWeekGrid = {
@@ -239,25 +240,30 @@ export async function deleteHomework(id: number) {
   await apiRequest(`/homework/${id}`, { method: 'DELETE' })
 }
 
-export async function getWeeklyPlan(classId: number, subjectId: number, weekStart: string) {
-  const qs = new URLSearchParams({
-    classId: String(classId),
-    subjectId: String(subjectId),
-    weekStart,
-  })
-  const data = await apiRequest<{ weeklyPlan: WeeklyPlanEntry | null }>(`/weekly-plans?${qs}`)
-  return data.weeklyPlan
-}
-
-export async function saveWeeklyPlan(input: {
+export async function saveWeeklyPlanCell(input: {
   classId: number
   subjectId: number
-  weekStart: string
-  days: WeeklyPlanDays
+  date: string
+  period: string
+  title: string
 }) {
-  const data = await apiRequest<{ weeklyPlan: WeeklyPlanEntry }>('/weekly-plans', {
+  const data = await apiRequest<{
+    weeklyPlan: {
+      id: number
+      classId: number
+      subjectId: number
+      date: string | null
+      period: string | null
+      title: string
+      weekStart: string
+    }
+  }>('/weekly-plans', {
     method: 'POST',
     body: input,
   })
   return data.weeklyPlan
+}
+
+export async function deleteWeeklyPlan(id: number) {
+  await apiRequest(`/weekly-plans/${id}`, { method: 'DELETE' })
 }
