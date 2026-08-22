@@ -52,6 +52,7 @@ const TABS: TabDef[] = [
 export function TeacherDailyWorkflow({
   assignments,
   activeAssignmentId,
+  todaySlots = [],
   roster,
   todayDate,
   attendanceSavedAt,
@@ -189,6 +190,36 @@ export function TeacherDailyWorkflow({
               onSelectAssignment={onSelectAssignment}
             />
           </div>
+          {todaySlots.length > 0 && (
+            <div className="relative mt-3 flex flex-wrap gap-2">
+              <span className="w-full text-xs font-medium text-slate-500 dark:text-slate-400">
+                حصص اليوم — اضغط للانتقال مباشرة
+              </span>
+              {todaySlots.map((slot) => {
+                const active = slot.assignmentId != null && slot.assignmentId === activeAssignmentId
+                return (
+                  <button
+                    key={`${slot.period}-${slot.className}-${slot.subjectNameAr}`}
+                    type="button"
+                    disabled={!slot.assignmentId}
+                    onClick={() => slot.assignmentId && onSelectAssignment?.(slot.assignmentId)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors',
+                      active
+                        ? 'border-blue-600 bg-blue-600 text-white'
+                        : 'border-slate-200 bg-white text-slate-800 hover:border-blue-300 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100',
+                      !slot.assignmentId && 'cursor-not-allowed opacity-50'
+                    )}
+                  >
+                    <span className="tabular-nums opacity-80">ح{slot.period}</span>
+                    <span>
+                      {slot.className} · {slot.subjectNameAr}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </div>
 

@@ -5,6 +5,13 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, idParam } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, notFound } from '../utils/errors.js';
+import { uploadTimetableFile } from '../middleware/upload.js';
+import { parseTimetableUpload } from '../services/timetablePdfParse.js';
+import {
+  applyTimetableImport,
+  getTeacherDaySchedule,
+  resolveTimetableSlots,
+} from '../services/timetableImport.js';
 
 const router = Router();
 
@@ -18,9 +25,7 @@ const createSchema = z.object({
 
 const syncSchema = z.object({
   teacherId: z.number().int().positive(),
-  /** Classes in scope — unchecked cells inside these classes are removed. */
   classIds: z.array(z.number().int().positive()).min(1),
-  /** Desired (classId, subjectId) pairs for this teacher. */
   items: z.array(
     z.object({
       classId: z.number().int().positive(),
@@ -34,6 +39,13 @@ const listQuery = z.object({
   classId: z.coerce.number().int().positive().optional(),
 });
 
+const todayQuery = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+
 const assignmentInclude = {
   teacher: { select: { id: true, name: true, email: true } },
   class: true,
@@ -44,6 +56,152 @@ function pairKey(classId, subjectId) {
   return `${classId}:${subjectId}`;
 }
 
+function todayLocal() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * GET /teacher-assignments/today?date=YYYY-MM-DD
+ * Today's timetable slots for the logged-in teacher (ordered by period).
+ */
+router.get(
+  '/today',
+  validateQuery(todayQuery),
+  asyncHandler(async (req, res) => {
+    const date = req.query.date || todayLocal();
+    if (req.user.role !== 'TEACHER') {
+      return res.json({ date, dayOfWeek: null, academicYear: null, slots: [] });
+    }
+    const schedule = await getTeacherDaySchedule(req.user.id, date);
+    res.json(schedule);
+  })
+);
+
+/**
+ * POST /teacher-assignments/import-timetable?dryRun=1
+ * Upload aSc PDF — always prefer dryRun first so admin can map short names → full names.
+ */
+router.post(
+  '/import-timetable',
+  requireRole('ADMIN'),
+  (req, res, next) => {
+    uploadTimetableFile(req, res, (err) => {
+      if (err) return next(err);
+      next();
+    });
+  },
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw badRequest('ارفع ملف الجدول (PDF أو Excel)');
+    const dryRun =
+      String(req.query.dryRun || '') === '1' ||
+      String(req.query.dryRun || '') === 'true' ||
+      req.query.dryRun === undefined; // default to preview/mapping flow
+
+    const parsed = await parseTimetableUpload(req.file);
+    if (!parsed.slots.length) {
+      throw badRequest(
+        parsed.errors?.[0]?.error ||
+          'لم يُستخرج أي درس من الملف. جرّب «teachers table.pdf» من aSc Timetables.'
+      );
+    }
+
+    if (dryRun) {
+      const preview = await resolveTimetableSlots(parsed.slots, { createMissingSubjects: false });
+      return res.json({
+        dryRun: true,
+        view: parsed.view,
+        fileName: req.file.originalname,
+        parseErrors: parsed.errors,
+        academicYear: preview.academicYear,
+        total: preview.total,
+        matched: preview.matched,
+        unresolved: preview.unresolved,
+        unmatchedTeachers: preview.unmatchedTeachers,
+        unmatchedClasses: preview.unmatchedClasses,
+        unmatchedSubjects: preview.unmatchedSubjects,
+        sample: preview.sample,
+        teacherMappings: preview.teacherMappings,
+        classMappings: preview.classMappings,
+        subjectMappings: preview.subjectMappings,
+        teacherOptions: preview.teacherOptions,
+        classOptions: preview.classOptions,
+        subjectOptions: preview.subjectOptions,
+        slots: preview.slots,
+      });
+    }
+
+    const result = await applyTimetableImport(parsed.slots);
+    res.json({
+      dryRun: false,
+      view: parsed.view,
+      fileName: req.file.originalname,
+      parseErrors: parsed.errors,
+      ...result,
+    });
+  })
+);
+
+const confirmSchema = z.object({
+  slots: z
+    .array(
+      z.object({
+        teacherName: z.string().min(1),
+        classLabel: z.string().min(1),
+        subjectName: z.string().min(1),
+        dayOfWeek: z.enum(['SUN', 'MON', 'TUE', 'WED', 'THU']),
+        period: z.union([z.string(), z.number()]).transform(String),
+      })
+    )
+    .min(1),
+  teacherMap: z.record(z.string(), z.number().int().positive()).default({}),
+  /** Timetable short names → create new TEACHER accounts (edit full name later in staff). */
+  createTeachers: z.array(z.string().min(1)).default([]),
+  classMap: z.record(z.string(), z.number().int().positive()).default({}),
+  subjectMap: z.record(z.string(), z.number().int().positive()).default({}),
+  fileName: z.string().optional(),
+  view: z.string().optional(),
+  academicYear: z.string().optional(),
+});
+
+/**
+ * POST /teacher-assignments/import-timetable/confirm
+ * Apply parsed slots after admin finishes the name-mapping grid.
+ */
+router.post(
+  '/import-timetable/confirm',
+  requireRole('ADMIN'),
+  validateBody(confirmSchema),
+  asyncHandler(async (req, res) => {
+    const {
+      slots,
+      teacherMap,
+      createTeachers,
+      classMap,
+      subjectMap,
+      fileName,
+      view,
+      academicYear,
+    } = req.body;
+    const result = await applyTimetableImport(slots, {
+      academicYear,
+      teacherMap,
+      createTeachers,
+      classMap,
+      subjectMap,
+    });
+    res.json({
+      dryRun: false,
+      view: view || null,
+      fileName: fileName || 'timetable',
+      ...result,
+    });
+  })
+);
+
 router.get(
   '/',
   validateQuery(listQuery),
@@ -52,8 +210,6 @@ router.get(
     if (req.query.teacherId) where.teacherId = req.query.teacherId;
     if (req.query.classId) where.classId = req.query.classId;
 
-    // Teachers only see their own assignments; counselors get an empty list
-    // unless filtering by teacherId/classId (admin sees school-wide).
     if (req.user.role === 'TEACHER') {
       where.teacherId = req.user.id;
     } else if (req.user.role === 'COUNSELOR') {
@@ -111,11 +267,6 @@ router.post(
   })
 );
 
-/**
- * POST /teacher-assignments/sync
- * Replace a teacher's assignments for the given classIds with `items`.
- * Checking a cell owned by another teacher reassigns it to this teacher.
- */
 router.post(
   '/sync',
   requireRole('ADMIN'),

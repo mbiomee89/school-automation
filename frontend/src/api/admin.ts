@@ -482,6 +482,86 @@ export async function importNoorTeachersFile(file: File): Promise<ImportResult> 
   }
 }
 
+export type TimetableNameMapping = {
+  tableName: string
+  count: number
+  suggestedId: number | null
+  suggestedName: string | null
+}
+
+export type TimetableImportResult = {
+  dryRun: boolean
+  view?: string
+  fileName: string
+  academicYear?: string
+  total?: number
+  matched?: number
+  unresolved?: number
+  slotsCreated?: number
+  assignmentsCreated?: number
+  assignmentsReassigned?: number
+  teachersCreated?: number
+  defaultPassword?: string | null
+  unmatchedTeachers?: Array<{ name: string; count: number }>
+  unmatchedClasses?: Array<{ name: string; count: number }>
+  unmatchedSubjects?: Array<{ name: string; count: number }>
+  sample?: Array<{
+    teacherName: string
+    classLabel: string
+    subjectName: string
+    dayOfWeek: string
+    period: string
+  }>
+  slots?: Array<{
+    teacherName: string
+    classLabel: string
+    subjectName: string
+    dayOfWeek: string
+    period: string
+  }>
+  teacherMappings?: TimetableNameMapping[]
+  classMappings?: TimetableNameMapping[]
+  subjectMappings?: TimetableNameMapping[]
+  teacherOptions?: Array<{ id: number; name: string }>
+  classOptions?: Array<{ id: number; name: string }>
+  subjectOptions?: Array<{ id: number; nameAr: string }>
+}
+
+/** Upload aSc PDF/Excel → preview + mapping suggestions (always dry-run). */
+export async function importTimetableFile(file: File): Promise<TimetableImportResult> {
+  const form = new FormData()
+  form.append('file', file)
+  const data = await apiRequest<TimetableImportResult>(
+    '/teacher-assignments/import-timetable?dryRun=1',
+    {
+      method: 'POST',
+      body: form,
+    }
+  )
+  return { ...data, fileName: data.fileName || file.name, dryRun: true }
+}
+
+/** Apply import after admin confirms the name-mapping grid. */
+export async function confirmTimetableImport(payload: {
+  slots: NonNullable<TimetableImportResult['slots']>
+  teacherMap: Record<string, number>
+  createTeachers?: string[]
+  classMap: Record<string, number>
+  subjectMap: Record<string, number>
+  fileName?: string
+  view?: string
+  academicYear?: string
+}): Promise<TimetableImportResult> {
+  const data = await apiRequest<TimetableImportResult>(
+    '/teacher-assignments/import-timetable/confirm',
+    {
+      method: 'POST',
+      body: payload,
+    }
+  )
+  return { ...data, dryRun: false }
+}
+
 export async function importStudents(
   classId: number,
   fileName: string,

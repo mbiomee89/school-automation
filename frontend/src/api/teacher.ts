@@ -50,6 +50,29 @@ export async function listTeacherAssignments(): Promise<TeacherAssignmentOption[
   }))
 }
 
+export type TeacherDaySlot = {
+  id: number
+  period: string
+  dayOfWeek: string
+  classId: number
+  className: string
+  subjectId: number
+  subjectNameAr: string
+  subjectNameEn: string
+  assignmentId: number | null
+}
+
+/** Today's timetable lessons for the logged-in teacher. */
+export async function getTeacherToday(date?: string): Promise<{
+  date: string
+  dayOfWeek: string | null
+  academicYear: string | null
+  slots: TeacherDaySlot[]
+}> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : ''
+  return apiRequest(`/teacher-assignments/today${qs}`)
+}
+
 export async function listRoster(classId: number): Promise<RosterStudent[]> {
   const data = await apiRequest<{
     students: Array<{ id: string; nameAr: string; nameEn: string }>

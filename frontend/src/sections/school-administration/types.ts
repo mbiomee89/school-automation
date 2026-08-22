@@ -136,6 +136,52 @@ export interface ImportResult {
   defaultPassword?: string | null
 }
 
+export interface TimetableNameMapping {
+  tableName: string
+  count: number
+  suggestedId: number | null
+  suggestedName: string | null
+}
+
+export interface TimetableImportResult {
+  dryRun: boolean
+  view?: string
+  fileName: string
+  academicYear?: string
+  total?: number
+  matched?: number
+  unresolved?: number
+  slotsCreated?: number
+  assignmentsCreated?: number
+  assignmentsReassigned?: number
+  teachersCreated?: number
+  defaultPassword?: string | null
+  unmatchedTeachers?: Array<{ name: string; count: number }>
+  unmatchedClasses?: Array<{ name: string; count: number }>
+  unmatchedSubjects?: Array<{ name: string; count: number }>
+  sample?: Array<{
+    teacherName: string
+    classLabel: string
+    subjectName: string
+    dayOfWeek: string
+    period: string
+  }>
+  /** Parsed slots kept for confirm-after-mapping */
+  slots?: Array<{
+    teacherName: string
+    classLabel: string
+    subjectName: string
+    dayOfWeek: string
+    period: string
+  }>
+  teacherMappings?: TimetableNameMapping[]
+  classMappings?: TimetableNameMapping[]
+  subjectMappings?: TimetableNameMapping[]
+  teacherOptions?: Array<{ id: number; name: string }>
+  classOptions?: Array<{ id: number; name: string }>
+  subjectOptions?: Array<{ id: number; nameAr: string }>
+}
+
 export interface NotificationLogItem {
   id: number
   eventType: NotificationEventType
@@ -268,6 +314,17 @@ export interface SchoolAdministrationProps {
   onImportTeachers?: (file: File) => void | Promise<void>
   /** Last teachers-import result (separate from student importResult) */
   teacherImportResult?: ImportResult | null
+  /** Last aSc timetable import result */
+  timetableImportResult?: TimetableImportResult | null
+  /** Upload aSc Timetables PDF — opens mapping grid (preview). */
+  onImportTimetable?: (file: File) => void | Promise<void>
+  /** Confirm import after admin finishes name mapping grid. */
+  onConfirmTimetableImport?: (payload: {
+    teacherMap: Record<string, number>
+    createTeachers: string[]
+    classMap: Record<string, number>
+    subjectMap: Record<string, number>
+  }) => void | Promise<void>
   /** Filter notification log */
   onFilterNotifications?: (filters: {
     status?: NotificationStatus | 'ALL'

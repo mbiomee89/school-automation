@@ -213,7 +213,10 @@ export function AdminDashboard({
   onRemoveAssignment,
   onImportStudents,
   onImportTeachers,
+  onImportTimetable,
+  onConfirmTimetableImport,
   teacherImportResult = null,
+  timetableImportResult = null,
   onPrint,
   onSaveSchoolSettings,
   onUploadSchoolLogo,
@@ -263,6 +266,34 @@ export function AdminDashboard({
   const [yearFilter, setYearFilter] = useState(academicYearFilter ?? overviewStats.academicYear)
   const [importBusy, setImportBusy] = useState(false)
   const [teacherImportBusy, setTeacherImportBusy] = useState(false)
+  const [timetableBusy, setTimetableBusy] = useState(false)
+  const [timetableConfirmBusy, setTimetableConfirmBusy] = useState(false)
+  const [teacherMapDraft, setTeacherMapDraft] = useState<Record<string, number | '' | '__create__'>>(
+    {}
+  )
+  const [classMapDraft, setClassMapDraft] = useState<Record<string, number | ''>>({})
+  const [subjectMapDraft, setSubjectMapDraft] = useState<Record<string, number | ''>>({})
+
+  useEffect(() => {
+    if (!timetableImportResult?.dryRun) return
+    const t: Record<string, number | '' | '__create__'> = {}
+    for (const row of timetableImportResult.teacherMappings ?? []) {
+      // No suggestion → default to create-from-table (common when teacher not in Noor yet)
+      t[row.tableName] = row.suggestedId ?? '__create__'
+    }
+    const c: Record<string, number | ''> = {}
+    for (const row of timetableImportResult.classMappings ?? []) {
+      c[row.tableName] = row.suggestedId ?? ''
+    }
+    const s: Record<string, number | ''> = {}
+    for (const row of timetableImportResult.subjectMappings ?? []) {
+      s[row.tableName] = row.suggestedId ?? ''
+    }
+    setTeacherMapDraft(t)
+    setClassMapDraft(c)
+    setSubjectMapDraft(s)
+  }, [timetableImportResult])
+
 
   const [settingsForm, setSettingsForm] = useState({
     name: schoolSettings.name,
@@ -1298,6 +1329,295 @@ export function AdminDashboard({
 
         {currentTab === 'assignments' && (
           <div className="space-y-3">
+            <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-4 dark:border-blue-500/30 dark:bg-blue-950/30">
+              <h3 className="font-bold text-slate-900 dark:text-slate-50">استيراد الجدول الدراسي (aSc)</h3>
+              <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
+                ارفع <span className="font-semibold">teachers table.pdf</span> ثم طابق أسماء الجدول
+                القصيرة مع الأسماء الكاملة في النظام، ثم احفظ.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <label
+                  className={
+                    timetableBusy
+                      ? 'cursor-not-allowed rounded-md bg-blue-600/50 px-3 py-2 text-sm font-semibold text-white opacity-50'
+                      : 'cursor-pointer rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700'
+                  }
+                >
+                  {timetableBusy ? 'جارٍ التحليل…' : 'رفع ملف الجدول'}
+                  <input
+                    type="file"
+                    accept=".pdf,.xlsx,.xls,.csv,application/pdf"
+                    className="hidden"
+                    disabled={timetableBusy}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0]
+                      e.target.value = ''
+                      if (!file || !onImportTimetable) return
+                      setTimetableBusy(true)
+                      try {
+                        await onImportTimetable(file)
+                      } finally {
+                        setTimetableBusy(false)
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              {timetableImportResult?.dryRun && (
+                <div className="mt-4 space-y-4 rounded-md border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
+                  <div className="font-semibold text-slate-900 dark:text-slate-50">
+                    مطابقة الأسماء · {timetableImportResult.fileName}
+                    {timetableImportResult.view ? ` · ${timetableImportResult.view}` : ''}
+                  </div>
+                  <p className="text-slate-600 dark:text-slate-300">
+                    دروس: {timetableImportResult.total ?? '—'} · اقتراحات تلقائية جاهزة — راجع الشبكة
+                    وعدّل ما يلزم ثم احفظ.
+                  </p>
+
+                  {(timetableImportResult.teacherMappings?.length ?? 0) > 0 && (
+                    <div className="overflow-x-auto">
+                      <h4 className="mb-2 font-bold">المعلمون (اسم الجدول → الاسم الكامل)</h4>
+                      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                        إن لم يوجد المعلم في نور: اختر «إنشاء من اسم الجدول» ثم عدّل الاسم الكامل لاحقاً من
+                        تبويب الموظفين.
+                      </p>
+                      <table className="min-w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-start dark:border-slate-700">
+                            <th className="px-2 py-2 font-semibold">في الجدول</th>
+                            <th className="px-2 py-2 font-semibold">حصص</th>
+                            <th className="px-2 py-2 font-semibold">المعلم في النظام</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timetableImportResult.teacherMappings!.map((row) => (
+                            <tr
+                              key={row.tableName}
+                              className="border-b border-slate-100 dark:border-slate-800"
+                            >
+                              <td className="px-2 py-2 font-medium">{row.tableName}</td>
+                              <td className="px-2 py-2 tabular-nums text-slate-500">{row.count}</td>
+                              <td className="px-2 py-2">
+                                <select
+                                  value={
+                                    teacherMapDraft[row.tableName] === '__create__'
+                                      ? '__create__'
+                                      : (teacherMapDraft[row.tableName] ?? '')
+                                  }
+                                  onChange={(e) => {
+                                    const v = e.target.value
+                                    setTeacherMapDraft((prev) => ({
+                                      ...prev,
+                                      [row.tableName]:
+                                        v === '__create__' ? '__create__' : v ? Number(v) : '',
+                                    }))
+                                  }}
+                                  className={`min-h-10 w-full min-w-[14rem] rounded-md border px-2 py-1.5 dark:bg-slate-950 ${
+                                    teacherMapDraft[row.tableName]
+                                      ? 'border-emerald-400 dark:border-emerald-600'
+                                      : 'border-amber-400 dark:border-amber-600'
+                                  }`}
+                                >
+                                  <option value="">— اختر المعلم —</option>
+                                  <option value="__create__">
+                                    ＋ إنشاء من اسم الجدول (تعديل الاسم لاحقاً)
+                                  </option>
+                                  {(timetableImportResult.teacherOptions ?? []).map((opt) => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {(timetableImportResult.classMappings?.length ?? 0) > 0 && (
+                    <div className="overflow-x-auto">
+                      <h4 className="mb-2 font-bold">الفصول</h4>
+                      <table className="min-w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-start dark:border-slate-700">
+                            <th className="px-2 py-2 font-semibold">في الجدول</th>
+                            <th className="px-2 py-2 font-semibold">حصص</th>
+                            <th className="px-2 py-2 font-semibold">الفصل في النظام</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timetableImportResult.classMappings!.map((row) => (
+                            <tr
+                              key={row.tableName}
+                              className="border-b border-slate-100 dark:border-slate-800"
+                            >
+                              <td className="px-2 py-2 font-medium">{row.tableName}</td>
+                              <td className="px-2 py-2 tabular-nums text-slate-500">{row.count}</td>
+                              <td className="px-2 py-2">
+                                <select
+                                  value={classMapDraft[row.tableName] ?? ''}
+                                  onChange={(e) =>
+                                    setClassMapDraft((prev) => ({
+                                      ...prev,
+                                      [row.tableName]: e.target.value ? Number(e.target.value) : '',
+                                    }))
+                                  }
+                                  className={`min-h-10 w-full min-w-[12rem] rounded-md border px-2 py-1.5 dark:bg-slate-950 ${
+                                    classMapDraft[row.tableName]
+                                      ? 'border-emerald-400 dark:border-emerald-600'
+                                      : 'border-amber-400 dark:border-amber-600'
+                                  }`}
+                                >
+                                  <option value="">— اختر الفصل —</option>
+                                  {(timetableImportResult.classOptions ?? []).map((opt) => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {(timetableImportResult.subjectMappings?.length ?? 0) > 0 && (
+                    <div className="overflow-x-auto">
+                      <h4 className="mb-2 font-bold">المواد</h4>
+                      <table className="min-w-full border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b border-slate-200 text-start dark:border-slate-700">
+                            <th className="px-2 py-2 font-semibold">في الجدول</th>
+                            <th className="px-2 py-2 font-semibold">حصص</th>
+                            <th className="px-2 py-2 font-semibold">المادة في النظام</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {timetableImportResult.subjectMappings!.map((row) => (
+                            <tr
+                              key={row.tableName}
+                              className="border-b border-slate-100 dark:border-slate-800"
+                            >
+                              <td className="px-2 py-2 font-medium">{row.tableName}</td>
+                              <td className="px-2 py-2 tabular-nums text-slate-500">{row.count}</td>
+                              <td className="px-2 py-2">
+                                <select
+                                  value={subjectMapDraft[row.tableName] ?? ''}
+                                  onChange={(e) =>
+                                    setSubjectMapDraft((prev) => ({
+                                      ...prev,
+                                      [row.tableName]: e.target.value ? Number(e.target.value) : '',
+                                    }))
+                                  }
+                                  className={`min-h-10 w-full min-w-[12rem] rounded-md border px-2 py-1.5 dark:bg-slate-950 ${
+                                    subjectMapDraft[row.tableName]
+                                      ? 'border-emerald-400 dark:border-emerald-600'
+                                      : 'border-amber-400 dark:border-amber-600'
+                                  }`}
+                                >
+                                  <option value="">— اختر المادة (أو تُنشأ تلقائياً) —</option>
+                                  {(timetableImportResult.subjectOptions ?? []).map((opt) => (
+                                    <option key={opt.id} value={opt.id}>
+                                      {opt.nameAr}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      disabled={timetableConfirmBusy || !onConfirmTimetableImport}
+                      onClick={async () => {
+                        const teacherMap: Record<string, number> = {}
+                        const createTeachers: string[] = []
+                        for (const [k, v] of Object.entries(teacherMapDraft)) {
+                          if (v === '__create__') createTeachers.push(k)
+                          else if (typeof v === 'number') teacherMap[k] = v
+                        }
+                        const classMap: Record<string, number> = {}
+                        for (const [k, v] of Object.entries(classMapDraft)) {
+                          if (typeof v === 'number') classMap[k] = v
+                        }
+                        const subjectMap: Record<string, number> = {}
+                        for (const [k, v] of Object.entries(subjectMapDraft)) {
+                          if (typeof v === 'number') subjectMap[k] = v
+                        }
+                        const missingTeachers = (timetableImportResult.teacherMappings ?? []).filter(
+                          (r) =>
+                            teacherMap[r.tableName] == null && !createTeachers.includes(r.tableName)
+                        )
+                        const missingClasses = (timetableImportResult.classMappings ?? []).filter(
+                          (r) => classMap[r.tableName] == null
+                        )
+                        if (missingTeachers.length || missingClasses.length) {
+                          window.alert(
+                            `أكمل المطابقة أولاً: ${missingTeachers.length} معلم، ${missingClasses.length} فصل بدون اختيار.`
+                          )
+                          return
+                        }
+                        setTimetableConfirmBusy(true)
+                        try {
+                          await onConfirmTimetableImport?.({
+                            teacherMap,
+                            createTeachers,
+                            classMap,
+                            subjectMap,
+                          })
+                        } finally {
+                          setTimetableConfirmBusy(false)
+                        }
+                      }}
+                      className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                    >
+                      {timetableConfirmBusy ? 'جارٍ الحفظ…' : 'تأكيد المطابقة وحفظ الجدول'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+                  {timetableImportResult && !timetableImportResult.dryRun && (
+                <div className="mt-3 space-y-1 rounded-md border border-emerald-200 bg-emerald-50/80 p-3 text-sm dark:border-emerald-800 dark:bg-emerald-950/40">
+                  <div className="font-semibold text-emerald-900 dark:text-emerald-100">
+                    تم الاستيراد: {timetableImportResult.fileName}
+                  </div>
+                  <div className="text-emerald-800 dark:text-emerald-200">
+                    حصص محفوظة: {timetableImportResult.slotsCreated ?? 0} · توزيع جديد:{' '}
+                    {timetableImportResult.assignmentsCreated ?? 0} · أُعيد تعيين:{' '}
+                    {timetableImportResult.assignmentsReassigned ?? 0}
+                    {(timetableImportResult.teachersCreated ?? 0) > 0
+                      ? ` · معلمون أُنشئوا: ${timetableImportResult.teachersCreated}`
+                      : ''}
+                  </div>
+                  {timetableImportResult.defaultPassword && (
+                    <div className="text-amber-800 dark:text-amber-200">
+                      كلمة مرور المعلمين الجدد:{' '}
+                      <span className="font-mono font-bold">
+                        {timetableImportResult.defaultPassword}
+                      </span>{' '}
+                      — عدّل الأسماء الكاملة من تبويب الموظفين.
+                    </div>
+                  )}
+                  {(timetableImportResult.unresolved ?? 0) > 0 && (
+                    <div className="text-amber-700 dark:text-amber-300">
+                      دروس لم تُحفظ: {timetableImportResult.unresolved}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm text-slate-500 dark:text-slate-400">
                 عيّن للمعلم عدة فصول ومواد دفعة واحدة من شبكة التوزيع.

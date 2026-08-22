@@ -142,6 +142,29 @@ export const uploadNoorSpreadsheet = multer({
   },
 }).single('file');
 
+const ALLOWED_TIMETABLE_MIME = new Set([
+  ...ALLOWED_SPREADSHEET_MIME,
+  'application/pdf',
+]);
+
+/** In-memory upload for aSc timetable PDF or flat Excel/CSV. */
+export const uploadTimetableFile = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_SPREADSHEET_SIZE_BYTES },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    const okExt =
+      name.endsWith('.pdf') ||
+      name.endsWith('.xlsx') ||
+      name.endsWith('.xls') ||
+      name.endsWith('.csv');
+    if (!okExt && !ALLOWED_TIMETABLE_MIME.has(file.mimetype)) {
+      return cb(badRequest('يُقبل PDF أو Excel (.xlsx/.xls) أو CSV'));
+    }
+    cb(null, true);
+  },
+}).single('file');
+
 /** Relative path (e.g. "logos/abc123.png") -> public URL under /uploads, or null. */
 export function logoPathToUrl(logoPath) {
   if (!logoPath) return null;

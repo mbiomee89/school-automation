@@ -68,6 +68,13 @@ export interface TeacherDailyWorkflowProps {
   /** This teacher's class+subject assignments, for the assignment selector. */
   assignments: TeacherAssignmentOption[]
   activeAssignmentId: number | null
+  /** Today's timetable lessons (from import); empty if no schedule. */
+  todaySlots?: Array<{
+    period: string
+    className: string
+    subjectNameAr: string
+    assignmentId: number | null
+  }>
   /** Students in the class of the currently selected assignment. */
   roster: RosterStudent[]
   /** Today's date (YYYY-MM-DD), used to label the attendance/late/homework tabs. */

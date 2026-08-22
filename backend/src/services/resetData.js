@@ -271,6 +271,7 @@ export async function resetDataKeepAdmin(db) {
   await wipe('lateReports', async () => (await db.lateReport.deleteMany()).count);
   await wipe('homework', async () => (await db.homework.deleteMany()).count);
   await wipe('weeklyPlans', async () => (await db.weeklyPlan.deleteMany()).count);
+  await wipe('timetableSlots', async () => (await db.timetableSlot.deleteMany()).count);
   await wipe(
     'classEnrollments',
     async () => (await db.classEnrollment.deleteMany()).count

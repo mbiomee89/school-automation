@@ -52,6 +52,7 @@ model User {
   createdAt          DateTime @default(now())
 
   assignments    TeacherAssignment[]
+  timetableSlots TimetableSlot[]
   attendance     Attendance[]          @relation("AttendanceRecordedBy")
   homework       Homework[]            @relation("HomeworkCreatedBy")
   lateReports    LateReport[]          @relation("LateReportRecordedBy")
@@ -71,6 +72,7 @@ model Class {
 
   students    Student[]
   assignments TeacherAssignment[]
+  timetableSlots TimetableSlot[]
   attendance  Attendance[]
   homework    Homework[]
   lateReports LateReport[]
@@ -86,6 +88,7 @@ model Subject {
   nameEn  String
 
   assignments TeacherAssignment[]
+  timetableSlots TimetableSlot[]
   homework    Homework[]
   weeklyPlans WeeklyPlan[]
 }
@@ -196,6 +199,28 @@ model TeacherAssignment {
 
   @@unique([classId, subjectId]) // one teacher only per class+subject
   @@index([teacherId, classId]) // assignment-guard lookups (class-level for attendance/late)
+}
+
+/// One lesson cell from aSc Timetables (day × period). Import fills these and
+/// upserts TeacherAssignment from distinct (teacher, class, subject) pairs.
+/// dayOfWeek: SUN MON TUE WED THU (Saudi school week). period: "1".."6".
+model TimetableSlot {
+  id           Int      @id @default(autoincrement())
+  teacherId    Int
+  teacher      User     @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  classId      Int
+  class        Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId    Int
+  subject      Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  dayOfWeek    String // SUN | MON | TUE | WED | THU
+  period       String // "1" .. "6"
+  academicYear String
+  createdAt    DateTime @default(now())
+
+  @@unique([teacherId, dayOfWeek, period, academicYear])
+  @@unique([classId, dayOfWeek, period, academicYear])
+  @@index([teacherId, dayOfWeek, academicYear])
+  @@index([academicYear])
 }
 
 // ---------- Daily workflow tables ----------

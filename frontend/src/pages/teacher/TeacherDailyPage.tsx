@@ -11,6 +11,7 @@ import {
   getWeeklyPlan,
   listRoster,
   listTeacherAssignments,
+  getTeacherToday,
   saveAttendance,
   saveWeeklyPlan,
   todayDateStr,
@@ -40,6 +41,14 @@ export function TeacherDailyPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<TeacherAssignmentOption[]>([])
+  const [todaySlots, setTodaySlots] = useState<
+    Array<{
+      period: string
+      className: string
+      subjectNameAr: string
+      assignmentId: number | null
+    }>
+  >([])
   const [activeAssignmentId, setActiveAssignmentId] = useState<number | null>(null)
   const [roster, setRoster] = useState<RosterStudent[]>([])
   const [attendanceMarks, setAttendanceMarks] = useState<AttendanceMark[]>([])
@@ -75,16 +84,35 @@ export function TeacherDailyPage() {
     let cancelled = false
     ;(async () => {
       try {
-        const list = await listTeacherAssignments()
+        const [list, schedule] = await Promise.all([
+          listTeacherAssignments(),
+          getTeacherToday(today).catch(() => ({
+            date: today,
+            dayOfWeek: null,
+            academicYear: null,
+            slots: [],
+          })),
+        ])
         if (cancelled) return
         setAssignments(list)
+        const slots = (schedule.slots || []).map((s) => ({
+          period: s.period,
+          className: s.className,
+          subjectNameAr: s.subjectNameAr,
+          assignmentId: s.assignmentId,
+        }))
+        setTodaySlots(slots)
         if (list.length === 0) {
           setActiveAssignmentId(null)
           return
         }
-        const first = list[0]
-        setActiveAssignmentId(first.id)
-        await loadAssignmentData(first, weekStartSaturday(today))
+        // Prefer first today's lesson with an assignment; else first assignment
+        const fromSchedule =
+          slots.find((s) => s.assignmentId != null)?.assignmentId ??
+          list[0].id
+        const initial = list.find((a) => a.id === fromSchedule) ?? list[0]
+        setActiveAssignmentId(initial.id)
+        await loadAssignmentData(initial, weekStartSaturday(today))
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : 'تعذّر تحميل أعمال المعلم')
@@ -133,6 +161,7 @@ export function TeacherDailyPage() {
     <TeacherDailyWorkflow
       assignments={assignments}
       activeAssignmentId={activeAssignmentId}
+      todaySlots={todaySlots}
       roster={roster}
       todayDate={today}
       attendanceSavedAt={attendanceSavedAt}

@@ -14,6 +14,8 @@ import {
   getStudentStats,
   importNoorFile,
   importNoorTeachersFile,
+  importTimetableFile,
+  confirmTimetableImport,
   listAssignments,
   listClasses,
   listEnrollments,
@@ -48,6 +50,7 @@ import type {
   ImportResult,
   OverviewStats,
   SchoolSettings,
+  TimetableImportResult,
   Staff,
   StaffInput,
   Student,
@@ -91,6 +94,7 @@ export function AdministrationPage() {
   const [assignmentsLoaded, setAssignmentsLoaded] = useState(false)
   const [importResult, setImportResult] = useState<ImportResult | null>(null)
   const [teacherImportResult, setTeacherImportResult] = useState<ImportResult | null>(null)
+  const [timetableImportResult, setTimetableImportResult] = useState<TimetableImportResult | null>(null)
   const studentsLoadGen = useRef(0)
 
   const studentsActiveFilter = useRef<'true' | 'false' | 'all'>('true')
@@ -414,6 +418,7 @@ export function AdministrationPage() {
         }
       }}
       teacherImportResult={teacherImportResult}
+      timetableImportResult={timetableImportResult}
       onImportStudents={async (file) => {
         try {
           const result = await importNoorFile(file)
@@ -436,6 +441,37 @@ export function AdministrationPage() {
           setStaff(await listUsers())
         } catch (err) {
           alertError(err, 'فشل استيراد المعلمين')
+        }
+      }}
+      onImportTimetable={async (file) => {
+        try {
+          const result = await importTimetableFile(file)
+          setTimetableImportResult(result)
+        } catch (err) {
+          alertError(err, 'فشل تحليل الجدول الدراسي')
+        }
+      }}
+      onConfirmTimetableImport={async (maps) => {
+        if (!timetableImportResult?.slots?.length) {
+          window.alert('ارفع ملف الجدول أولاً')
+          return
+        }
+        try {
+          const result = await confirmTimetableImport({
+            slots: timetableImportResult.slots,
+            teacherMap: maps.teacherMap,
+            createTeachers: maps.createTeachers,
+            classMap: maps.classMap,
+            subjectMap: maps.subjectMap,
+            fileName: timetableImportResult.fileName,
+            view: timetableImportResult.view,
+            academicYear: timetableImportResult.academicYear,
+          })
+          setTimetableImportResult(result)
+          setAssignmentsLoaded(false)
+          await Promise.all([loadAssignments(), listUsers().then(setStaff), listSubjects().then(setSubjects)])
+        } catch (err) {
+          alertError(err, 'فشل حفظ الجدول بعد المطابقة')
         }
       }}
       onPrint={(view) => {
@@ -461,6 +497,7 @@ export function AdministrationPage() {
 
         setImportResult(null)
         setTeacherImportResult(null)
+        setTimetableImportResult(null)
         setEnrollments([])
         setActiveTab('overview')
         await loadShell()
@@ -470,6 +507,7 @@ export function AdministrationPage() {
         const result = await restoreDataFromBackupFile(file)
         setImportResult(null)
         setTeacherImportResult(null)
+        setTimetableImportResult(null)
         setEnrollments([])
         setActiveTab('overview')
         setStudentsLoaded(false)
