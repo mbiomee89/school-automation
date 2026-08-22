@@ -530,7 +530,7 @@ router.get(
         {
           type: 'HOMEWORK_LOG',
           title: 'سجل الواجبات',
-          description: 'الواجبات المسجّلة لهذا اليوم',
+          description: 'جدول الواجبات للأسبوع (يوم × حصة)',
           iconHint: 'BOOK_OPEN',
           context: dateStr,
           count: homeworkCount,
