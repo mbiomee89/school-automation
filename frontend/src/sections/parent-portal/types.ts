@@ -45,6 +45,8 @@ export interface HomeworkItem {
   subjectNameEn: string
   description: string
   dueDate: string | null
+  period?: string | null
+  noHomework?: boolean
 }
 
 /** Saudi school weekdays (Sun–Thu). Weekend Fri/Sat are not planned. */
@@ -122,6 +124,9 @@ export interface ParentPortalProps {
   onToggleWaOptIn?: (optedIn: boolean) => void
   /** Log out of the parent portal */
   onLogout?: () => void
+  /** Date used to browse homework (YYYY-MM-DD). Defaults to today on the page. */
+  homeworkBrowseDate?: string
+  onHomeworkBrowseDateChange?: (date: string) => void
 }
 
 export type ParentLoginMode = 'login' | 'register'

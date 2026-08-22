@@ -10,7 +10,9 @@ import { parseTimetableUpload } from '../services/timetablePdfParse.js';
 import {
   applyTimetableImport,
   getTeacherDaySchedule,
+  getTeacherWeekSchedule,
   resolveTimetableSlots,
+  weekStartSunday,
 } from '../services/timetableImport.js';
 
 const router = Router();
@@ -40,6 +42,13 @@ const listQuery = z.object({
 });
 
 const todayQuery = z.object({
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+});
+
+const weekQuery = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
@@ -77,6 +86,29 @@ router.get(
       return res.json({ date, dayOfWeek: null, academicYear: null, slots: [] });
     }
     const schedule = await getTeacherDaySchedule(req.user.id, date);
+    res.json(schedule);
+  })
+);
+
+/**
+ * GET /teacher-assignments/week?date=YYYY-MM-DD
+ * Sun–Thu grid for the week containing date (teacher only).
+ */
+router.get(
+  '/week',
+  validateQuery(weekQuery),
+  asyncHandler(async (req, res) => {
+    const date = req.query.date || todayLocal();
+    if (req.user.role !== 'TEACHER') {
+      return res.json({
+        weekStart: weekStartSunday(date),
+        weekEnd: null,
+        academicYear: null,
+        editable: false,
+        days: [],
+      });
+    }
+    const schedule = await getTeacherWeekSchedule(req.user.id, date);
     res.json(schedule);
   })
 );

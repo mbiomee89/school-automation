@@ -62,6 +62,29 @@ export type TeacherDaySlot = {
   assignmentId: number | null
 }
 
+export type TeacherWeekSlot = TeacherDaySlot & {
+  date: string
+  homeworkId: number | null
+  noHomework: boolean
+  hasHomework: boolean
+  handled: boolean
+  description: string | null
+  dueDate: string | null
+}
+
+export type TeacherWeekGrid = {
+  weekStart: string
+  weekEnd: string
+  academicYear: string | null
+  editable: boolean
+  today?: string
+  days: Array<{
+    dayOfWeek: string
+    date: string
+    slots: TeacherWeekSlot[]
+  }>
+}
+
 /** Today's timetable lessons for the logged-in teacher. */
 export async function getTeacherToday(date?: string): Promise<{
   date: string
@@ -71,6 +94,21 @@ export async function getTeacherToday(date?: string): Promise<{
 }> {
   const qs = date ? `?date=${encodeURIComponent(date)}` : ''
   return apiRequest(`/teacher-assignments/today${qs}`)
+}
+
+/** Sunday on or before date (UTC date-only). */
+export function weekStartSunday(dateStr?: string) {
+  const base = dateStr ?? todayDateStr()
+  const [y, m, d] = base.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, m - 1, d))
+  utc.setUTCDate(utc.getUTCDate() - utc.getUTCDay())
+  return utc.toISOString().slice(0, 10)
+}
+
+/** Full Sun–Thu homework grid for the week containing date. */
+export async function getTeacherWeek(date?: string): Promise<TeacherWeekGrid> {
+  const qs = date ? `?date=${encodeURIComponent(date)}` : ''
+  return apiRequest(`/teacher-assignments/week${qs}`)
 }
 
 export async function listRoster(classId: number): Promise<RosterStudent[]> {
@@ -154,12 +192,18 @@ export async function deleteLateReport(id: number) {
   await apiRequest(`/late-reports/${id}`, { method: 'DELETE' })
 }
 
-export async function getHomework(classId: number, subjectId: number, date: string) {
+export async function getHomework(
+  classId: number,
+  subjectId: number,
+  date: string,
+  period?: string
+) {
   const qs = new URLSearchParams({
     classId: String(classId),
     subjectId: String(subjectId),
     date,
   })
+  if (period) qs.set('period', period)
   const data = await apiRequest<{ homework: HomeworkEntry[] }>(`/homework?${qs}`)
   return data.homework
 }
@@ -168,8 +212,10 @@ export async function addHomework(input: {
   classId: number
   subjectId: number
   date: string
-  description: string
+  period?: string
+  description?: string
   dueDate?: string | null
+  noHomework?: boolean
 }) {
   const data = await apiRequest<{ homework: HomeworkEntry }>('/homework', {
     method: 'POST',
@@ -180,7 +226,7 @@ export async function addHomework(input: {
 
 export async function updateHomework(
   id: number,
-  patch: { description?: string; dueDate?: string | null }
+  patch: { description?: string; dueDate?: string | null; noHomework?: boolean }
 ) {
   const data = await apiRequest<{ homework: HomeworkEntry }>(`/homework/${id}`, {
     method: 'PATCH',

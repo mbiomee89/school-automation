@@ -72,9 +72,21 @@ export async function getParentAttendance(studentId: string) {
   return data.attendance
 }
 
-export async function getParentHomework(studentId: string) {
+export async function getParentHomework(
+  studentId: string,
+  opts?: { from?: string; to?: string; date?: string }
+) {
+  const qs = new URLSearchParams()
+  if (opts?.date) {
+    qs.set('from', opts.date)
+    qs.set('to', opts.date)
+  } else {
+    if (opts?.from) qs.set('from', opts.from)
+    if (opts?.to) qs.set('to', opts.to)
+  }
+  const q = qs.toString()
   const data = await apiRequest<{ homework: HomeworkItem[] }>(
-    `/parent/students/${studentId}/homework`,
+    `/parent/students/${studentId}/homework${q ? `?${q}` : ''}`,
     { auth: 'parent' }
   )
   return data.homework

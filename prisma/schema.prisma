@@ -293,12 +293,18 @@ model Homework {
   teacherId   Int
   teacher     User     @relation("HomeworkCreatedBy", fields: [teacherId], references: [id], onDelete: Restrict)
   date        DateTime // date-only (UTC midnight) — digest job groups by this
+  /// Timetable period "1".."6". Empty string = legacy rows before grid homework.
+  period      String   @default("")
+  /// Teacher marked this cell as intentionally no homework (shown in reports).
+  noHomework  Boolean  @default(false)
   description String
   dueDate     DateTime?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@index([classId, subjectId, date, period])
   @@index([classId, date])
+  @@index([teacherId, date])
 }
 
 model LateReport {

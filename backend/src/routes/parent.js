@@ -176,7 +176,9 @@ router.get(
         date: toUtcMidnight(h.date).toISOString().slice(0, 10),
         subjectNameAr: h.subject.nameAr,
         subjectNameEn: h.subject.nameEn,
-        description: h.description,
+        period: h.period || null,
+        noHomework: Boolean(h.noHomework),
+        description: h.noHomework ? 'لا يوجد واجب' : h.description,
         dueDate: h.dueDate ? toUtcMidnight(h.dueDate).toISOString().slice(0, 10) : null,
       })),
     });

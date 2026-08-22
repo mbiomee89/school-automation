@@ -50,6 +50,9 @@ export function ParentPortalPage() {
   const [homeworkItems, setHomeworkItems] = useState<HomeworkItem[]>([])
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlanItem[]>([])
   const [excuseSubmissions, setExcuseSubmissions] = useState<ExcuseSubmission[]>([])
+  const [homeworkBrowseDate, setHomeworkBrowseDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  )
 
   useEffect(() => {
     if (students.length === 0) return
@@ -60,13 +63,13 @@ export function ParentPortalPage() {
 
   const loadGen = useRef(0)
 
-  const loadChild = useCallback(async (studentId: string) => {
+  const loadChild = useCallback(async (studentId: string, browseDate: string) => {
     const gen = ++loadGen.current
     setError(null)
     const [summary, attendance, homework, plans, excuses] = await Promise.all([
       getParentSummary(studentId),
       getParentAttendance(studentId),
-      getParentHomework(studentId),
+      getParentHomework(studentId, { date: browseDate }),
       getParentWeeklyPlans(studentId),
       getParentExcuses(studentId),
     ])
@@ -92,7 +95,7 @@ export function ParentPortalPage() {
     ;(async () => {
       setLoading(true)
       try {
-        await loadChild(activeChildId)
+        await loadChild(activeChildId, homeworkBrowseDate)
       } catch (err) {
         if (!cancelled && loadGen.current) {
           if (err instanceof ApiError && err.status === 401) {
@@ -113,7 +116,7 @@ export function ParentPortalPage() {
     return () => {
       cancelled = true
     }
-  }, [activeChildId, loadChild, logout, navigate])
+  }, [activeChildId, homeworkBrowseDate, loadChild, logout, navigate])
 
   if (bootstrapping) {
     return (
@@ -159,7 +162,7 @@ export function ParentPortalPage() {
           if (activeChildId) {
             setLoading(true)
             setError(null)
-            loadChild(activeChildId)
+            loadChild(activeChildId, homeworkBrowseDate)
               .catch((err) => {
                 if (err instanceof ApiError && err.status === 401) {
                   logout()
@@ -184,6 +187,8 @@ export function ParentPortalPage() {
       homeworkItems={homeworkItems}
       weeklyPlans={weeklyPlans}
       excuseSubmissions={excuseSubmissions}
+      homeworkBrowseDate={homeworkBrowseDate}
+      onHomeworkBrowseDateChange={setHomeworkBrowseDate}
       onSelectChild={setActiveChildId}
       onSubmitExcuse={async (input) => {
         const day = attendanceHistory.find(
@@ -195,7 +200,7 @@ export function ParentPortalPage() {
         }
         try {
           await submitExcuse(day.id, input.reasonText, input.file)
-          await loadChild(activeChildId)
+          await loadChild(activeChildId, homeworkBrowseDate)
         } catch (err) {
           window.alert(err instanceof ApiError ? err.message : 'فشل إرسال العذر')
         }

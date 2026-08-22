@@ -41,6 +41,8 @@ export interface HomeworkEntry {
   /** Date-only (YYYY-MM-DD); optional. */
   dueDate: string | null
   createdAt: string
+  period?: string | null
+  noHomework?: boolean
 }
 
 /** Saudi school weekdays (Sun–Thu). Weekend Fri/Sat are not planned. */

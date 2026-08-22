@@ -215,7 +215,9 @@ router.get(
       className: r.class.name,
       subjectName: r.subject.nameAr,
       teacherName: r.teacher.name,
-      description: r.description,
+      period: r.period || null,
+      noHomework: Boolean(r.noHomework),
+      description: r.noHomework ? 'لا يوجد واجب' : r.description,
       dueDate: r.dueDate ? toUtcMidnight(r.dueDate).toISOString().slice(0, 10) : null,
     }));
 

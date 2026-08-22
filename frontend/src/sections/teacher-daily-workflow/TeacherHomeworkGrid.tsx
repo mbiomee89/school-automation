@@ -1,0 +1,392 @@
+import { useEffect, useMemo, useState } from 'react'
+import { ChevronLeft, ChevronRight, X, Ban } from 'lucide-react'
+import { cn } from '../../shared/utils'
+import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
+import {
+  addHomework,
+  deleteHomework,
+  getTeacherWeek,
+  todayDateStr,
+  weekStartSunday,
+  type TeacherWeekGrid,
+  type TeacherWeekSlot,
+} from '../../api/teacher'
+import { ApiError } from '../../api/client'
+
+const DAY_LABELS: Record<string, string> = {
+  SUN: 'الأحد',
+  MON: 'الإثنين',
+  TUE: 'الثلاثاء',
+  WED: 'الأربعاء',
+  THU: 'الخميس',
+}
+
+const PERIODS = ['1', '2', '3', '4', '5', '6']
+
+function addDays(dateStr: string, days: number) {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const utc = new Date(Date.UTC(y, m - 1, d + days))
+  return utc.toISOString().slice(0, 10)
+}
+
+function alertError(err: unknown, fallback: string) {
+  window.alert(err instanceof ApiError ? err.message : fallback)
+}
+
+export function TeacherHomeworkGrid() {
+  const today = todayDateStr()
+  const [anchor, setAnchor] = useState(today)
+  const [grid, setGrid] = useState<TeacherWeekGrid | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<TeacherWeekSlot | null>(null)
+  const [description, setDescription] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function reload(nextAnchor = anchor) {
+    setLoading(true)
+    try {
+      const data = await getTeacherWeek(nextAnchor)
+      setGrid(data)
+    } catch (err) {
+      alertError(err, 'تعذّر تحميل جدول الواجبات')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void reload(anchor)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anchor])
+
+  const editable = grid?.editable ?? false
+  const weekStart = grid?.weekStart ?? weekStartSunday(anchor)
+  const currentWeekStart = weekStartSunday(today)
+
+  const cellMap = useMemo(() => {
+    const map = new Map<string, TeacherWeekSlot>()
+    for (const day of grid?.days ?? []) {
+      for (const slot of day.slots) {
+        map.set(`${day.dayOfWeek}|${slot.period}`, slot)
+      }
+    }
+    return map
+  }, [grid])
+
+  const missingToday = useMemo(() => {
+    if (!grid) return []
+    const todayDay = grid.days.find((d) => d.date === today)
+    if (!todayDay || !editable) return []
+    return todayDay.slots.filter((s) => !s.handled && s.assignmentId != null)
+  }, [grid, today, editable])
+
+  function openCell(slot: TeacherWeekSlot) {
+    setSelected(slot)
+    setDescription(slot.noHomework ? '' : slot.description || '')
+    setDueDate(slot.dueDate ?? '')
+  }
+
+  async function saveHomework() {
+    if (!selected || !editable) return
+    const trimmed = description.trim()
+    if (!trimmed) return
+    setBusy(true)
+    try {
+      await addHomework({
+        classId: selected.classId,
+        subjectId: selected.subjectId,
+        date: selected.date,
+        period: selected.period,
+        description: trimmed,
+        dueDate: dueDate || null,
+        noHomework: false,
+      })
+      setSelected(null)
+      await reload()
+    } catch (err) {
+      alertError(err, 'فشل حفظ الواجب')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function saveNoHomework() {
+    if (!selected || !editable) return
+    setBusy(true)
+    try {
+      await addHomework({
+        classId: selected.classId,
+        subjectId: selected.subjectId,
+        date: selected.date,
+        period: selected.period,
+        noHomework: true,
+      })
+      setSelected(null)
+      await reload()
+    } catch (err) {
+      alertError(err, 'فشل التسجيل')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removeHomework() {
+    if (!selected?.homeworkId || !editable) return
+    if (!window.confirm('حذف تسجيل هذه الحصة؟')) return
+    setBusy(true)
+    try {
+      await deleteHomework(selected.homeworkId)
+      setSelected(null)
+      await reload()
+    } catch (err) {
+      alertError(err, 'فشل الحذف')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">واجبات الأسبوع</h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            اضغط حصة لإضافة واجب · الأسابيع السابقة للعرض فقط
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+            onClick={() => setAnchor(addDays(weekStart, -7))}
+            aria-label="الأسبوع السابق"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+          <span className="min-w-36 text-center text-sm font-semibold tabular-nums" dir="ltr">
+            {weekStart} → {addDays(weekStart, 4)}
+          </span>
+          <button
+            type="button"
+            className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+            onClick={() => setAnchor(addDays(weekStart, 7))}
+            disabled={weekStart >= currentWeekStart}
+            aria-label="الأسبوع التالي"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      {!editable && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          أسبوع سابق — عرض فقط، لا يمكن التعديل
+        </p>
+      )}
+
+      {editable && missingToday.length > 0 && (
+        <button
+          type="button"
+          onClick={() => openCell(missingToday[0])}
+          className="flex w-full items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-950 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-50"
+        >
+          <span>متبقي اليوم: {missingToday.length} حصة</span>
+          <span className="text-xs font-medium opacity-80">اضغط للانتقال</span>
+        </button>
+      )}
+
+      {loading || !grid ? (
+        <div className="flex justify-center py-16">
+          <span className={SPINNER_CLASS} aria-label="جارٍ التحميل" />
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+          <table className="w-full min-w-[640px] border-collapse text-sm">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/80">
+                <th className="border-b border-e border-slate-200 px-2 py-2 text-xs font-bold dark:border-slate-700">
+                  الحصة
+                </th>
+                {grid.days.map((day) => (
+                  <th
+                    key={day.dayOfWeek}
+                    className={cn(
+                      'border-b border-e border-slate-200 px-2 py-2 text-xs font-bold dark:border-slate-700',
+                      day.date === today && 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-100'
+                    )}
+                  >
+                    <div>{DAY_LABELS[day.dayOfWeek]}</div>
+                    <div className="mt-0.5 font-normal tabular-nums opacity-70" dir="ltr">
+                      {day.date.slice(5)}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {PERIODS.map((period) => (
+                <tr key={period}>
+                  <td className="border-b border-e border-slate-200 px-2 py-2 text-center text-xs font-bold tabular-nums dark:border-slate-700">
+                    {period}
+                  </td>
+                  {grid.days.map((day) => {
+                    const slot = cellMap.get(`${day.dayOfWeek}|${period}`)
+                    const isTodayCol = day.date === today
+                    if (!slot) {
+                      return (
+                        <td
+                          key={day.dayOfWeek}
+                          className={cn(
+                            'border-b border-e border-slate-100 bg-slate-50/50 px-1 py-1 dark:border-slate-800 dark:bg-slate-950/40',
+                            isTodayCol && 'bg-blue-50/40 dark:bg-blue-500/5'
+                          )}
+                        />
+                      )
+                    }
+                    return (
+                      <td
+                        key={day.dayOfWeek}
+                        className={cn(
+                          'border-b border-e border-slate-200 p-1 dark:border-slate-700',
+                          isTodayCol && 'bg-blue-50/50 dark:bg-blue-500/10'
+                        )}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => openCell(slot)}
+                          className={cn(
+                            'flex min-h-16 w-full flex-col items-start gap-0.5 rounded-lg border px-2 py-1.5 text-start transition-colors',
+                            slot.hasHomework &&
+                              'border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10',
+                            slot.noHomework &&
+                              'border-slate-300 bg-slate-100 dark:border-slate-600 dark:bg-slate-800',
+                            !slot.handled &&
+                              isTodayCol &&
+                              editable &&
+                              'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10',
+                            !slot.handled &&
+                              !(isTodayCol && editable) &&
+                              'border-slate-200 bg-white hover:border-blue-300 dark:border-slate-600 dark:bg-slate-900'
+                          )}
+                        >
+                          <span className="text-[11px] font-bold leading-tight text-slate-900 dark:text-slate-50">
+                            {slot.className}
+                          </span>
+                          <span className="text-[10px] leading-tight text-slate-600 dark:text-slate-300">
+                            {slot.subjectNameAr}
+                          </span>
+                          {slot.hasHomework && (
+                            <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">تم</span>
+                          )}
+                          {slot.noHomework && (
+                            <span className="text-[10px] font-semibold text-slate-500">لا يوجد واجب</span>
+                          )}
+                          {!slot.handled && isTodayCol && editable && (
+                            <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">
+                              لم يُسجّل
+                            </span>
+                          )}
+                        </button>
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {selected && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 sm:items-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <p className="text-xs text-slate-500">
+                  {DAY_LABELS[selected.dayOfWeek]} · الحصة {selected.period}
+                  <span className="mx-1">·</span>
+                  <span dir="ltr">{selected.date}</span>
+                </p>
+                <h3 className="mt-1 text-base font-bold text-slate-900 dark:text-slate-50">
+                  {selected.className} · {selected.subjectNameAr}
+                </h3>
+                {!editable && (
+                  <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">عرض فقط</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelected(null)}
+                className="rounded-lg p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
+              >
+                <X className="size-5" />
+              </button>
+            </div>
+
+            <label className="mt-4 block text-sm">
+              <span className="text-slate-600 dark:text-slate-400">وصف الواجب</span>
+              <textarea
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                rows={4}
+                disabled={!editable || busy}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950"
+              />
+            </label>
+
+            <label className="mt-3 block text-sm">
+              <span className="text-slate-600 dark:text-slate-400">تاريخ الاستحقاق (اختياري)</span>
+              <input
+                type="date"
+                min={selected.date}
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                disabled={!editable || busy}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950"
+              />
+            </label>
+
+            {editable && (
+              <div className="mt-4 flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={busy || !description.trim()}
+                  onClick={() => void saveHomework()}
+                  className={buttonVariants({ variant: 'primary', className: 'w-full disabled:opacity-50' })}
+                >
+                  {busy ? 'جارٍ الحفظ…' : selected.homeworkId && !selected.noHomework ? 'تحديث الواجب' : 'حفظ الواجب'}
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void saveNoHomework()}
+                  className={buttonVariants({ variant: 'secondary', className: 'w-full' })}
+                >
+                  <Ban className="size-4" />
+                  لا يوجد واجب
+                </button>
+                {selected.homeworkId ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void removeHomework()}
+                    className="text-sm font-medium text-rose-600 hover:underline dark:text-rose-400"
+                  >
+                    حذف التسجيل
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default TeacherHomeworkGrid

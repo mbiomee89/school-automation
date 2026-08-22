@@ -45,6 +45,8 @@ export function ParentPortal({
   onSelectAttendanceDay,
   onSubmitExcuse,
   onLogout,
+  homeworkBrowseDate,
+  onHomeworkBrowseDateChange,
 }: ParentPortalProps) {
   const [tab, setTab] = useState<ParentTab>(controlledTab ?? 'home')
   const [attendanceView, setAttendanceView] = useState<AttendanceView>('history')
@@ -188,7 +190,23 @@ export function ParentPortal({
                 ]}
               />
               {homeworkView === 'homework' ? (
-                <HomeworkList items={homeworkItems} />
+                <div className="space-y-3">
+                  {homeworkBrowseDate != null && onHomeworkBrowseDateChange ? (
+                    <label className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-800">
+                      <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                        عرض واجبات يوم
+                      </span>
+                      <input
+                        type="date"
+                        value={homeworkBrowseDate}
+                        onChange={(e) => onHomeworkBrowseDateChange(e.target.value)}
+                        className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm tabular-nums dark:border-slate-600 dark:bg-slate-900"
+                        dir="ltr"
+                      />
+                    </label>
+                  ) : null}
+                  <HomeworkList items={homeworkItems} />
+                </div>
               ) : (
                 <WeeklyPlanList items={weeklyPlans} />
               )}

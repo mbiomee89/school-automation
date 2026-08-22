@@ -663,3 +663,115 @@ export async function getTeacherDaySchedule(teacherId, dateStr, academicYear) {
       .sort((a, b) => Number(a.period) - Number(b.period)),
   };
 }
+
+/** Sunday (UTC date-only) on or before dateStr. */
+export function weekStartSunday(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const utc = new Date(Date.UTC(y, m - 1, d));
+  utc.setUTCDate(utc.getUTCDate() - utc.getUTCDay());
+  return utc.toISOString().slice(0, 10);
+}
+
+function addUtcDays(dateStr, days) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const utc = new Date(Date.UTC(y, m - 1, d + days));
+  return utc.toISOString().slice(0, 10);
+}
+
+const DAY_ORDER = ['SUN', 'MON', 'TUE', 'WED', 'THU'];
+
+/**
+ * Full Sun–Thu week grid for a teacher, plus homework status per cell for that week.
+ */
+export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicYear) {
+  const settings = await prisma.schoolSettings.findFirst();
+  const year = academicYear || settings?.academicYear;
+  const weekStart = weekStartSunday(anchorDateStr);
+  const today = (() => {
+    const n = new Date();
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+  })();
+  const currentWeekStart = weekStartSunday(today);
+  const editable = weekStart === currentWeekStart;
+
+  if (!year) {
+    return {
+      weekStart,
+      weekEnd: addUtcDays(weekStart, 4),
+      academicYear: null,
+      editable,
+      days: DAY_ORDER.map((dayOfWeek, i) => ({
+        dayOfWeek,
+        date: addUtcDays(weekStart, i),
+        slots: [],
+      })),
+    };
+  }
+
+  const weekEnd = addUtcDays(weekStart, 4);
+  const slots = await prisma.timetableSlot.findMany({
+    where: { teacherId, academicYear: year, dayOfWeek: { in: DAY_ORDER } },
+    include: { class: true, subject: true },
+  });
+
+  const assignments = await prisma.teacherAssignment.findMany({ where: { teacherId } });
+  const assignByPair = new Map(assignments.map((a) => [`${a.classId}:${a.subjectId}`, a]));
+
+  const from = new Date(`${weekStart}T00:00:00.000Z`);
+  const to = new Date(`${weekEnd}T00:00:00.000Z`);
+  const classIds = [...new Set(slots.map((s) => s.classId))];
+  const homeworkRows =
+    classIds.length === 0
+      ? []
+      : await prisma.homework.findMany({
+          where: {
+            classId: { in: classIds },
+            date: { gte: from, lte: to },
+            period: { not: '' },
+          },
+        });
+  const hwByKey = new Map();
+  for (const h of homeworkRows) {
+    const key = `${h.date.toISOString().slice(0, 10)}|${h.period}|${h.classId}|${h.subjectId}`;
+    hwByKey.set(key, h);
+  }
+
+  const days = DAY_ORDER.map((dayOfWeek, i) => {
+    const date = addUtcDays(weekStart, i);
+    const daySlots = slots
+      .filter((s) => s.dayOfWeek === dayOfWeek)
+      .map((s) => {
+        const assignment = assignByPair.get(`${s.classId}:${s.subjectId}`);
+        const hw = hwByKey.get(`${date}|${s.period}|${s.classId}|${s.subjectId}`);
+        return {
+          id: s.id,
+          period: s.period,
+          dayOfWeek: s.dayOfWeek,
+          date,
+          classId: s.classId,
+          className: s.class.name,
+          subjectId: s.subjectId,
+          subjectNameAr: s.subject.nameAr,
+          subjectNameEn: s.subject.nameEn,
+          assignmentId: assignment?.id ?? null,
+          homeworkId: hw?.id ?? null,
+          noHomework: hw?.noHomework ?? false,
+          hasHomework: Boolean(hw && !hw.noHomework),
+          handled: Boolean(hw),
+          description: hw && !hw.noHomework ? hw.description : null,
+          dueDate: hw?.dueDate ? hw.dueDate.toISOString().slice(0, 10) : null,
+        };
+      })
+      .sort((a, b) => Number(a.period) - Number(b.period));
+    return { dayOfWeek, date, slots: daySlots };
+  });
+
+  return {
+    weekStart,
+    weekEnd,
+    academicYear: year,
+    editable,
+    today,
+    days,
+  };
+}
