@@ -22,7 +22,8 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'محاولات كثيرة، حاول لاحقاً' },
-  validate: { keyGeneratorIpFallback: false },
+  // Custom key: IP + email/phone. Do not set removed validate flags
+  // (e.g. keyGeneratorIpFallback) — newer express-rate-limit rejects them.
   keyGenerator: (req) => {
     const id =
       (typeof req.body?.phone === 'string' && req.body.phone.trim()) ||
