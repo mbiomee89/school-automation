@@ -62,12 +62,16 @@ function run(command, args) {
 
 describeDatabaseUrl(process.env.DATABASE_URL);
 
+// Dedupe against the live DB *before* db push applies new unique constraints.
 console.log('[start] dedupe teacher assignments…');
 run('node', ['scripts/dedupe-teacher-assignments.js']);
 
+console.log('[start] dedupe subjects (nameAr)…');
+run('node', ['scripts/dedupe-subjects.js']);
+
 // No --accept-data-loss: refuse destructive schema drift rather than wipe data.
 console.log('[start] prisma db push…');
-run('npx', ['prisma', 'db', 'push', '--schema=prisma/schema.prisma']);
+run('npx', ['prisma', 'db', 'push', '--schema=prisma/schema.prisma', '--skip-generate']);
 
 console.log('[start] seed…');
 run('node', ['prisma/seed.js']);
