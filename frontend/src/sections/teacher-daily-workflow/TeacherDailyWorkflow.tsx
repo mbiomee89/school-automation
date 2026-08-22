@@ -304,22 +304,80 @@ export function TeacherDailyWorkflow({
 
         {currentTab === 'homework' && (
           <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-            <HomeworkForm todayDate={todayDate} onSubmit={(entry) => onAddHomework?.(entry)} />
+            <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-slate-50">
+                فصولك اليوم — اختر حصة لإضافة واجب
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                من الجدول الدراسي المستورد. اضغط الحصة ثم اكتب الواجب أدناه.
+              </p>
+              {todaySlots.filter((s) => s.assignmentId != null).length === 0 ? (
+                <p className="mt-3 text-sm text-amber-800 dark:text-amber-200">
+                  لا توجد حصص مجدولة لك اليوم (أو لم يُستورد الجدول بعد). يمكنك اختيار فصل من القائمة أعلى
+                  الصفحة.
+                </p>
+              ) : (
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {todaySlots
+                    .filter((s) => s.assignmentId != null)
+                    .map((slot) => {
+                      const selected = slot.assignmentId === activeAssignmentId
+                      return (
+                        <li key={`${slot.period}-${slot.assignmentId}`}>
+                          <button
+                            type="button"
+                            onClick={() => onSelectAssignment?.(slot.assignmentId!)}
+                            className={cn(
+                              'flex w-full flex-col items-start gap-0.5 rounded-xl border px-3 py-3 text-start transition-colors',
+                              selected
+                                ? 'border-blue-600 bg-blue-600 text-white shadow-sm'
+                                : 'border-slate-200 bg-slate-50 text-slate-900 hover:border-blue-300 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-50'
+                            )}
+                          >
+                            <span
+                              className={cn(
+                                'text-[11px] font-semibold tabular-nums',
+                                selected ? 'text-blue-100' : 'text-slate-500 dark:text-slate-400'
+                              )}
+                            >
+                              الحصة {slot.period}
+                            </span>
+                            <span className="text-sm font-bold">{slot.className}</span>
+                            <span className={cn('text-xs', selected ? 'text-blue-50' : 'text-slate-600 dark:text-slate-300')}>
+                              {slot.subjectNameAr}
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                </ul>
+              )}
+            </section>
 
-            {homeworkToday.length === 0 ? (
-              <EmptyState icon={BookOpenCheck} title="لا توجد واجبات اليوم" description="الواجبات التي تضيفها لهذا الفصل والمادة ستظهر هنا." />
-            ) : (
-              <ul className="space-y-2.5">
-                {homeworkToday.map((entry) => (
-                  <HomeworkRow
-                    key={entry.id}
-                    entry={entry}
-                    todayDate={todayDate}
-                    onUpdate={onUpdateHomework}
-                    onDelete={onDeleteHomework}
+            {activeAssignmentId != null && (
+              <>
+                <HomeworkForm todayDate={todayDate} onSubmit={(entry) => onAddHomework?.(entry)} />
+
+                {homeworkToday.length === 0 ? (
+                  <EmptyState
+                    icon={BookOpenCheck}
+                    title="لا توجد واجبات لهذه الحصة اليوم"
+                    description="أضف وصفاً أعلاه ثم احفظ — يظهر الواجب لأولياء الأمور حسب إعدادات المدرسة."
                   />
-                ))}
-              </ul>
+                ) : (
+                  <ul className="space-y-2.5">
+                    {homeworkToday.map((entry) => (
+                      <HomeworkRow
+                        key={entry.id}
+                        entry={entry}
+                        todayDate={todayDate}
+                        onUpdate={onUpdateHomework}
+                        onDelete={onDeleteHomework}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
           </div>
         )}

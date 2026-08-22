@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Inbox } from 'lucide-react'
 import {
   addHomework,
@@ -27,6 +28,7 @@ import type {
   LateReportEntry,
   RosterStudent,
   TeacherAssignmentOption,
+  TeacherTab,
   WeeklyPlanEntry,
 } from '../../sections/teacher-daily-workflow/types'
 import { EmptyState } from '../../shared/EmptyState'
@@ -38,6 +40,13 @@ function alertError(err: unknown, fallback: string) {
 
 export function TeacherDailyPage() {
   const today = todayDateStr()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
+  const initialTab: TeacherTab =
+    tabParam === 'homework' || tabParam === 'late' || tabParam === 'weekly-plan' || tabParam === 'attendance'
+      ? tabParam
+      : 'attendance'
+  const [activeTab, setActiveTab] = useState<TeacherTab>(initialTab)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<TeacherAssignmentOption[]>([])
@@ -79,6 +88,42 @@ export function TeacherDailyPage() {
     },
     [today]
   )
+
+  useEffect(() => {
+    const t = searchParams.get('tab')
+    if (t === 'homework' || t === 'late' || t === 'weekly-plan' || t === 'attendance') {
+      setActiveTab(t)
+    }
+  }, [searchParams])
+
+  const selectAssignment = useCallback(
+    async (assignmentId: number) => {
+      const next = assignments.find((a) => a.id === assignmentId)
+      if (!next) return
+      try {
+        await loadAssignmentData(next, currentWeekStart)
+        setActiveAssignmentId(assignmentId)
+      } catch (err) {
+        alertError(err, 'فشل تحميل بيانات الصف')
+      }
+    },
+    [assignments, currentWeekStart, loadAssignmentData]
+  )
+
+  function handleTabChange(tab: TeacherTab) {
+    setActiveTab(tab)
+    if (tab === 'attendance') {
+      setSearchParams({}, { replace: true })
+    } else {
+      setSearchParams({ tab }, { replace: true })
+    }
+    if (tab === 'homework') {
+      const todayIds = todaySlots.map((s) => s.assignmentId).filter((id): id is number => id != null)
+      if (todayIds.length > 0 && (activeAssignmentId == null || !todayIds.includes(activeAssignmentId))) {
+        void selectAssignment(todayIds[0])
+      }
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -170,18 +215,9 @@ export function TeacherDailyPage() {
       homeworkToday={homeworkToday}
       currentWeekStart={currentWeekStart}
       weeklyPlan={weeklyPlan}
-      onSelectAssignment={async (assignmentId) => {
-        const next = assignments.find((a) => a.id === assignmentId)
-        if (!next) return
-        try {
-          // Load roster/marks before flipping the active id so draft attendance
-          // does not resync against a stale all-PRESENT roster.
-          await loadAssignmentData(next, currentWeekStart)
-          setActiveAssignmentId(assignmentId)
-        } catch (err) {
-          alertError(err, 'فشل تحميل بيانات الصف')
-        }
-      }}
+      activeTab={activeTab}
+      onTabChange={handleTabChange}
+      onSelectAssignment={selectAssignment}
       onSaveAttendance={async (marks) => {
         if (!active) return
         try {

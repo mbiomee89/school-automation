@@ -44,7 +44,7 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
  */
 export const STAFF_NAV_BY_ROLE: Record<'ADMIN' | 'TEACHER' | 'COUNSELOR', string[]> = {
   ADMIN: ['الإدارة المدرسية', 'التقارير'],
-  TEACHER: ['أعمال المعلم اليومية'],
+  TEACHER: ['أعمال المعلم اليومية', 'الواجبات'],
   COUNSELOR: ['مراجعة الأعذار', 'التقارير'],
 }
 

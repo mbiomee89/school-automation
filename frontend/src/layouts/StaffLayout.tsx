@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useState } from 'react'
 import { AppShell } from '../shell/components'
 import { ROLE_HOME, roleMayAccessSection } from '../shared/accessControl'
-import { STAFF_NAV_ITEMS, SECTION_BY_HREF } from '../lib/navigation'
+import { STAFF_NAV_ITEMS, SECTION_BY_HREF, isStaffNavActive } from '../lib/navigation'
 import { roleLabelAr, useAuth } from '../lib/auth'
 import { changeStaffPassword } from '../api/auth'
 import { ApiError } from '../api/client'
@@ -50,7 +50,7 @@ export function StaffLayout() {
 
   const navigationItems = STAFF_NAV_ITEMS.map((item) => ({
     ...item,
-    isActive: location.pathname === item.href,
+    isActive: isStaffNavActive(item.href, location.pathname, location.search),
   }))
 
   async function submitPasswordChange() {
