@@ -182,90 +182,91 @@ export function TeacherWeeklyPlanGrid() {
             <thead>
               <tr className="bg-slate-50 dark:bg-slate-800/80">
                 <th className="border-b border-e border-slate-200 px-2 py-2 text-xs font-bold dark:border-slate-700">
-                  الحصة
+                  اليوم
                 </th>
-                {grid.days.map((day) => (
+                {PERIODS.map((period) => (
                   <th
-                    key={day.dayOfWeek}
-                    className={cn(
-                      'border-b border-e border-slate-200 px-2 py-2 text-xs font-bold dark:border-slate-700',
-                      day.date === today && 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-100'
-                    )}
+                    key={period}
+                    className="border-b border-e border-slate-200 px-2 py-2 text-xs font-bold tabular-nums dark:border-slate-700"
                   >
-                    <div>{DAY_LABELS[day.dayOfWeek]}</div>
-                    <div className="mt-0.5 font-normal tabular-nums opacity-70" dir="ltr">
-                      {day.date.slice(5)}
-                    </div>
+                    ح{period}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {PERIODS.map((period) => (
-                <tr key={period}>
-                  <td className="border-b border-e border-slate-200 px-2 py-2 text-center text-xs font-bold tabular-nums dark:border-slate-700">
-                    {period}
-                  </td>
-                  {grid.days.map((day) => {
-                    const slot = cellMap.get(`${day.dayOfWeek}|${period}`)
-                    const isTodayCol = day.date === today
-                    if (!slot) {
+              {grid.days.map((day) => {
+                const isTodayRow = day.date === today
+                return (
+                  <tr
+                    key={day.dayOfWeek}
+                    className={cn(isTodayRow && 'bg-blue-50/40 dark:bg-blue-500/5')}
+                  >
+                    <td
+                      className={cn(
+                        'border-b border-e border-slate-200 px-2 py-2 text-xs font-bold dark:border-slate-700',
+                        isTodayRow && 'bg-blue-100 text-blue-900 dark:bg-blue-500/20 dark:text-blue-100'
+                      )}
+                    >
+                      <div>{DAY_LABELS[day.dayOfWeek]}</div>
+                      <div className="mt-0.5 font-normal tabular-nums opacity-70" dir="ltr">
+                        {day.date.slice(5)}
+                      </div>
+                    </td>
+                    {PERIODS.map((period) => {
+                      const slot = cellMap.get(`${day.dayOfWeek}|${period}`)
+                      if (!slot) {
+                        return (
+                          <td
+                            key={period}
+                            className="border-b border-e border-slate-100 bg-slate-50/50 px-1 py-1 dark:border-slate-800 dark:bg-slate-950/40"
+                          />
+                        )
+                      }
                       return (
                         <td
-                          key={day.dayOfWeek}
-                          className={cn(
-                            'border-b border-e border-slate-100 bg-slate-50/50 px-1 py-1 dark:border-slate-800 dark:bg-slate-950/40',
-                            isTodayCol && 'bg-blue-50/40 dark:bg-blue-500/5'
-                          )}
-                        />
-                      )
-                    }
-                    return (
-                      <td
-                        key={day.dayOfWeek}
-                        className={cn(
-                          'border-b border-e border-slate-200 p-1 dark:border-slate-700',
-                          isTodayCol && 'bg-blue-50/50 dark:bg-blue-500/10'
-                        )}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => openCell(slot)}
-                          className={cn(
-                            'flex min-h-16 w-full flex-col items-start gap-0.5 rounded-lg border px-2 py-1.5 text-start transition-colors',
-                            slot.hasPlan &&
-                              'border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10',
-                            !slot.hasPlan &&
-                              isTodayCol &&
-                              editable &&
-                              'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10',
-                            !slot.hasPlan &&
-                              !(isTodayCol && editable) &&
-                              'border-slate-200 bg-white hover:border-blue-300 dark:border-slate-600 dark:bg-slate-900'
-                          )}
+                          key={period}
+                          className="border-b border-e border-slate-200 p-1 dark:border-slate-700"
                         >
-                          <span className="text-[11px] font-bold leading-tight text-slate-900 dark:text-slate-50">
-                            {slot.className}
-                          </span>
-                          <span className="text-[10px] leading-tight text-slate-600 dark:text-slate-300">
-                            {slot.subjectNameAr}
-                          </span>
-                          {slot.hasPlan && (
-                            <span className="line-clamp-2 text-[10px] font-semibold text-emerald-800 dark:text-emerald-200">
-                              {slot.planTitle}
+                          <button
+                            type="button"
+                            onClick={() => openCell(slot)}
+                            className={cn(
+                              'flex min-h-16 w-full flex-col items-start gap-0.5 rounded-lg border px-2 py-1.5 text-start transition-colors',
+                              slot.hasPlan &&
+                                'border-emerald-300 bg-emerald-50 dark:border-emerald-500/40 dark:bg-emerald-500/10',
+                              !slot.hasPlan &&
+                                isTodayRow &&
+                                editable &&
+                                'border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10',
+                              !slot.hasPlan &&
+                                !(isTodayRow && editable) &&
+                                'border-slate-200 bg-white hover:border-blue-300 dark:border-slate-600 dark:bg-slate-900'
+                            )}
+                          >
+                            <span className="text-[11px] font-bold leading-tight text-slate-900 dark:text-slate-50">
+                              {slot.className}
                             </span>
-                          )}
-                          {!slot.hasPlan && isTodayCol && editable && (
-                            <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">
-                              لم يُسجّل
+                            <span className="text-[10px] leading-tight text-slate-600 dark:text-slate-300">
+                              {slot.subjectNameAr}
                             </span>
-                          )}
-                        </button>
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
+                            {slot.hasPlan && (
+                              <span className="line-clamp-2 text-[10px] font-semibold text-emerald-800 dark:text-emerald-200">
+                                {slot.planTitle}
+                              </span>
+                            )}
+                            {!slot.hasPlan && isTodayRow && editable && (
+                              <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-200">
+                                لم يُسجّل
+                              </span>
+                            )}
+                          </button>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
