@@ -21,8 +21,15 @@ export function parseAscTimetablePdf(buffer, originalName = 'timetable.pdf') {
 
     const py =
       process.env.PYTHON || process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
+    const projectRoot = path.resolve(__dirname, '../../..');
+    const pythonDeps = path.join(projectRoot, '.python-deps');
+    const env = { ...process.env };
+    if (fs.existsSync(pythonDeps)) {
+      env.PYTHONPATH = env.PYTHONPATH ? `${pythonDeps}${path.delimiter}${env.PYTHONPATH}` : pythonDeps;
+    }
     const child = spawn(py, [PARSER_SCRIPT, pdfPath, '--out', outPath], {
       windowsHide: true,
+      env,
     });
 
     let stderr = '';
@@ -57,7 +64,7 @@ export function parseAscTimetablePdf(buffer, originalName = 'timetable.pdf') {
           if (/pymupdf/i.test(err)) {
             return reject(
               badRequest(
-                'محلل PDF غير جاهز على السيرفر (مكتبة pymupdf). أعد النشر بصورة Docker، أو ارفع ملف Excel من aSc مؤقتاً.'
+                'محلل PDF غير جاهز على السيرفر (مكتبة pymupdf). تأكد أن أمر البناء يثبّت pymupdf في .python-deps، أو ارفع Excel مؤقتاً.'
               )
             );
           }

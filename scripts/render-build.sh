@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Build for Render Node runtime (see render.yaml buildCommand — keep in sync).
-# Native images include python3-pip; pymupdf enables aSc teachers table.pdf import.
+# Install pymupdf into ./.python-deps (deployed with the app). --user alone is
+# lost between build and runtime on Render.
 set -euo pipefail
 
-echo "==> Installing pymupdf for aSc PDF timetable import"
-pip3 install --user --no-cache-dir pymupdf
+echo "==> Installing pymupdf into .python-deps (aSc PDF import)"
+mkdir -p .python-deps
+pip3 install --no-cache-dir --target .python-deps pymupdf
 
 echo "==> Switching Prisma provider to PostgreSQL for this build"
 sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma

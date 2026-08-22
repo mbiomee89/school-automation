@@ -81,6 +81,18 @@ function run(command, args) {
 
 hardenDatabaseUrl(process.env.DATABASE_URL);
 
+// Ensure aSc PDF parser can import pymupdf (installed into .python-deps at build).
+const pythonDeps = path.join(root, '.python-deps');
+if (!process.env.PYTHONPATH) {
+  process.env.PYTHONPATH = pythonDeps;
+} else if (!process.env.PYTHONPATH.split(path.delimiter).includes(pythonDeps)) {
+  process.env.PYTHONPATH = `${pythonDeps}${path.delimiter}${process.env.PYTHONPATH}`;
+}
+process.env.PYTHON = process.env.PYTHON || 'python3';
+
+console.log('[start] ensure pymupdf…');
+run('node', ['scripts/ensure-pymupdf.js']);
+
 console.log('[start] database ping…');
 run('node', ['scripts/db-ping.js']);
 

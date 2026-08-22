@@ -11,6 +11,7 @@ backend/uploads/*
 Thumbs.db
 *.log
 .prisma/
+.python-deps/
 
 # Local design / archives (not needed on Render)
 my-project-design/

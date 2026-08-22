@@ -16,7 +16,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: pip3 install --user --no-cache-dir pymupdf && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npm install --include=dev && npx prisma generate --schema=prisma/schema.prisma && npm run build -w frontend
+    buildCommand: mkdir -p .python-deps && pip3 install --no-cache-dir --target .python-deps pymupdf && sed -i 's/provider = "sqlite"/provider = "postgresql"/' prisma/schema.prisma && npm install --include=dev && npx prisma generate --schema=prisma/schema.prisma && npm run build -w frontend
     startCommand: node scripts/start.js
     healthCheckPath: /health
     envVars:
@@ -34,5 +34,7 @@ services:
         value: ./backend/uploads
       - key: PYTHON
         value: python3
+      - key: PYTHONPATH
+        value: .python-deps
       - key: NODE_VERSION
         value: "22.16.0"
