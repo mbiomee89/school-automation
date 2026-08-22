@@ -68,10 +68,6 @@ export interface LateArrivalsReportDetail extends ReportBrandFields {
 
 export interface HomeworkLogReportDetail extends ReportBrandFields {
   date: string
-  weekStart?: string
-  weekEnd?: string
-  days?: Array<{ dayKey: string; dayLabel: string; date: string }>
-  periods?: string[]
   generatedAt?: string
   rows: Array<{
     id: number
@@ -79,9 +75,6 @@ export interface HomeworkLogReportDetail extends ReportBrandFields {
     className: string
     subjectName: string
     teacherName: string
-    date?: string
-    dayKey?: string | null
-    dayLabel?: string | null
     period?: string | null
     noHomework?: boolean
     description: string
