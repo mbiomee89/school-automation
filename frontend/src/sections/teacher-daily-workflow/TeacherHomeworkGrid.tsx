@@ -40,7 +40,6 @@ export function TeacherHomeworkGrid() {
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<TeacherWeekSlot | null>(null)
   const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function reload(nextAnchor = anchor) {
@@ -84,7 +83,6 @@ export function TeacherHomeworkGrid() {
   function openCell(slot: TeacherWeekSlot) {
     setSelected(slot)
     setDescription(slot.noHomework ? '' : slot.description || '')
-    setDueDate(slot.dueDate ?? '')
   }
 
   async function saveHomework() {
@@ -99,7 +97,7 @@ export function TeacherHomeworkGrid() {
         date: selected.date,
         period: selected.period,
         description: trimmed,
-        dueDate: dueDate || null,
+        dueDate: null,
         noHomework: false,
       })
       setSelected(null)
@@ -334,18 +332,6 @@ export function TeacherHomeworkGrid() {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 rows={4}
-                disabled={!editable || busy}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950"
-              />
-            </label>
-
-            <label className="mt-3 block text-sm">
-              <span className="text-slate-600 dark:text-slate-400">تاريخ الاستحقاق (اختياري)</span>
-              <input
-                type="date"
-                min={selected.date}
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
                 disabled={!editable || busy}
                 className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm disabled:opacity-60 dark:border-slate-600 dark:bg-slate-950"
               />

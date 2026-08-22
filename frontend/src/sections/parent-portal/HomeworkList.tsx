@@ -1,4 +1,4 @@
-﻿import { BookOpenCheck, CalendarClock } from 'lucide-react'
+﻿import { BookOpenCheck } from 'lucide-react'
 import type { HomeworkItem } from './types'
 import { EmptyState } from '../../shared/EmptyState'
 import { cn } from '../../shared/utils'
@@ -62,12 +62,6 @@ export function HomeworkList({
           >
             {item.description}
           </p>
-          {item.dueDate && !item.noHomework && (
-            <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-300">
-              <CalendarClock className="size-3.5 shrink-0" strokeWidth={1.75} aria-hidden="true" />
-              التسليم: {formatShortDate(item.dueDate)}
-            </p>
-          )}
         </li>
       ))}
     </ul>
