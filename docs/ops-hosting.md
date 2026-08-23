@@ -7,10 +7,20 @@ Short checklist for the school-automation web service + Postgres on Render.
 - `NODE_ENV=production`
 - `DATABASE_URL` = **External** Postgres URL (not the internal `dpg-…-a` host if regions differ)
 - Web service and Postgres in the **same region**
-- `JWT_SECRET` set (non-empty)
-- `UPLOAD_DIR` set (e.g. `./backend/uploads`)
+- `JWT_SECRET` = long random secret (**never** leave empty or use `.env.example` value)
+- `CORS_ORIGIN` = your public HTTPS origin(s), comma-separated (e.g. `https://school.example.com`) — **required in production** when the browser origin must be locked down
+- `UPLOAD_DIR` set (e.g. `./backend/uploads`) — used for server-side files only; **not** publicly served
 - Build log shows Prisma provider switched to PostgreSQL
 - Health: `GET /health` (and `/api/health` if used) returns 200 after deploy
+- Change seed admin password immediately (`admin@school.local` / default from seed) — API blocks staff until password change when `mustChangePassword` is set
+
+## Security notes (student PII)
+
+- `/uploads` is **not** mounted as public static (backups/absence files are not world-readable)
+- School logo: `GET /api/school-settings/logo`
+- Absence attachments: authenticated parent/counselor download APIs only
+- Backups: download via admin UI using **base64 ZIP** in the API response — do not rely on `/uploads/backups/...` URLs
+- Public student-profile form: rate-limited; lookup returns name/class only (no prior medical/phones)
 
 ## Ephemeral disk (accepted on free Render)
 

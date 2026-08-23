@@ -131,19 +131,7 @@ export function StudentProfilePublicPage() {
     setLookupNote(null)
     try {
       const data = await lookupPublicStudent(token, id)
-      if (data.submission?.payload) {
-        const prior = data.submission.payload
-        const same = prior.guardianWhatsappSame !== false
-        setForm({
-          ...EMPTY,
-          ...prior,
-          guardianWhatsappSame: same,
-          guardianWhatsapp: prior.guardianWhatsapp || prior.guardianMobile || '',
-          attested: true,
-        })
-        setMatched(Boolean(data.found))
-        setLookupNote('تم تحميل بيانات سابقة — يمكنك التعديل والحفظ.')
-      } else if (data.found && data.student) {
+      if (data.found && data.student) {
         setForm({
           ...EMPTY,
           nameAr: data.student.nameAr,
@@ -153,11 +141,19 @@ export function StudentProfilePublicPage() {
           attested: true,
         })
         setMatched(true)
-        setLookupNote(null)
+        setLookupNote(
+          data.hasPriorSubmission
+            ? 'يوجد إرسال سابق لهذا المعرّف — أعد تعبئة الاستمارة للحفظ (يُحدَّث السجل دون إظهار البيانات السابقة علناً).'
+            : null
+        )
       } else {
         setForm({ ...EMPTY, civilId: id, attested: true })
         setMatched(false)
-        setLookupNote('لم يُعثر على المعرّف في السجل — أكمل البيانات يدوياً.')
+        setLookupNote(
+          data.hasPriorSubmission
+            ? 'يوجد إرسال سابق — أعد تعبئة البيانات للحفظ. لم يُعثر على المعرّف في سجل الطلاب.'
+            : 'لم يُعثر على المعرّف في السجل — أكمل البيانات يدوياً.'
+        )
       }
       setStep('form')
     } catch (err) {

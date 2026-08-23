@@ -165,16 +165,15 @@ export const uploadTimetableFile = multer({
   },
 }).single('file');
 
-/** Relative path (e.g. "logos/abc123.png") -> public URL under /uploads, or null. */
+/** @deprecated Logos are served from GET /api/school-settings/logo — do not use public /uploads. */
 export function logoPathToUrl(logoPath) {
   if (!logoPath) return null;
-  return `/uploads/${logoPath.replace(/\\/g, '/')}`;
+  return `/api/school-settings/logo`;
 }
 
-/** Relative path under uploads → public URL. */
-export function uploadPathToUrl(relativePath) {
-  if (!relativePath) return null;
-  return `/uploads/${relativePath.replace(/\\/g, '/')}`;
+/** @deprecated Sensitive files must not be exposed via public /uploads URLs. */
+export function uploadPathToUrl(_relativePath) {
+  return null;
 }
 
 /** Delete a previously stored upload file (relative to UPLOAD_ROOT); ignores missing files. */

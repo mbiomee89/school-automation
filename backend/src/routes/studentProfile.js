@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -258,6 +259,17 @@ staffRouter.patch(
 /** Public form API (no staff auth) */
 const publicRouter = Router();
 
+const publicFormLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 40,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'محاولات كثيرة على الاستمارة، حاول لاحقاً' },
+  keyGenerator: (req) => `${req.ip}:${req.params?.token || 'anon'}`,
+});
+
+publicRouter.use(publicFormLimiter);
+
 publicRouter.get(
   '/:token/meta',
   asyncHandler(async (req, res) => {
@@ -292,19 +304,14 @@ publicRouter.get(
       include: { class: { select: { id: true, name: true } } },
     });
 
-    const prior = await prisma.studentProfileSubmission.findUnique({
+    const priorCount = await prisma.studentProfileSubmission.count({
       where: {
-        campaignId_enteredStudentId: {
-          campaignId: campaign.id,
-          enteredStudentId: enteredId,
-        },
-      },
-      include: {
-        class: { select: { id: true, name: true } },
-        student: { select: { id: true, nameAr: true } },
+        campaignId: campaign.id,
+        enteredStudentId: enteredId,
       },
     });
 
+    // Do not return prior PII to anonymous clients — name/class only when found.
     res.json({
       found: Boolean(student),
       student: student
@@ -315,7 +322,7 @@ publicRouter.get(
             className: student.class?.name ?? null,
           }
         : null,
-      submission: prior ? serializeSubmission(prior) : null,
+      hasPriorSubmission: priorCount > 0,
     });
   })
 );

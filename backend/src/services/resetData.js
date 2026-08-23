@@ -198,7 +198,8 @@ export async function writeBackupFile(backup, { prefix = 'school-backup' } = {})
 
   return {
     fileName,
-    downloadUrl: `/uploads/backups/${fileName}`,
+    /** Backups are not publicly downloadable; clients must use backupZipBase64. */
+    downloadUrl: null,
     zipBuffer: buffer,
   };
 }

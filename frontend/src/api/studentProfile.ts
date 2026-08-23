@@ -82,7 +82,8 @@ export async function lookupPublicStudent(token: string, studentId: string) {
       classId: number | null
       className: string | null
     } | null
-    submission: StudentProfileSubmission | null
+    /** True if a prior row exists; payload is never returned to anonymous clients. */
+    hasPriorSubmission: boolean
   }>(`/student-profile/public/${token}/lookup?${qs}`, { auth: false })
 }
 

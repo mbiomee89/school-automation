@@ -10,7 +10,8 @@ function getBearerToken(req) {
 }
 
 /**
- * Staff auth (ADMIN / TEACHER / COUNSELOR). Attaches req.user.
+ * Staff auth (ADMIN / TEACHER / COUNSELOR / STUDENT_AFFAIRS). Attaches req.user.
+ * Users with mustChangePassword may only call password-change and /auth/me.
  */
 export const requireStaff = asyncHandler(async (req, _res, next) => {
   const token = getBearerToken(req);
@@ -44,9 +45,27 @@ export const requireStaff = asyncHandler(async (req, _res, next) => {
     throw unauthorized('Invalid or expired token');
   }
 
+  if (user.mustChangePassword && !isStaffPasswordChangeExempt(req)) {
+    throw forbidden('يجب تغيير كلمة المرور قبل متابعة استخدام النظام');
+  }
+
   req.user = user;
   next();
 });
+
+function isStaffPasswordChangeExempt(req) {
+  const url = `${req.originalUrl || ''} ${req.path || ''}`.toLowerCase();
+  if (req.method === 'GET' && (url.includes('/auth/me') || url.endsWith('/me'))) {
+    return true;
+  }
+  if (
+    req.method === 'POST' &&
+    (url.includes('/auth/change-password') || url.includes('/change-password'))
+  ) {
+    return true;
+  }
+  return false;
+}
 
 /**
  * Parent auth — JWT issued after OTP verify. Payload = normalized phone.

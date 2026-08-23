@@ -668,7 +668,7 @@ export type BackupDataResult = {
   ok: boolean
   counts: Record<string, unknown>
   backupFileName: string
-  backupDownloadUrl: string
+  backupDownloadUrl: string | null
   backupZipBase64: string
 }
 
@@ -684,7 +684,7 @@ export type ResetDataResult = {
   ok: boolean
   summary: Record<string, unknown>
   backupFileName: string
-  backupDownloadUrl: string
+  backupDownloadUrl: string | null
   backupZipBase64: string
 }
 

@@ -6,7 +6,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { errorHandler } from './utils/errors.js';
-import { UPLOAD_ROOT } from './middleware/upload.js';
 
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
@@ -80,9 +79,8 @@ export function createApp() {
   app.get('/health', health);
   app.get('/api/health', health);
 
-  // Uploaded files (logos, attachments) — served as static assets.
-  app.use('/uploads', express.static(UPLOAD_ROOT));
-  app.use('/api/uploads', express.static(UPLOAD_ROOT));
+  // Do NOT mount express.static(UPLOAD_ROOT) — backups and absence files must not be
+  // world-readable. Logo: GET /api/school-settings/logo. Attachments: authed API only.
 
   // Local Vite proxy strips `/api` → mount APIs at root only in development.
   // In production, mounting at root would steal SPA routes like GET /reports
@@ -118,7 +116,6 @@ export function createApp() {
       if (req.method !== 'GET' && req.method !== 'HEAD') return next();
       if (
         req.path.startsWith('/api') ||
-        req.path.startsWith('/uploads') ||
         req.path === '/health'
       ) {
         return next();
