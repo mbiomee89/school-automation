@@ -13,47 +13,9 @@ import {
   SAUDI_MOBILE_HINT,
   tryNormalizeSaudiMobile,
 } from '../../shared/saudiPhone'
+import { countrySelectOptions } from '../../shared/countriesAr'
 
 type ClassOpt = { id: number; name: string }
-
-/** Shared Arabic list for الجنسية + مكان الولادة — الدولة. Saudi first, Palestine included, Israel excluded. */
-const COUNTRY_OR_NATIONALITY_OPTIONS = [
-  'المملكة العربية السعودية',
-  'فلسطين',
-  'مصر',
-  'الأردن',
-  'سوريا',
-  'لبنان',
-  'اليمن',
-  'الإمارات',
-  'الكويت',
-  'البحرين',
-  'عمان',
-  'قطر',
-  'العراق',
-  'السودان',
-  'المغرب',
-  'الجزائر',
-  'تونس',
-  'ليبيا',
-  'موريتانيا',
-  'الصومال',
-  'جيبوتي',
-  'جزر القمر',
-  'باكستان',
-  'الهند',
-  'بنغلاديش',
-  'الفلبين',
-  'إندونيسيا',
-  'تركيا',
-  'أفغانستان',
-] as const
-
-function countrySelectOptions(current: string): string[] {
-  const list: string[] = [...COUNTRY_OR_NATIONALITY_OPTIONS]
-  if (current && !list.includes(current)) list.push(current)
-  return list
-}
 
 const EMPTY: StudentProfilePayload = {
   nameAr: '',

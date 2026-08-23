@@ -7,11 +7,15 @@ import {
   patchStaffProfileCampaign,
   type StudentProfileSubmission,
 } from '../../api/studentProfile'
-import { listClasses, listStudents } from '../../api/admin'
+import { getSchoolSettings, listClasses, listStudents } from '../../api/admin'
 import { ApiError } from '../../api/client'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
 import { cn } from '../../shared/utils'
+import {
+  StudentProfilePrintSheet,
+  type SchoolPrintHeader,
+} from './StudentProfilePrintSheet'
 
 function whatsappOf(payload: StudentProfileSubmission['payload']) {
   if (payload.guardianWhatsapp?.trim()) return payload.guardianWhatsapp.trim()
@@ -30,6 +34,10 @@ export function StudentAffairsPage() {
   } | null>(null)
   const [submissions, setSubmissions] = useState<StudentProfileSubmission[]>([])
   const [classes, setClasses] = useState<Array<{ id: number; name: string }>>([])
+  const [schoolHeader, setSchoolHeader] = useState<SchoolPrintHeader>({
+    schoolName: 'المدرسة',
+    academicYear: '',
+  })
   const [classFilter, setClassFilter] = useState<string>('ALL')
   const [unlinkedOnly, setUnlinkedOnly] = useState(false)
   const [medicalOnly, setMedicalOnly] = useState(false)
@@ -39,10 +47,12 @@ export function StudentAffairsPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copyHint, setCopyHint] = useState<string | null>(null)
+  /** When set, print CSS shows only this submission sheet. */
+  const [printOnlyId, setPrintOnlyId] = useState<number | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
-    const [camp, subs, cls] = await Promise.all([
+    const [camp, subs, cls, settings] = await Promise.all([
       getStaffProfileCampaign(),
       listProfileSubmissions({
         classId: classFilter !== 'ALL' ? Number(classFilter) : undefined,
@@ -50,10 +60,18 @@ export function StudentAffairsPage() {
         medicalOnly,
       }),
       listClasses(),
+      getSchoolSettings(),
     ])
     setCampaign(camp.campaign)
     setSubmissions(subs)
     setClasses(cls.map((c) => ({ id: c.id, name: c.name })))
+    setSchoolHeader({
+      schoolName: settings.name || 'المدرسة',
+      academicYear: settings.academicYear || '',
+      educationAdminName: settings.educationAdminName,
+      logoUrl: settings.logoUrl,
+      principalName: settings.principalName,
+    })
   }, [classFilter, unlinkedOnly, medicalOnly])
 
   useEffect(() => {
@@ -79,10 +97,23 @@ export function StudentAffairsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- first-load flag uses campaign presence
   }, [reload])
 
+  useEffect(() => {
+    function onAfterPrint() {
+      setPrintOnlyId(null)
+    }
+    window.addEventListener('afterprint', onAfterPrint)
+    return () => window.removeEventListener('afterprint', onAfterPrint)
+  }, [])
+
   const publicUrl = useMemo(() => {
     if (!campaign) return ''
     return `${window.location.origin}${campaign.publicPath}`
   }, [campaign])
+
+  const sheetsToPrint = useMemo(() => {
+    if (printOnlyId == null) return submissions
+    return submissions.filter((s) => s.id === printOnlyId)
+  }, [submissions, printOnlyId])
 
   async function copyLink() {
     if (!publicUrl) return
@@ -133,6 +164,16 @@ export function StudentAffairsPage() {
     }
   }
 
+  function printAll() {
+    setPrintOnlyId(null)
+    window.setTimeout(() => window.print(), 50)
+  }
+
+  function printOne(id: number) {
+    setPrintOnlyId(id)
+    window.setTimeout(() => window.print(), 80)
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -159,16 +200,13 @@ export function StudentAffairsPage() {
     )
   }
 
-  const classLabel =
-    classFilter === 'ALL'
-      ? 'كل الفصول'
-      : classes.find((c) => String(c.id) === classFilter)?.name || 'فصل'
-
   return (
     <div dir="rtl" lang="ar" className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6" style={fontArabic}>
       <div className="print:hidden">
         <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-50">شؤون الطلاب</h1>
-        <p className="mt-1 text-sm text-slate-500">استمارات البيانات الشخصية — تصفية حسب الفصل</p>
+        <p className="mt-1 text-sm text-slate-500">
+          استمارات البيانات الشخصية — طباعة صفحة لكل طالب بنفس تصميم الاستمارة
+        </p>
       </div>
 
       {campaign && (
@@ -250,11 +288,12 @@ export function StudentAffairsPage() {
         </label>
         <button
           type="button"
-          className={buttonVariants({ variant: 'secondary', size: 'sm', className: 'ms-auto' })}
-          onClick={() => window.print()}
+          disabled={submissions.length === 0}
+          className={buttonVariants({ variant: 'primary', size: 'sm', className: 'ms-auto' })}
+          onClick={printAll}
         >
           <Printer className="size-4" strokeWidth={1.5} />
-          طباعة التقرير
+          طباعة الاستمارات (صفحة لكل طالب)
         </button>
       </div>
 
@@ -310,13 +349,22 @@ export function StudentAffairsPage() {
                     </div>
                   </td>
                   <td className="px-3 py-2 text-end">
-                    <button
-                      type="button"
-                      className="text-xs text-blue-700 underline"
-                      onClick={() => void openLink(s)}
-                    >
-                      عرض / ربط
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        type="button"
+                        className="text-xs text-slate-700 underline"
+                        onClick={() => printOne(s.id)}
+                      >
+                        طباعة
+                      </button>
+                      <button
+                        type="button"
+                        className="text-xs text-blue-700 underline"
+                        onClick={() => void openLink(s)}
+                      >
+                        عرض / ربط
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))
@@ -325,122 +373,29 @@ export function StudentAffairsPage() {
         </table>
       </div>
 
-      <section
-        className="hidden print:block report-print-area overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900"
-        style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
-      >
-        <div className="border-b border-slate-100 px-4 py-4 text-center">
-          <p className="text-lg font-bold">استمارة البيانات الشخصية للطالب — تقرير الاستمارات</p>
-          <p className="mt-1 text-sm text-slate-600">
-            {classLabel}
-            {unlinkedOnly ? ' · غير مربوط' : ''}
-            {medicalOnly ? ' · حالات مرضية' : ''}
+      {/* Screen preview of printable sheets (scrollable); also used for browser print */}
+      <section className="space-y-4 print:hidden">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">معاينة الطباعة</h2>
+          <span className="text-xs text-slate-500">{submissions.length} صفحة</span>
+        </div>
+        {submissions.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+            لا توجد استمارات للطباعة ضمن الفلتر الحالي.
           </p>
-        </div>
-        <div className="m-4 overflow-hidden rounded-xl border border-teal-600/40">
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-teal-600 text-white">
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">المعرّف</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الاسم</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الفصل</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">ولي الأمر</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الجوال</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">واتساب</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الربط</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">طبية</th>
-              </tr>
-            </thead>
-            <tbody>
-              {submissions.map((s) => (
-                <tr key={s.id}>
-                  <td className="border border-slate-200 px-2 py-2" dir="ltr">
-                    {s.enteredStudentId}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 font-semibold">
-                    {s.studentNameAr || s.payload.nameAr}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2">
-                    {s.className || s.payload.className || '—'}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2">{s.payload.guardianName}</td>
-                  <td className="border border-slate-200 px-2 py-2" dir="ltr">
-                    {s.payload.guardianMobile}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2" dir="ltr">
-                    {whatsappOf(s.payload)}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2">
-                    {s.linked ? 'مربوط' : 'غير مربوط'}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2">
-                    {s.hasMedical ? 'نعم' : 'لا'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {submissions.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-500">لا توجد استمارات ضمن الفلتر الحالي.</p>
-          )}
-        </div>
+        ) : (
+          submissions.map((s) => (
+            <StudentProfilePrintSheet key={`preview-${s.id}`} submission={s} header={schoolHeader} />
+          ))
+        )}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 print:hidden dark:border-slate-700 dark:bg-slate-900">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">التقرير الرسمي</h2>
-          <span className="text-xs text-slate-500">{submissions.length} سجل</span>
-        </div>
-        <div className="overflow-x-auto overflow-hidden rounded-xl border border-teal-600/40">
-          <table className="w-full min-w-[44rem] border-collapse text-sm">
-            <thead>
-              <tr className="bg-teal-600 text-white">
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">المعرّف</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الاسم</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الفصل</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">ولي الأمر</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الجوال</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">واتساب</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">الربط</th>
-                <th className="border border-teal-700 px-2 py-2.5 font-bold">طبية</th>
-              </tr>
-            </thead>
-            <tbody>
-              {submissions.map((s) => (
-                <tr key={`formal-${s.id}`} className="bg-white dark:bg-slate-950">
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700" dir="ltr">
-                    {s.enteredStudentId}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 font-semibold dark:border-slate-700">
-                    {s.studentNameAr || s.payload.nameAr}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700">
-                    {s.className || s.payload.className || '—'}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700">
-                    {s.payload.guardianName}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700" dir="ltr">
-                    {s.payload.guardianMobile}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700" dir="ltr">
-                    {whatsappOf(s.payload)}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700">
-                    {s.linked ? 'مربوط' : 'غير مربوط'}
-                  </td>
-                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700">
-                    {s.hasMedical ? 'نعم' : 'لا'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {submissions.length === 0 && (
-            <p className="p-6 text-center text-sm text-slate-500">لا توجد استمارات ضمن الفلتر الحالي.</p>
-          )}
-        </div>
-      </section>
+      {/* Print-only area: one PDF page per student */}
+      <div className="hidden print:block report-print-area">
+        {sheetsToPrint.map((s) => (
+          <StudentProfilePrintSheet key={`print-${s.id}`} submission={s} header={schoolHeader} />
+        ))}
+      </div>
 
       {selected && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 print:hidden sm:items-center">
@@ -499,7 +454,14 @@ export function StudentAffairsPage() {
                 <p className="mt-1 text-xs text-amber-700">تعذّر تحميل قائمة الطلاب — أدخل المعرّف يدوياً.</p>
               )}
             </label>
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={buttonVariants({ variant: 'secondary', className: 'flex-1' })}
+                onClick={() => printOne(selected.id)}
+              >
+                طباعة الاستمارة
+              </button>
               <button
                 type="button"
                 disabled={busy || !linkStudentId.trim()}
