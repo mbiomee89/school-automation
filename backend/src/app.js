@@ -22,10 +22,20 @@ import absenceReasonsRoutes from './routes/absenceReasons.js';
 import reportsRoutes from './routes/reports.js';
 import parentRoutes from './routes/parent.js';
 import studentProfileRoutes from './routes/studentProfile.js';
+import teacherDocumentsRoutes from './routes/teacherDocuments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
 const FRONTEND_DIST = path.resolve(PROJECT_ROOT, 'frontend/dist');
+
+/** Dev: reflect any origin. Production: require CORS_ORIGIN allowlist (checked at boot). */
+function resolveCorsOrigin() {
+  const raw = process.env.CORS_ORIGIN?.trim();
+  if (raw) {
+    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+  }
+  return true;
+}
 
 function mountApiRoutes(app, prefix = '') {
   app.use(`${prefix}/auth`, authRoutes);
@@ -43,6 +53,7 @@ function mountApiRoutes(app, prefix = '') {
   app.use(`${prefix}/reports`, reportsRoutes);
   app.use(`${prefix}/parent`, parentRoutes);
   app.use(`${prefix}/student-profile`, studentProfileRoutes);
+  app.use(`${prefix}/teacher-documents`, teacherDocumentsRoutes);
 }
 
 export function createApp() {
@@ -58,7 +69,7 @@ export function createApp() {
   );
   app.use(
     cors({
-      origin: process.env.CORS_ORIGIN?.split(',') ?? true,
+      origin: resolveCorsOrigin(),
       credentials: true,
     })
   );

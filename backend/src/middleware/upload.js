@@ -9,8 +9,51 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // backend/src/middleware -> backend/src -> backend -> project root
 const PROJECT_ROOT = path.resolve(__dirname, '../../..');
 
-/** Absolute path to the uploads root, served statically at /uploads. */
+/** Absolute path to the uploads root (not publicly served). */
 export const UPLOAD_ROOT = path.resolve(PROJECT_ROOT, process.env.UPLOAD_DIR || './backend/uploads');
+
+/**
+ * Return a relative path safe to store under UPLOAD_ROOT, or null if unsafe.
+ * Rejects empty, absolute, NUL, and any `..` segment.
+ */
+export function sanitizeUploadRelativePath(relativePath) {
+  if (relativePath == null) return null;
+  const raw = String(relativePath).trim();
+  if (!raw || raw.includes('\0')) return null;
+  if (path.isAbsolute(raw)) return null;
+  // Windows drive / UNC disguised as relative
+  if (/^[a-zA-Z]:[\\/]/.test(raw) || raw.startsWith('\\\\')) return null;
+
+  const forward = raw.replace(/\\/g, '/');
+  if (forward.split('/').includes('..')) return null;
+
+  const normalized = path.posix.normalize(forward);
+  if (
+    !normalized ||
+    normalized === '.' ||
+    normalized === '..' ||
+    normalized.startsWith('../') ||
+    path.posix.isAbsolute(normalized) ||
+    normalized.split('/').includes('..')
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+/**
+ * Resolve a stored relative upload path to an absolute path under UPLOAD_ROOT.
+ * Returns null if the path would escape the uploads root.
+ */
+export function resolveSafeUploadPath(relativePath) {
+  const safeRel = sanitizeUploadRelativePath(relativePath);
+  if (!safeRel) return null;
+  const root = path.resolve(UPLOAD_ROOT);
+  const absolute = path.resolve(root, safeRel);
+  const prefix = root.endsWith(path.sep) ? root : root + path.sep;
+  if (absolute !== root && !absolute.startsWith(prefix)) return null;
+  return absolute;
+}
 
 const LOGO_DIR = path.join(UPLOAD_ROOT, 'logos');
 fs.mkdirSync(LOGO_DIR, { recursive: true });
@@ -165,6 +208,68 @@ export const uploadTimetableFile = multer({
   },
 }).single('file');
 
+const TEACHER_DOC_DIR = path.join(UPLOAD_ROOT, 'teacher-documents');
+fs.mkdirSync(TEACHER_DOC_DIR, { recursive: true });
+
+const MAX_TEACHER_PDF_BYTES = 5 * 1024 * 1024; // 5MB
+
+/** In-memory PDF upload for teacher employment dossier (5MB). */
+export const uploadTeacherPdf = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_TEACHER_PDF_BYTES },
+  fileFilter: (_req, file, cb) => {
+    const name = (file.originalname || '').toLowerCase();
+    const okExt = name.endsWith('.pdf');
+    if (!okExt && file.mimetype !== 'application/pdf') {
+      return cb(badRequest('يُسمح بملفات PDF فقط'));
+    }
+    cb(null, true);
+  },
+}).single('file');
+
+/** True when buffer starts with PDF magic bytes `%PDF`. */
+export function isPdfBuffer(buffer) {
+  return Boolean(
+    buffer &&
+      buffer.length >= 4 &&
+      buffer[0] === 0x25 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x44 &&
+      buffer[3] === 0x46
+  );
+}
+
+/** After multer memory upload: require PDF magic bytes. */
+export function assertPdfSniff(req, _res, next) {
+  if (!req.file) return next(badRequest('الملف مطلوب'));
+  if (!isPdfBuffer(req.file.buffer)) {
+    return next(badRequest('محتوى الملف ليس PDF صالحاً'));
+  }
+  req.file.mimetype = 'application/pdf';
+  return next();
+}
+
+/** Safe display name for stored PDFs (basename + strip control chars). */
+export function safePdfDisplayName(originalName) {
+  const base = path.basename(String(originalName || 'document.pdf')).replace(/[^\w.\u0600-\u06FF\- ]+/g, '_');
+  const trimmed = base.trim().slice(0, 180) || 'document.pdf';
+  return trimmed.toLowerCase().endsWith('.pdf') ? trimmed : `${trimmed}.pdf`;
+}
+
+/** Optional local disk mirror under uploads/teacher-documents (Render-ephemeral). */
+export function writeTeacherPdfMirror(teacherId, docType, buffer) {
+  const rel = path.posix.join(
+    'teacher-documents',
+    String(teacherId),
+    `${docType}-${crypto.randomBytes(8).toString('hex')}.pdf`
+  );
+  const absolute = resolveSafeUploadPath(rel);
+  if (!absolute) return null;
+  fs.mkdirSync(path.dirname(absolute), { recursive: true });
+  fs.writeFileSync(absolute, buffer);
+  return rel;
+}
+
 /** @deprecated Logos are served from GET /api/school-settings/logo — do not use public /uploads. */
 export function logoPathToUrl(logoPath) {
   if (!logoPath) return null;
@@ -176,10 +281,10 @@ export function uploadPathToUrl(_relativePath) {
   return null;
 }
 
-/** Delete a previously stored upload file (relative to UPLOAD_ROOT); ignores missing files. */
+/** Delete a previously stored upload file (relative to UPLOAD_ROOT); ignores missing/unsafe paths. */
 export function deleteUploadFile(relativePath) {
-  if (!relativePath) return;
-  const absolute = path.join(UPLOAD_ROOT, relativePath);
+  const absolute = resolveSafeUploadPath(relativePath);
+  if (!absolute) return;
   fs.unlink(absolute, (err) => {
     if (err && err.code !== 'ENOENT') {
       console.error('[upload] failed to delete file', absolute, err);

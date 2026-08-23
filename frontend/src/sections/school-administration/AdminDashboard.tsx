@@ -741,7 +741,7 @@ export function AdminDashboard({
         skipped > 0 ? ` تُجاوز ${skipped} سجلًا (راجع التفاصيل في الاستجابة).` : ''
       setSettingsMessage({
         type: skipped > 0 ? 'err' : 'ok',
-        text: `تمت استعادة البيانات من الملف.${safety}${skipNote} كلمة مرور الحسابات المستعادة: ${result?.defaultPassword || 'Password123!'} — يجب تغييرها عند الدخول.`,
+        text: `تمت استعادة البيانات من الملف.${safety}${skipNote} تم تعيين كلمة مرور مؤقتة للحسابات المستعادة — يجب تغييرها عند أول دخول (لا تُعرض كلمة المرور هنا).`,
       })
     } catch (err) {
       const message = err instanceof ApiError ? err.message : 'فشل استعادة النسخة الاحتياطية'
@@ -1643,13 +1643,10 @@ export function AdminDashboard({
                       ? ` · معلمون أُنشئوا: ${timetableImportResult.teachersCreated}`
                       : ''}
                   </div>
-                  {timetableImportResult.defaultPassword && (
+                  {timetableImportResult.temporaryPasswordIssued && (
                     <div className="text-amber-800 dark:text-amber-200">
-                      كلمة مرور المعلمين الجدد:{' '}
-                      <span className="font-mono font-bold">
-                        {timetableImportResult.defaultPassword}
-                      </span>{' '}
-                      — عدّل الأسماء الكاملة من تبويب الموظفين.
+                      تم إنشاء معلمين بكلمة مرور مؤقتة — يُطلب تغييرها عند أول دخول. عدّل الأسماء
+                      الكاملة من تبويب الموظفين.
                     </div>
                   )}
                   {(timetableImportResult.unresolved ?? 0) > 0 && (
@@ -1867,10 +1864,9 @@ export function AdminDashboard({
             {teacherImportResult && (
               <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
                 <h3 className="font-bold">آخر استيراد معلمين: {teacherImportResult.fileName}</h3>
-                {teacherImportResult.defaultPassword && (
+                {teacherImportResult.temporaryPasswordIssued && (
                   <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-                    كلمة المرور للحسابات الجديدة:{' '}
-                    <span className="font-mono font-bold">{teacherImportResult.defaultPassword}</span>
+                    تم إنشاء حسابات جديدة بكلمة مرور مؤقتة — يُطلب من المعلمين تغييرها عند أول دخول.
                   </p>
                 )}
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -2090,7 +2086,8 @@ export function AdminDashboard({
               </p>
               <p className="mt-1 text-xs leading-5 text-slate-600 dark:text-slate-400">
                 ارفع ملف النسخة الاحتياطية (ZIP أو JSON القديم) الذي نزّلته سابقاً لإرجاع الطلاب
-                والتقارير والبيانات. كلمة مرور الحسابات المستعادة ستكون Password123!
+                والتقارير والبيانات. الحسابات المستعادة تحصل على كلمة مرور مؤقتة ويجب تغييرها عند
+                أول دخول.
               </p>
               <label className="mt-3 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-800">
                 <Upload className="size-4" strokeWidth={1.5} />

@@ -8,7 +8,7 @@ export interface ParentAuthContextValue {
   bootstrapping: boolean
   isAuthenticated: boolean
   login: (phone: string, password: string) => Promise<void>
-  register: (phone: string, password: string) => Promise<void>
+  register: (phone: string, password: string, studentId: string) => Promise<void>
   logout: () => void
   refreshStudents: () => Promise<void>
   setStudents: (students: ParentChild[]) => void

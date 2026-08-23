@@ -61,6 +61,7 @@ model User {
   importBatches  StudentImportBatch[]  @relation("ImportedBy")
   classChanges   ClassEnrollment[]     @relation("ClassEnrollmentChangedBy")
   reasonsReviewed Attendance[]         @relation("AbsenceReasonReviewedBy")
+  teacherDocuments TeacherDocument[]
 }
 
 model Class {
@@ -480,7 +481,8 @@ model StudentProfileCampaign {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  submissions StudentProfileSubmission[]
+  submissions    StudentProfileSubmission[]
+  changeRequests StudentProfileChangeRequest[]
 }
 
 model StudentProfileSubmission {
@@ -499,8 +501,69 @@ model StudentProfileSubmission {
   submittedAt     DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  changeRequests StudentProfileChangeRequest[]
+
   @@unique([campaignId, enteredStudentId])
   @@index([classId])
   @@index([studentId])
   @@index([hasMedical])
+}
+
+enum StudentProfileChangeStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// Parent resubmit while a live submission already exists — affairs must approve.
+model StudentProfileChangeRequest {
+  id               Int                        @id @default(autoincrement())
+  campaignId       Int
+  campaign         StudentProfileCampaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  submissionId     Int
+  submission       StudentProfileSubmission   @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  enteredStudentId String
+  proposedPayload  String
+  hasMedical       Boolean                    @default(false)
+  status           StudentProfileChangeStatus @default(PENDING)
+  reviewNote       String?
+  reviewedBy       Int?
+  reviewedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  @@index([campaignId, status])
+  @@index([submissionId, status])
+  @@index([status])
+}
+
+// ---------- Teacher employment PDF dossier ----------
+
+enum TeacherDocType {
+  NOMINATION_FORM
+  NATIONAL_ID
+  CRIMINAL_CLEARANCE
+  MEDICAL_EXAM
+  ACADEMIC_QUALIFICATION
+  TRAINING_COURSES
+  PREVIOUS_EXPERIENCE
+  PROFESSIONAL_LICENSE
+  UNIFIED_CONTRACT
+  PERFORMANCE_2Y
+}
+
+model TeacherDocument {
+  id          Int            @id @default(autoincrement())
+  teacherId   Int
+  teacher     User           @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  docType     TeacherDocType
+  fileName    String
+  mime        String         @default("application/pdf")
+  data        Bytes
+  storagePath String?
+  uploadedAt  DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@unique([teacherId, docType])
+  @@index([teacherId])
 }

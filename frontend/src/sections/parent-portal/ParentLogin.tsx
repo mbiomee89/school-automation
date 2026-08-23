@@ -1,5 +1,5 @@
 ﻿import { useId, useState, type FormEvent } from 'react'
-import { Building2, Eye, EyeOff, Lock, Smartphone } from 'lucide-react'
+import { Building2, Eye, EyeOff, IdCard, Lock, Smartphone } from 'lucide-react'
 import type { ParentLoginErrorCode, ParentLoginMode, ParentLoginProps } from './types'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic, fontMono } from '../../shared/fonts'
@@ -11,6 +11,7 @@ const ERROR_AR: Record<ParentLoginErrorCode, string> = {
   PHONE_NOT_FOUND: 'هذا الرقم غير مرتبط بطالب في المدرسة. تواصل مع الإدارة.',
   ACCOUNT_EXISTS: 'يوجد حساب لهذا الرقم مسبقاً — سجّل الدخول بدل الإنشاء.',
   WEAK_PASSWORD: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.',
+  STUDENT_ID_REQUIRED: 'أدخل معرّف / رقم هوية أحد أبنائك المسجّلين على هذا الجوال.',
   NETWORK: 'تعذّر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.',
 }
 
@@ -25,7 +26,7 @@ function looksLikeSaudiPhone(value: string) {
 }
 
 /**
- * Parent phone + password login / first-time register.
+ * Parent phone + password login / first-time register (register also needs student ID).
  * Mobile-first, no app shell.
  */
 export function ParentLogin({
@@ -41,14 +42,17 @@ export function ParentLogin({
 }: ParentLoginProps) {
   const phoneId = useId()
   const passwordId = useId()
+  const studentIdFieldId = useId()
   const [mode, setMode] = useState<ParentLoginMode>(controlledMode ?? 'login')
   const [phone, setPhone] = useState(initialPhone)
   const [password, setPassword] = useState('')
+  const [studentId, setStudentId] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [localError, setLocalError] = useState<ParentLoginErrorCode | null>(null)
 
   const currentMode = controlledMode ?? mode
-  const displayError = errorMessage || (errorCode ? ERROR_AR[errorCode] : null) || (localError ? ERROR_AR[localError] : null)
+  const displayError =
+    errorMessage || (errorCode ? ERROR_AR[errorCode] : null) || (localError ? ERROR_AR[localError] : null)
   const schoolName = brand?.schoolName ?? 'منصة إدارة المدرسة'
 
   function switchMode(next: ParentLoginMode) {
@@ -73,7 +77,17 @@ export function ParentLogin({
       setLocalError('WEAK_PASSWORD')
       return
     }
-    onSubmit?.({ phone: trimmedPhone, password, mode: currentMode })
+    const trimmedStudentId = studentId.trim()
+    if (currentMode === 'register' && !trimmedStudentId) {
+      setLocalError('STUDENT_ID_REQUIRED')
+      return
+    }
+    onSubmit?.({
+      phone: trimmedPhone,
+      password,
+      mode: currentMode,
+      ...(currentMode === 'register' ? { studentId: trimmedStudentId } : {}),
+    })
   }
 
   return (
@@ -146,7 +160,8 @@ export function ParentLogin({
 
           {currentMode === 'register' && (
             <p className="rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200">
-              لأول مرة فقط: استخدم رقم الجوال المسجّل لدى المدرسة ثم اختر كلمة مرور (8 أحرف على الأقل).
+              لأول مرة فقط: أدخل رقم الجوال المسجّل لدى المدرسة ومعرّف أحد أبنائك على هذا الجوال، ثم اختر
+              كلمة مرور (8 أحرف على الأقل).
             </p>
           )}
 
@@ -179,6 +194,41 @@ export function ParentLogin({
               />
             </div>
           </label>
+
+          {currentMode === 'register' && (
+            <label className="block text-sm" htmlFor={studentIdFieldId}>
+              <span className="font-medium text-slate-700 dark:text-slate-300">
+                معرّف الطالب / رقم الهوية <span className="text-red-600">*</span>
+              </span>
+              <div className="relative mt-1.5">
+                <IdCard
+                  className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                  strokeWidth={1.75}
+                  aria-hidden="true"
+                />
+                <input
+                  id={studentIdFieldId}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  dir="ltr"
+                  value={studentId}
+                  disabled={isSubmitting}
+                  onChange={(e) => {
+                    setStudentId(e.target.value)
+                    setLocalError(null)
+                  }}
+                  placeholder="رقم هوية أحد الأبناء"
+                  className="min-h-11 w-full rounded-xl border border-slate-300 bg-white py-2.5 pe-3 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  style={fontMono}
+                  aria-invalid={!!displayError}
+                />
+              </div>
+              <span className="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">
+                يجب أن يطابق رقم الجوال المسجّل لهذا الطالب في سجلات المدرسة.
+              </span>
+            </label>
+          )}
 
           <label className="block text-sm" htmlFor={passwordId}>
             <span className="font-medium text-slate-700 dark:text-slate-300">

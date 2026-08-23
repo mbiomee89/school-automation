@@ -32,7 +32,7 @@ export async function loginParent(phone: string, password: string) {
   })
 }
 
-export async function registerParent(phone: string, password: string) {
+export async function registerParent(phone: string, password: string, studentId: string) {
   return apiRequest<{
     token: string
     phone: string
@@ -46,7 +46,7 @@ export async function registerParent(phone: string, password: string) {
   }>('/auth/parent/register', {
     method: 'POST',
     auth: false,
-    body: { phone, password },
+    body: { phone, password, studentId },
   })
 }
 

@@ -484,7 +484,7 @@ export async function importNoorTeachersFile(file: File): Promise<ImportResult> 
     updated: number
     reactivated: number
     skipped: number
-    defaultPassword?: string | null
+    temporaryPasswordIssued?: boolean
     errors: ImportResult['errors']
   }>('/users/import-noor', {
     method: 'POST',
@@ -496,7 +496,7 @@ export async function importNoorTeachersFile(file: File): Promise<ImportResult> 
     updated: data.updated,
     reactivated: data.reactivated,
     skipped: data.skipped,
-    defaultPassword: data.defaultPassword ?? null,
+    temporaryPasswordIssued: !!data.temporaryPasswordIssued || data.created > 0,
     errors: data.errors ?? [],
   }
 }
@@ -520,7 +520,7 @@ export type TimetableImportResult = {
   assignmentsCreated?: number
   assignmentsReassigned?: number
   teachersCreated?: number
-  defaultPassword?: string | null
+  temporaryPasswordIssued?: boolean
   unmatchedTeachers?: Array<{ name: string; count: number }>
   unmatchedClasses?: Array<{ name: string; count: number }>
   unmatchedSubjects?: Array<{ name: string; count: number }>
@@ -705,7 +705,7 @@ export type RestoreDataResult = {
     users?: number
     [key: string]: unknown
   }
-  defaultPassword: string
+  temporaryPasswordIssued?: boolean
   safetyBackupFileName?: string
   safetyBackupDownloadUrl?: string
 }

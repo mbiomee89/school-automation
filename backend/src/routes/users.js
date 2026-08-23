@@ -168,7 +168,8 @@ router.post(
       updated,
       reactivated,
       skipped: errors.length,
-      defaultPassword: created > 0 ? NOOR_TEACHER_DEFAULT_PASSWORD : null,
+      /** True when new teachers got a temporary password (must change on login). Value is never returned. */
+      temporaryPasswordIssued: created > 0,
       errors,
     });
   })
@@ -267,6 +268,16 @@ router.patch(
     const id = req.params.id;
     if (id === req.user.id) {
       throw badRequest('You cannot deactivate your own account');
+    }
+    const existing = await prisma.user.findUnique({ where: { id } });
+    if (!existing) throw notFound('User not found');
+    if (existing.role === 'ADMIN' && existing.isActive) {
+      const otherAdmins = await prisma.user.count({
+        where: { role: 'ADMIN', isActive: true, id: { not: id } },
+      });
+      if (otherAdmins === 0) {
+        throw badRequest('لا يمكن تعطيل آخر مسؤول نشط');
+      }
     }
     const user = await prisma.user.update({
       where: { id },

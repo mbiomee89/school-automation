@@ -524,7 +524,7 @@ export function AdministrationPage() {
         setAssignmentsLoaded(false)
         await loadShell()
         return {
-          defaultPassword: result.defaultPassword,
+          temporaryPasswordIssued: !!result.temporaryPasswordIssued,
           restored: result.restored,
           safetyBackupFileName: result.safetyBackupFileName,
         }

@@ -26,6 +26,8 @@ services:
         sync: false
       - key: JWT_SECRET
         generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
       - key: JWT_EXPIRES_IN
         value: 8h
       - key: PARENT_JWT_EXPIRES_IN

@@ -492,7 +492,7 @@ export async function ensureTeachersFromTableNames(tableNames) {
     teacherMap[tableName] = user.id;
   }
 
-  return { teacherMap, created, defaultPassword: created > 0 ? TIMETABLE_TEACHER_DEFAULT_PASSWORD : null };
+  return { teacherMap, created, temporaryPasswordIssued: created > 0 };
 }
 
 /**
@@ -510,13 +510,13 @@ export async function applyTimetableImport(
 ) {
   const mergedTeacherMap = { ...teacherMap };
   let teachersCreated = 0;
-  let defaultPassword = null;
+  let temporaryPasswordIssued = false;
 
   if (createTeachers.length) {
     const ensured = await ensureTeachersFromTableNames(createTeachers);
     Object.assign(mergedTeacherMap, ensured.teacherMap);
     teachersCreated = ensured.created;
-    defaultPassword = ensured.defaultPassword;
+    temporaryPasswordIssued = !!ensured.temporaryPasswordIssued;
   }
 
   const preview = await resolveTimetableSlots(rawSlots, {
@@ -603,7 +603,7 @@ export async function applyTimetableImport(
     unmatchedClasses: preview.unmatchedClasses,
     unmatchedSubjects: preview.unmatchedSubjects,
     teachersCreated,
-    defaultPassword,
+    temporaryPasswordIssued,
     slotsCreated,
     assignmentsCreated,
     assignmentsReassigned,

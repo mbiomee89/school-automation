@@ -19,7 +19,8 @@ const bulkSchema = z.object({
     .array(
       z.object({
         studentId: z.string().min(1),
-        status: z.enum(['PRESENT', 'ABSENT', 'EXCUSED']),
+        // EXCUSED only via counselor excuse approval — not teacher/admin bulk mark.
+        status: z.enum(['PRESENT', 'ABSENT']),
       })
     )
     .min(1),

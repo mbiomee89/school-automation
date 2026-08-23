@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { UPLOAD_ROOT } from '../middleware/upload.js';
+import { resolveSafeUploadPath } from '../middleware/upload.js';
 import { prisma } from '../utils/prisma.js';
 
 const SINGLETON_ID = 1;
@@ -47,8 +47,8 @@ export async function loadSchoolLogo() {
   }
 
   if (settings.logoPath) {
-    const absolute = path.join(UPLOAD_ROOT, settings.logoPath);
-    if (fs.existsSync(absolute)) {
+    const absolute = resolveSafeUploadPath(settings.logoPath);
+    if (absolute && fs.existsSync(absolute)) {
       const buffer = fs.readFileSync(absolute);
       const mime = settings.logoMime || guessMimeFromPath(settings.logoPath);
       // One-time migrate: persist ephemeral disk logo into Postgres.

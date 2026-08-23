@@ -46,6 +46,8 @@ const parentAuthSchema = z.object({
 const parentRegisterSchema = z.object({
   phone: z.string().min(1),
   password: z.string().min(8),
+  /** National / iqama id — must match an active student with this parentPhone. */
+  studentId: z.string().min(1),
 });
 
 /** POST /auth/login — staff */
@@ -92,15 +94,15 @@ router.post(
 );
 
 /**
- * POST /auth/parent/register — first-time password for a phone that already
- * appears on active student records.
+ * POST /auth/parent/register — first-time password. Requires phone + studentId
+ * matching an active Student (parentPhone + id); blocks phone-only takeover.
  */
 router.post(
   '/parent/register',
   authLimiter,
   validateBody(parentRegisterSchema),
   asyncHandler(async (req, res) => {
-    const result = await registerParent(req.body.phone, req.body.password);
+    const result = await registerParent(req.body.phone, req.body.password, req.body.studentId);
     res.status(201).json(result);
   })
 );

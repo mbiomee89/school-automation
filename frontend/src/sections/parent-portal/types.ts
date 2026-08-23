@@ -142,6 +142,7 @@ export type ParentLoginErrorCode =
   | 'PHONE_NOT_FOUND'
   | 'ACCOUNT_EXISTS'
   | 'WEAK_PASSWORD'
+  | 'STUDENT_ID_REQUIRED'
   | 'NETWORK'
 
 export interface ParentLoginBrand {
@@ -164,8 +165,16 @@ export interface ParentLoginProps {
   isSubmitting?: boolean
 
   onModeChange?: (mode: ParentLoginMode) => void
-  /** Submit phone + password for login or register depending on mode. */
-  onSubmit?: (credentials: { phone: string; password: string; mode: ParentLoginMode }) => void
+  /**
+   * Submit credentials. `studentId` is required in register mode (national ID
+   * of one child linked to this phone).
+   */
+  onSubmit?: (credentials: {
+    phone: string
+    password: string
+    mode: ParentLoginMode
+    studentId?: string
+  }) => void
   /** Navigate to the staff login screen (different auth realm — no shared session). */
   onOpenStaffLogin?: () => void
 }

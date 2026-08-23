@@ -64,6 +64,24 @@ export type StudentProfileSubmission = {
   updatedAt: string
 }
 
+export type StudentProfileChangeRequest = {
+  id: number
+  campaignId: number
+  submissionId: number
+  enteredStudentId: string
+  hasMedical: boolean
+  status: 'PENDING' | 'APPROVED' | 'REJECTED'
+  reviewNote: string | null
+  reviewedBy: number | null
+  reviewedAt: string | null
+  createdAt: string
+  updatedAt: string
+  proposedPayload: StudentProfilePayload
+  liveSubmission: StudentProfileSubmission | null
+  studentNameAr: string | null
+  className: string | null
+}
+
 export async function getPublicProfileMeta(token: string) {
   return apiRequest<{
     title: string
@@ -84,6 +102,7 @@ export async function lookupPublicStudent(token: string, studentId: string) {
     } | null
     /** True if a prior row exists; payload is never returned to anonymous clients. */
     hasPriorSubmission: boolean
+    hasPendingChangeRequest: boolean
   }>(`/student-profile/public/${token}/lookup?${qs}`, { auth: false })
 }
 
@@ -91,10 +110,16 @@ export async function submitPublicStudentProfile(
   token: string,
   body: { enteredStudentId: string; payload: StudentProfilePayload }
 ) {
-  return apiRequest<{ submission: StudentProfileSubmission }>(
-    `/student-profile/public/${token}/submit`,
-    { method: 'POST', body, auth: false }
-  )
+  return apiRequest<{
+    ok: true
+    submissionId: number
+    pending: boolean
+    changeRequestId?: number
+  }>(`/student-profile/public/${token}/submit`, {
+    method: 'POST',
+    body,
+    auth: false,
+  })
 }
 
 export async function getStaffProfileCampaign() {
@@ -106,6 +131,7 @@ export async function getStaffProfileCampaign() {
       isActive: boolean
       publicPath: string
       submissionCount?: number
+      pendingChangeCount?: number
     }
   }>('/student-profile/staff/campaign')
 }
@@ -144,4 +170,28 @@ export async function linkProfileSubmission(id: number, studentId: string) {
     { method: 'PATCH', body: { studentId } }
   )
   return data.submission
+}
+
+export async function listProfileChangeRequests(status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL' = 'PENDING') {
+  const qs = new URLSearchParams({ status })
+  const data = await apiRequest<{ changeRequests: StudentProfileChangeRequest[] }>(
+    `/student-profile/staff/change-requests?${qs}`
+  )
+  return data.changeRequests
+}
+
+export async function approveProfileChangeRequest(id: number) {
+  const data = await apiRequest<{ changeRequest: StudentProfileChangeRequest }>(
+    `/student-profile/staff/change-requests/${id}/approve`,
+    { method: 'POST', body: {} }
+  )
+  return data.changeRequest
+}
+
+export async function rejectProfileChangeRequest(id: number, note?: string) {
+  const data = await apiRequest<{ changeRequest: StudentProfileChangeRequest }>(
+    `/student-profile/staff/change-requests/${id}/reject`,
+    { method: 'POST', body: { note: note ?? null } }
+  )
+  return data.changeRequest
 }

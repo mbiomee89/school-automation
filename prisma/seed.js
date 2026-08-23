@@ -40,10 +40,15 @@ async function main() {
         passwordHash,
         role: 'ADMIN',
         langPref: 'AR',
+        mustChangePassword: true,
       },
     });
     console.log('Seed complete (admin created).');
-    console.log({ admin: admin.email, password: PASSWORD });
+    console.log({
+      admin: admin.email,
+      mustChangePassword: true,
+      note: 'Use the documented default password from ops-hosting.md, then change it on first login.',
+    });
   }
 
   await prisma.schoolSettings.upsert({

@@ -77,11 +77,15 @@ export async function loginParent(rawPhone, password) {
   return { token, phone, students };
 }
 
+const PARENT_REGISTER_GENERIC =
+  'تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً';
+
 /**
- * First-time parent registration — phone must already appear on active students,
- * and no ParentAccount may exist yet.
+ * First-time parent registration — requires an active Student whose id matches
+ * studentId and parentPhone matches the phone. Blocks phone-only takeover.
+ * No ParentAccount may exist yet for that phone.
  */
-export async function registerParent(rawPhone, password) {
+export async function registerParent(rawPhone, password, rawStudentId) {
   let phone;
   try {
     phone = normalizePhone(rawPhone);
@@ -93,18 +97,28 @@ export async function registerParent(rawPhone, password) {
     throw badRequest(`Password must be at least ${MIN_PARENT_PASSWORD} characters`);
   }
 
-  const activeCount = await prisma.student.count({
-    where: { parentPhone: phone, isActive: true },
+  const studentId = String(rawStudentId ?? '').trim();
+  if (!studentId) {
+    throw badRequest(PARENT_REGISTER_GENERIC);
+  }
+
+  // Proof of possession: national ID must belong to a child on this phone.
+  const matched = await prisma.student.findFirst({
+    where: {
+      id: studentId,
+      parentPhone: phone,
+      isActive: true,
+    },
+    select: { id: true },
   });
-  if (activeCount === 0) {
-    // Same generic message as login — avoid phone enumeration.
-    throw badRequest('تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً');
+  if (!matched) {
+    // Same generic message — avoid phone / ID enumeration.
+    throw badRequest(PARENT_REGISTER_GENERIC);
   }
 
   const existing = await prisma.parentAccount.findUnique({ where: { phone } });
   if (existing) {
-    // Same status + message as "no students" to avoid phone enumeration.
-    throw badRequest('تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً');
+    throw badRequest(PARENT_REGISTER_GENERIC);
   }
 
   const passwordHash = await hashPassword(password);

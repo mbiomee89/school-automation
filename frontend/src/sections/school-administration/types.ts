@@ -133,7 +133,7 @@ export interface ImportResult {
   classesReused?: number
   academicYear?: string
   /** Shared initial password for newly created teacher accounts (Noor teacher import). */
-  defaultPassword?: string | null
+  temporaryPasswordIssued?: boolean
 }
 
 export interface TimetableNameMapping {
@@ -155,7 +155,7 @@ export interface TimetableImportResult {
   assignmentsCreated?: number
   assignmentsReassigned?: number
   teachersCreated?: number
-  defaultPassword?: string | null
+  temporaryPasswordIssued?: boolean
   unmatchedTeachers?: Array<{ name: string; count: number }>
   unmatchedClasses?: Array<{ name: string; count: number }>
   unmatchedSubjects?: Array<{ name: string; count: number }>
@@ -345,7 +345,7 @@ export interface SchoolAdministrationProps {
   onResetAllData?: () => void | Promise<{ backupFileName: string }>
   /** Restore platform data from a previously downloaded backup ZIP/JSON file. */
   onRestoreFromBackup?: (file: File) => void | Promise<{
-    defaultPassword: string
+    temporaryPasswordIssued?: boolean
     restored?: { skipped?: string[]; [key: string]: unknown }
     safetyBackupFileName?: string
   }>

@@ -39,13 +39,13 @@ export function ParentLoginPage() {
         setErrorCode(null)
         setErrorMessage(null)
       }}
-      onSubmit={async ({ phone, password, mode: submitMode }) => {
+      onSubmit={async ({ phone, password, mode: submitMode, studentId }) => {
         setErrorCode(null)
         setErrorMessage(null)
         setIsSubmitting(true)
         try {
           if (submitMode === 'register') {
-            await register(phone, password)
+            await register(phone, password, studentId ?? '')
           } else {
             await login(phone, password)
           }
@@ -59,11 +59,7 @@ export function ParentLoginPage() {
             } else if (err.status === 400) {
               const msg = err.message.toLowerCase()
               if (msg.includes('password')) setErrorCode('WEAK_PASSWORD')
-              else if (msg.includes('phone') || msg.includes('linked') || msg.includes('student')) {
-                setErrorCode('PHONE_NOT_FOUND')
-              } else {
-                setErrorMessage(err.message)
-              }
+              else setErrorMessage(err.message)
             } else {
               setErrorCode('NETWORK')
             }

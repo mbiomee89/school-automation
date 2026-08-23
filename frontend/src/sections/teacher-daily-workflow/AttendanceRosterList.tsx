@@ -9,16 +9,14 @@ export interface AttendanceRosterListProps {
   onSetStatus: (studentId: string, status: AttendanceStatus) => void
 }
 
-const STATUS_ORDER: AttendanceStatus[] = ['PRESENT', 'ABSENT', 'EXCUSED']
+const STATUS_ORDER: AttendanceStatus[] = ['PRESENT', 'ABSENT']
 
 function initials(nameAr: string) {
   return nameAr.trim().charAt(0)
 }
 
 /**
- * Roster with a direct-set (never cycling) 3-way status control per student.
- * Every student starts PRESENT, so a teacher only has to tap the one or two
- * students who aren't — the fast path this section's spec calls for.
+ * Roster with direct-set PRESENT/ABSENT. EXCUSED is counselor-only (shown read-only if already set).
  */
 export function AttendanceRosterList({ roster, marks, onSetStatus }: AttendanceRosterListProps) {
   return (
@@ -26,6 +24,7 @@ export function AttendanceRosterList({ roster, marks, onSetStatus }: AttendanceR
       {roster.map((student) => {
         const status = marks[student.id] ?? 'PRESENT'
         const statusTone = TONE_CLASSES[ATTENDANCE_STATUS_META[status].tone]
+        const isExcused = status === 'EXCUSED'
 
         return (
           <li
@@ -54,10 +53,16 @@ export function AttendanceRosterList({ roster, marks, onSetStatus }: AttendanceR
               </div>
             </div>
 
+            {isExcused ? (
+              <p className="mt-2.5 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-900 dark:border-violet-900 dark:bg-violet-950/40 dark:text-violet-200">
+                معفى (من المرشد) — غيّر إلى حاضر أو غائب إن لزم.
+              </p>
+            ) : null}
+
             <div
               role="group"
               aria-label={`حالة حضور ${student.nameAr}`}
-              className="mt-2.5 grid grid-cols-3 gap-1.5"
+              className="mt-2.5 grid grid-cols-2 gap-1.5"
             >
               {STATUS_ORDER.map((option) => {
                 const meta = ATTENDANCE_STATUS_META[option]

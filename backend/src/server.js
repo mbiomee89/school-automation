@@ -12,6 +12,16 @@ if (!process.env.JWT_SECRET) {
   process.exit(1);
 }
 
+if (process.env.NODE_ENV === 'production') {
+  const corsOrigin = process.env.CORS_ORIGIN?.trim();
+  if (!corsOrigin) {
+    console.error(
+      'CORS_ORIGIN is required in production (comma-separated HTTPS origins, e.g. https://school.example.com)'
+    );
+    process.exit(1);
+  }
+}
+
 // Prisma's SQLite engine resolves a relative `file:` datasource URL against the
 // process's current working directory, which differs depending on how the
 // server is started (e.g. `cd backend && npm run dev` vs. `npm run backend:dev`

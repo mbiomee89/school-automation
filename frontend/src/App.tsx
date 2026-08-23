@@ -12,6 +12,8 @@ import { StudentAffairsPage } from './pages/affairs/StudentAffairsPage'
 import { StudentProfilePublicPage } from './pages/public/StudentProfilePublicPage'
 import { ParentLoginPage } from './pages/parent/ParentLoginPage'
 import { ParentPortalPage } from './pages/parent/ParentPortalPage'
+import { TeacherDocumentsPage } from './pages/teacher/TeacherDocumentsPage'
+import { TeacherFilesAdminPage } from './pages/admin/TeacherFilesAdminPage'
 import { ROLE_HOME } from './shared/accessControl'
 
 function HomeRedirect() {
@@ -36,6 +38,8 @@ export default function App() {
                 <Route index element={<HomeRedirect />} />
                 <Route path="administration" element={<AdministrationPage />} />
                 <Route path="teacher-daily" element={<TeacherDailyPage />} />
+                <Route path="teacher-documents" element={<TeacherDocumentsPage />} />
+                <Route path="teacher-files" element={<TeacherFilesAdminPage />} />
                 <Route path="counselor-review" element={<CounselorReviewPage />} />
                 <Route path="student-affairs" element={<StudentAffairsPage />} />
                 <Route path="reports" element={<ReportsPage />} />

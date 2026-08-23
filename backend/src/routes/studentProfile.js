@@ -30,70 +30,75 @@ const HOUSING = ['OWNED', 'RENT', 'OTHER'];
 const RELATION = ['FATHER', 'MOTHER', 'BROTHER', 'SISTER', 'UNCLE_P', 'UNCLE_M', 'GUARDIAN', 'OTHER'];
 const ID_TYPE = ['NATIONAL', 'IQAMA', 'VISIT'];
 
-const payloadSchema = z.object({
-  stage: z.literal('الابتدائية').optional(),
-  classId: z.number().int().positive().nullable().optional(),
-  className: z.string().optional(),
-  nameAr: z.string().min(1),
-  nameEnFirst: z.string().min(1),
-  nameEnFather: z.string().min(1),
-  nameEnGrand: z.string().min(1),
-  nameEnFamily: z.string().min(1),
-  nationality: z.string().min(1),
-  civilId: z.string().min(1),
-  idIssueDate: z.string().optional().nullable(),
-  passportNumber: z.string().optional().nullable(),
-  birthDate: z.string().min(1),
-  birthCountry: z.string().min(1),
-  birthCity: z.string().min(1),
-  bloodType: z.enum(BLOOD).optional().nullable(),
-  housing: z.enum(HOUSING).optional().nullable(),
-  adminRegion: z.string().min(1),
-  city: z.string().min(1),
-  district: z.string().min(1),
-  streetMain: z.string().min(1),
-  streetSub: z.string().optional().nullable(),
-  houseNumber: z.string().min(1),
-  email: z.string().email(),
-  postalCode: z.string().optional().nullable(),
-  poBox: z.string().optional().nullable(),
-  guardianName: z.string().min(1),
-  guardianNationality: z.string().min(1),
-  guardianRelation: z.enum(RELATION),
-  guardianIdType: z.enum(ID_TYPE),
-  guardianIdNumber: z.string().min(1),
-  guardianIdIssueDate: z.string().min(1),
-  guardianIdSource: z.string().min(1),
-  guardianIdExpiry: z.string().min(1),
-  guardianHomePhone: z.string().optional().nullable(),
-  guardianMobile: z.string().min(1),
-  guardianWhatsappSame: z.boolean().default(true),
-  guardianWhatsapp: z.string().optional().nullable(),
-  guardianWorkPhone: z.string().optional().nullable(),
-  relativeName: z.string().min(1),
-  relativePhone: z.string().min(1),
-  relativeAddress: z.string().optional().nullable(),
-  hasMedicalConditions: z.boolean(),
-  medicalDetails: z.string().optional().nullable(),
-  attested: z.literal(true),
-}).superRefine((data, ctx) => {
-  if (data.guardianWhatsappSame) return;
-  if (!data.guardianWhatsapp || !String(data.guardianWhatsapp).trim()) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'رقم واتساب مطلوب',
-      path: ['guardianWhatsapp'],
-    });
+const payloadSchema = z
+  .object({
+    stage: z.literal('الابتدائية').optional(),
+    classId: z.number().int().positive().nullable().optional(),
+    className: z.string().optional(),
+    nameAr: z.string().min(1),
+    nameEnFirst: z.string().min(1),
+    nameEnFather: z.string().min(1),
+    nameEnGrand: z.string().min(1),
+    nameEnFamily: z.string().min(1),
+    nationality: z.string().min(1),
+    civilId: z.string().min(1),
+    idIssueDate: z.string().optional().nullable(),
+    passportNumber: z.string().optional().nullable(),
+    birthDate: z.string().min(1),
+    birthCountry: z.string().min(1),
+    birthCity: z.string().min(1),
+    bloodType: z.enum(BLOOD).optional().nullable(),
+    housing: z.enum(HOUSING).optional().nullable(),
+    adminRegion: z.string().min(1),
+    city: z.string().min(1),
+    district: z.string().min(1),
+    streetMain: z.string().min(1),
+    streetSub: z.string().optional().nullable(),
+    houseNumber: z.string().min(1),
+    email: z.string().email(),
+    postalCode: z.string().optional().nullable(),
+    poBox: z.string().optional().nullable(),
+    guardianName: z.string().min(1),
+    guardianNationality: z.string().min(1),
+    guardianRelation: z.enum(RELATION),
+    guardianIdType: z.enum(ID_TYPE),
+    guardianIdNumber: z.string().min(1),
+    guardianIdIssueDate: z.string().min(1),
+    guardianIdSource: z.string().min(1),
+    guardianIdExpiry: z.string().min(1),
+    guardianHomePhone: z.string().optional().nullable(),
+    guardianMobile: z.string().min(1),
+    guardianWhatsappSame: z.boolean().default(true),
+    guardianWhatsapp: z.string().optional().nullable(),
+    guardianWorkPhone: z.string().optional().nullable(),
+    relativeName: z.string().min(1),
+    relativePhone: z.string().min(1),
+    relativeAddress: z.string().optional().nullable(),
+    hasMedicalConditions: z.boolean(),
+    medicalDetails: z.string().optional().nullable(),
+    attested: z.literal(true),
+  })
+  .superRefine((data, ctx) => {
+    if (data.guardianWhatsappSame) return;
+    if (!data.guardianWhatsapp || !String(data.guardianWhatsapp).trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'رقم واتساب مطلوب',
+        path: ['guardianWhatsapp'],
+      });
+    }
+  });
+
+function parsePayload(raw) {
+  try {
+    return JSON.parse(raw || '{}');
+  } catch {
+    return {};
   }
-});
+}
 
 function serializeSubmission(row) {
-  let payload = {};
-  try {
-    payload = JSON.parse(row.payload || '{}');
-  } catch {
-    payload = {};
-  }
+  const payload = parsePayload(row.payload);
   if (payload.guardianWhatsappSame == null) {
     payload.guardianWhatsappSame = true;
   }
@@ -114,6 +119,82 @@ function serializeSubmission(row) {
     submittedAt: row.submittedAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+function serializeChangeRequest(row) {
+  const proposed = parsePayload(row.proposedPayload);
+  const live = row.submission ? serializeSubmission(row.submission) : null;
+  return {
+    id: row.id,
+    campaignId: row.campaignId,
+    submissionId: row.submissionId,
+    enteredStudentId: row.enteredStudentId,
+    hasMedical: row.hasMedical,
+    status: row.status,
+    reviewNote: row.reviewNote ?? null,
+    reviewedBy: row.reviewedBy ?? null,
+    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    proposedPayload: proposed,
+    liveSubmission: live,
+    studentNameAr: live?.studentNameAr ?? proposed.nameAr ?? null,
+    className: live?.className ?? proposed.className ?? null,
+  };
+}
+
+/**
+ * Normalize and validate payload against roster; mutates payload; returns { student, classId }.
+ */
+async function prepareSubmissionPayload(enteredStudentId, payload) {
+  if (payload.hasMedicalConditions) {
+    if (!payload.medicalDetails || !String(payload.medicalDetails).trim()) {
+      throw badRequest('يرجى كتابة تفاصيل الحالات المرضية');
+    }
+  } else {
+    payload.medicalDetails = null;
+  }
+
+  if (payload.guardianWhatsappSame !== false) {
+    payload.guardianWhatsappSame = true;
+    payload.guardianWhatsapp = payload.guardianMobile;
+  } else {
+    payload.guardianWhatsappSame = false;
+    payload.guardianWhatsapp = String(payload.guardianWhatsapp || '').trim();
+    if (!payload.guardianWhatsapp) throw badRequest('رقم واتساب مطلوب');
+  }
+
+  payload.guardianMobile = requireSaudiMobile(payload.guardianMobile, 'الجوال');
+  payload.guardianWhatsapp = requireSaudiMobile(payload.guardianWhatsapp, 'واتساب');
+  payload.relativePhone = requireSaudiMobile(payload.relativePhone, 'هاتف القريب');
+  payload.guardianHomePhone = optionalSaudiMobile(payload.guardianHomePhone, 'هاتف المنزل');
+  payload.guardianWorkPhone = optionalSaudiMobile(payload.guardianWorkPhone, 'هاتف العمل');
+
+  const student = await prisma.student.findFirst({
+    where: { id: enteredStudentId, isActive: true },
+  });
+
+  let classId = payload.classId ?? null;
+  if (student?.classId) classId = student.classId;
+  if (!student && !classId) throw badRequest('اختر الصف / الفصل');
+
+  if (classId) {
+    const cls = await prisma.class.findUnique({ where: { id: classId } });
+    if (!cls) throw badRequest('الفصل غير صالح');
+    payload.className = cls.name;
+    payload.classId = classId;
+  }
+
+  if (student) {
+    payload.nameAr = student.nameAr;
+  } else if (!payload.nameAr?.trim()) {
+    throw badRequest('الاسم العربي مطلوب');
+  }
+
+  payload.stage = 'الابتدائية';
+  payload.attested = true;
+
+  return { student, classId };
 }
 
 /** Prefer the active campaign; otherwise reuse the oldest campaign (even if paused). Never spawn a second school-wide link on pause. */
@@ -147,9 +228,12 @@ staffRouter.get(
   '/campaign',
   asyncHandler(async (_req, res) => {
     const campaign = await ensureActiveCampaign();
-    const count = await prisma.studentProfileSubmission.count({
-      where: { campaignId: campaign.id },
-    });
+    const [count, pendingChangeCount] = await Promise.all([
+      prisma.studentProfileSubmission.count({ where: { campaignId: campaign.id } }),
+      prisma.studentProfileChangeRequest.count({
+        where: { campaignId: campaign.id, status: 'PENDING' },
+      }),
+    ]);
     res.json({
       campaign: {
         id: campaign.id,
@@ -158,6 +242,7 @@ staffRouter.get(
         isActive: campaign.isActive,
         publicPath: `/student-profile/${campaign.token}`,
         submissionCount: count,
+        pendingChangeCount,
       },
     });
   })
@@ -245,7 +330,6 @@ staffRouter.patch(
       data: {
         studentId: student.id,
         classId: student.classId,
-        // Keep parent-entered key; rewriting enteredStudentId risks unique clashes.
       },
       include: {
         class: { select: { id: true, name: true } },
@@ -253,6 +337,102 @@ staffRouter.patch(
       },
     });
     res.json({ submission: serializeSubmission(row) });
+  })
+);
+
+const changeRequestInclude = {
+  submission: {
+    include: {
+      class: { select: { id: true, name: true } },
+      student: { select: { id: true, nameAr: true } },
+    },
+  },
+};
+
+staffRouter.get(
+  '/change-requests',
+  validateQuery(
+    z.object({
+      status: z.enum(['PENDING', 'APPROVED', 'REJECTED', 'ALL']).optional(),
+    })
+  ),
+  asyncHandler(async (req, res) => {
+    const campaign = await ensureActiveCampaign();
+    const status = req.query.status || 'PENDING';
+    const where = { campaignId: campaign.id };
+    if (status !== 'ALL') where.status = status;
+    const rows = await prisma.studentProfileChangeRequest.findMany({
+      where,
+      include: changeRequestInclude,
+      orderBy: [{ createdAt: 'desc' }],
+    });
+    res.json({ changeRequests: rows.map(serializeChangeRequest) });
+  })
+);
+
+staffRouter.post(
+  '/change-requests/:id/approve',
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.studentProfileChangeRequest.findUnique({
+      where: { id: req.params.id },
+      include: changeRequestInclude,
+    });
+    if (!row) throw notFound('طلب التعديل غير موجود');
+    if (row.status !== 'PENDING') throw badRequest('تمت مراجعة هذا الطلب مسبقاً');
+
+    const now = new Date();
+    await prisma.$transaction([
+      prisma.studentProfileSubmission.update({
+        where: { id: row.submissionId },
+        data: {
+          payload: row.proposedPayload,
+          hasMedical: row.hasMedical,
+          submittedAt: now,
+        },
+      }),
+      prisma.studentProfileChangeRequest.update({
+        where: { id: row.id },
+        data: {
+          status: 'APPROVED',
+          reviewedBy: req.user.id,
+          reviewedAt: now,
+          reviewNote: null,
+        },
+      }),
+    ]);
+
+    const updated = await prisma.studentProfileChangeRequest.findUnique({
+      where: { id: row.id },
+      include: changeRequestInclude,
+    });
+    res.json({ changeRequest: serializeChangeRequest(updated) });
+  })
+);
+
+staffRouter.post(
+  '/change-requests/:id/reject',
+  validateParams(idParam),
+  validateBody(z.object({ note: z.string().max(500).optional().nullable() })),
+  asyncHandler(async (req, res) => {
+    const row = await prisma.studentProfileChangeRequest.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!row) throw notFound('طلب التعديل غير موجود');
+    if (row.status !== 'PENDING') throw badRequest('تمت مراجعة هذا الطلب مسبقاً');
+
+    const note = req.body.note != null ? String(req.body.note).trim() || null : null;
+    const updated = await prisma.studentProfileChangeRequest.update({
+      where: { id: row.id },
+      data: {
+        status: 'REJECTED',
+        reviewedBy: req.user.id,
+        reviewedAt: new Date(),
+        reviewNote: note,
+      },
+      include: changeRequestInclude,
+    });
+    res.json({ changeRequest: serializeChangeRequest(updated) });
   })
 );
 
@@ -304,14 +484,22 @@ publicRouter.get(
       include: { class: { select: { id: true, name: true } } },
     });
 
-    const priorCount = await prisma.studentProfileSubmission.count({
+    const live = await prisma.studentProfileSubmission.findFirst({
       where: {
         campaignId: campaign.id,
         enteredStudentId: enteredId,
       },
+      select: { id: true },
     });
 
-    // Do not return prior PII to anonymous clients — name/class only when found.
+    let hasPendingChangeRequest = false;
+    if (live) {
+      const pending = await prisma.studentProfileChangeRequest.count({
+        where: { submissionId: live.id, status: 'PENDING' },
+      });
+      hasPendingChangeRequest = pending > 0;
+    }
+
     res.json({
       found: Boolean(student),
       student: student
@@ -322,7 +510,8 @@ publicRouter.get(
             className: student.class?.name ?? null,
           }
         : null,
-      hasPriorSubmission: priorCount > 0,
+      hasPriorSubmission: Boolean(live),
+      hasPendingChangeRequest,
     });
   })
 );
@@ -343,82 +532,70 @@ publicRouter.post(
 
     const enteredStudentId = req.body.enteredStudentId.trim();
     const payload = req.body.payload;
+    const { student, classId } = await prepareSubmissionPayload(enteredStudentId, payload);
 
-    if (payload.hasMedicalConditions) {
-      if (!payload.medicalDetails || !String(payload.medicalDetails).trim()) {
-        throw badRequest('يرجى كتابة تفاصيل الحالات المرضية');
-      }
-    } else {
-      payload.medicalDetails = null;
-    }
-
-    if (payload.guardianWhatsappSame !== false) {
-      payload.guardianWhatsappSame = true;
-      payload.guardianWhatsapp = payload.guardianMobile;
-    } else {
-      payload.guardianWhatsappSame = false;
-      payload.guardianWhatsapp = String(payload.guardianWhatsapp || '').trim();
-      if (!payload.guardianWhatsapp) throw badRequest('رقم واتساب مطلوب');
-    }
-
-    payload.guardianMobile = requireSaudiMobile(payload.guardianMobile, 'الجوال');
-    payload.guardianWhatsapp = requireSaudiMobile(payload.guardianWhatsapp, 'واتساب');
-    payload.relativePhone = requireSaudiMobile(payload.relativePhone, 'هاتف القريب');
-    payload.guardianHomePhone = optionalSaudiMobile(payload.guardianHomePhone, 'هاتف المنزل');
-    payload.guardianWorkPhone = optionalSaudiMobile(payload.guardianWorkPhone, 'هاتف العمل');
-
-    const student = await prisma.student.findFirst({
-      where: { id: enteredStudentId, isActive: true },
-    });
-
-    let classId = payload.classId ?? null;
-    if (student?.classId) classId = student.classId;
-    if (!student && !classId) throw badRequest('اختر الصف / الفصل');
-
-    if (classId) {
-      const cls = await prisma.class.findUnique({ where: { id: classId } });
-      if (!cls) throw badRequest('الفصل غير صالح');
-      payload.className = cls.name;
-      payload.classId = classId;
-    }
-
-    if (student) {
-      payload.nameAr = student.nameAr;
-    } else if (!payload.nameAr?.trim()) {
-      throw badRequest('الاسم العربي مطلوب');
-    }
-
-    payload.stage = 'الابتدائية';
-    payload.attested = true;
-
-    const data = {
-      studentId: student?.id ?? null,
-      classId,
-      payload: JSON.stringify(payload),
-      hasMedical: Boolean(payload.hasMedicalConditions),
-      submittedAt: new Date(),
-    };
-
-    const row = await prisma.studentProfileSubmission.upsert({
+    const existing = await prisma.studentProfileSubmission.findUnique({
       where: {
         campaignId_enteredStudentId: {
           campaignId: campaign.id,
           enteredStudentId,
         },
       },
-      create: {
-        campaignId: campaign.id,
-        enteredStudentId,
-        ...data,
-      },
-      update: data,
-      include: {
-        class: { select: { id: true, name: true } },
-        student: { select: { id: true, nameAr: true } },
-      },
     });
 
-    res.status(200).json({ submission: serializeSubmission(row) });
+    const payloadJson = JSON.stringify(payload);
+    const hasMedical = Boolean(payload.hasMedicalConditions);
+
+    if (!existing) {
+      const row = await prisma.studentProfileSubmission.create({
+        data: {
+          campaignId: campaign.id,
+          enteredStudentId,
+          studentId: student?.id ?? null,
+          classId,
+          payload: payloadJson,
+          hasMedical,
+          submittedAt: new Date(),
+        },
+      });
+      return res.status(200).json({ ok: true, submissionId: row.id, pending: false });
+    }
+
+    // Resubmit: do not overwrite live — upsert one PENDING change request.
+    const pending = await prisma.studentProfileChangeRequest.findFirst({
+      where: { submissionId: existing.id, status: 'PENDING' },
+    });
+
+    let changeRequest;
+    if (pending) {
+      changeRequest = await prisma.studentProfileChangeRequest.update({
+        where: { id: pending.id },
+        data: {
+          proposedPayload: payloadJson,
+          hasMedical,
+          enteredStudentId,
+          campaignId: campaign.id,
+        },
+      });
+    } else {
+      changeRequest = await prisma.studentProfileChangeRequest.create({
+        data: {
+          campaignId: campaign.id,
+          submissionId: existing.id,
+          enteredStudentId,
+          proposedPayload: payloadJson,
+          hasMedical,
+          status: 'PENDING',
+        },
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      pending: true,
+      changeRequestId: changeRequest.id,
+      submissionId: existing.id,
+    });
   })
 );
 

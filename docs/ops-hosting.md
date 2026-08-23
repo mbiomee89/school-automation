@@ -8,11 +8,11 @@ Short checklist for the school-automation web service + Postgres on Render.
 - `DATABASE_URL` = **External** Postgres URL (not the internal `dpg-…-a` host if regions differ)
 - Web service and Postgres in the **same region**
 - `JWT_SECRET` = long random secret (**never** leave empty or use `.env.example` value)
-- `CORS_ORIGIN` = your public HTTPS origin(s), comma-separated (e.g. `https://school.example.com`) — **required in production** when the browser origin must be locked down
+- `CORS_ORIGIN` = your public HTTPS origin(s), comma-separated (e.g. `https://school.example.com`) — **required in production** (API will not start without it)
 - `UPLOAD_DIR` set (e.g. `./backend/uploads`) — used for server-side files only; **not** publicly served
 - Build log shows Prisma provider switched to PostgreSQL
 - Health: `GET /health` (and `/api/health` if used) returns 200 after deploy
-- Change seed admin password immediately (`admin@school.local` / default from seed) — API blocks staff until password change when `mustChangePassword` is set
+- Change seed admin password immediately (`admin@school.local` — see seed/default in this doc). New seed admins have `mustChangePassword` and the API blocks other staff routes until they change it.
 
 ## Security notes (student PII)
 
@@ -41,7 +41,7 @@ Still ephemeral on disk only:
 ## Passwords
 
 - **Boot seed** creates `admin@school.local` only when missing; it does **not** reset an existing admin password.
-- After **ZIP restore** or **Noor/staff import**, default passwords may be `Password123!` — change them before handing accounts to staff.
+- After **ZIP restore** or **Noor/staff import**, temporary passwords are issued and **must be changed on first login**. The API/UI does not display the temporary password value.
 
 ## Schema apply on start
 

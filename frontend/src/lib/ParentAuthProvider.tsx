@@ -68,8 +68,8 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
   )
 
   const register = useCallback(
-    async (rawPhone: string, password: string) => {
-      const result = await registerParent(rawPhone, password)
+    async (rawPhone: string, password: string, studentId: string) => {
+      const result = await registerParent(rawPhone, password, studentId)
       await applySession(result.token, result.phone)
     },
     [applySession]

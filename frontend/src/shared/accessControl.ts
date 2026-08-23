@@ -51,8 +51,8 @@ export const STAFF_NAV_BY_ROLE: Record<
   'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS',
   string[]
 > = {
-  ADMIN: ['الإدارة المدرسية', 'التقارير', 'شؤون الطلاب'],
-  TEACHER: ['أعمال المعلم اليومية', 'الواجبات'],
+  ADMIN: ['الإدارة المدرسية', 'ملفات المعلمين', 'التقارير', 'شؤون الطلاب'],
+  TEACHER: ['أعمال المعلم اليومية', 'الواجبات', 'مستندات التوظيف'],
   COUNSELOR: ['مراجعة الأعذار', 'التقارير'],
   STUDENT_AFFAIRS: ['شؤون الطلاب', 'التقارير'],
 }
@@ -69,6 +69,8 @@ export function filterStaffNavByRole<T extends { label: string }>(
 export const SECTION_ALLOWED_ROLES: Record<string, AppRole[]> = {
   'school-administration': ['ADMIN'],
   'teacher-daily-workflow': ['TEACHER'],
+  'teacher-documents': ['TEACHER'],
+  'teacher-files': ['ADMIN'],
   'counselor-review': ['COUNSELOR'],
   'student-affairs': ['ADMIN', 'STUDENT_AFFAIRS'],
   reports: ['ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'],

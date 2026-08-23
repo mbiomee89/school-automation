@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
 import {
+  approveProfileChangeRequest,
   getStaffProfileCampaign,
+  listProfileChangeRequests,
   listProfileSubmissions,
   linkProfileSubmission,
   patchStaffProfileCampaign,
+  rejectProfileChangeRequest,
+  type StudentProfileChangeRequest,
+  type StudentProfilePayload,
   type StudentProfileSubmission,
 } from '../../api/studentProfile'
 import { getSchoolSettings, listClasses, listStudents } from '../../api/admin'
@@ -17,22 +22,63 @@ import {
   type SchoolPrintHeader,
 } from './StudentProfilePrintSheet'
 
-function whatsappOf(payload: StudentProfileSubmission['payload']) {
+type InboxMode = 'submissions' | 'changes'
+
+function whatsappOf(payload: StudentProfilePayload) {
   if (payload.guardianWhatsapp?.trim()) return payload.guardianWhatsapp.trim()
   return payload.guardianMobile || '—'
+}
+
+function PayloadCompare({
+  label,
+  payload,
+  hasMedical,
+}: {
+  label: string
+  payload: StudentProfilePayload
+  hasMedical?: boolean
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-950">
+      <p className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300">{label}</p>
+      <dl className="space-y-1 text-sm">
+        <div>الاسم: {payload.nameAr || '—'}</div>
+        <div>ولي الأمر: {payload.guardianName || '—'}</div>
+        <div dir="ltr">الجوال: {payload.guardianMobile || '—'}</div>
+        <div dir="ltr">واتساب: {whatsappOf(payload)}</div>
+        <div>
+          العنوان: {[payload.city, payload.district, payload.streetMain, payload.houseNumber]
+            .filter(Boolean)
+            .join(' — ') || '—'}
+        </div>
+        <div>
+          قريب الطوارئ: {payload.relativeName || '—'} —{' '}
+          <span dir="ltr">{payload.relativePhone || '—'}</span>
+        </div>
+        {(hasMedical || payload.hasMedicalConditions) && (
+          <div className="rounded-lg bg-rose-50 p-2 text-rose-900 dark:bg-rose-950/40 dark:text-rose-200">
+            حالات مرضية: {payload.medicalDetails || '—'}
+          </div>
+        )}
+      </dl>
+    </div>
+  )
 }
 
 export function StudentAffairsPage() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [inboxMode, setInboxMode] = useState<InboxMode>('submissions')
   const [campaign, setCampaign] = useState<{
     token: string
     title: string
     isActive: boolean
     publicPath: string
     submissionCount?: number
+    pendingChangeCount?: number
   } | null>(null)
   const [submissions, setSubmissions] = useState<StudentProfileSubmission[]>([])
+  const [changeRequests, setChangeRequests] = useState<StudentProfileChangeRequest[]>([])
   const [classes, setClasses] = useState<Array<{ id: number; name: string }>>([])
   const [schoolHeader, setSchoolHeader] = useState<SchoolPrintHeader>({
     schoolName: 'المدرسة',
@@ -42,28 +88,23 @@ export function StudentAffairsPage() {
   const [unlinkedOnly, setUnlinkedOnly] = useState(false)
   const [medicalOnly, setMedicalOnly] = useState(false)
   const [selected, setSelected] = useState<StudentProfileSubmission | null>(null)
+  const [selectedChange, setSelectedChange] = useState<StudentProfileChangeRequest | null>(null)
+  const [rejectNote, setRejectNote] = useState('')
   const [linkStudentId, setLinkStudentId] = useState('')
   const [studentOptions, setStudentOptions] = useState<Array<{ id: string; nameAr: string }>>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [copyHint, setCopyHint] = useState<string | null>(null)
-  /** When set, print CSS shows only this submission sheet. */
   const [printOnlyId, setPrintOnlyId] = useState<number | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
-    const [camp, subs, cls, settings] = await Promise.all([
+    const [camp, cls, settings] = await Promise.all([
       getStaffProfileCampaign(),
-      listProfileSubmissions({
-        classId: classFilter !== 'ALL' ? Number(classFilter) : undefined,
-        unlinkedOnly,
-        medicalOnly,
-      }),
       listClasses(),
       getSchoolSettings(),
     ])
     setCampaign(camp.campaign)
-    setSubmissions(subs)
     setClasses(cls.map((c) => ({ id: c.id, name: c.name })))
     setSchoolHeader({
       schoolName: settings.name || 'المدرسة',
@@ -72,7 +113,19 @@ export function StudentAffairsPage() {
       logoUrl: settings.logoUrl,
       principalName: settings.principalName,
     })
-  }, [classFilter, unlinkedOnly, medicalOnly])
+
+    if (inboxMode === 'submissions') {
+      const subs = await listProfileSubmissions({
+        classId: classFilter !== 'ALL' ? Number(classFilter) : undefined,
+        unlinkedOnly,
+        medicalOnly,
+      })
+      setSubmissions(subs)
+    } else {
+      const reqs = await listProfileChangeRequests('PENDING')
+      setChangeRequests(reqs)
+    }
+  }, [classFilter, unlinkedOnly, medicalOnly, inboxMode])
 
   useEffect(() => {
     let cancelled = false
@@ -114,6 +167,8 @@ export function StudentAffairsPage() {
     if (printOnlyId == null) return submissions
     return submissions.filter((s) => s.id === printOnlyId)
   }, [submissions, printOnlyId])
+
+  const pendingBadge = campaign?.pendingChangeCount ?? changeRequests.length
 
   async function copyLink() {
     if (!publicUrl) return
@@ -159,6 +214,35 @@ export function StudentAffairsPage() {
       await reload()
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'فشل الربط')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmApprove() {
+    if (!selectedChange) return
+    setBusy(true)
+    try {
+      await approveProfileChangeRequest(selectedChange.id)
+      setSelectedChange(null)
+      await reload()
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'فشل الاعتماد')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmReject() {
+    if (!selectedChange) return
+    setBusy(true)
+    try {
+      await rejectProfileChangeRequest(selectedChange.id, rejectNote.trim() || undefined)
+      setSelectedChange(null)
+      setRejectNote('')
+      await reload()
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : 'فشل الرفض')
     } finally {
       setBusy(false)
     }
@@ -243,6 +327,9 @@ export function StudentAffairsPage() {
           <p className="mt-2 text-xs text-slate-500">
             الحالة: {campaign.isActive ? 'مفتوحة للولي' : 'مغلقة — الرابط لا يقبل إرسالًا جديدًا'} · عدد
             المرسل: {campaign.submissionCount ?? submissions.length}
+            {typeof campaign.pendingChangeCount === 'number'
+              ? ` · طلبات تعديل معلّقة: ${campaign.pendingChangeCount}`
+              : ''}
             {refreshing ? ' · جارٍ التحديث…' : ''}
           </p>
         </section>
@@ -254,143 +341,240 @@ export function StudentAffairsPage() {
         </p>
       )}
 
-      <div className="flex flex-wrap items-end gap-3 print:hidden">
-        <label className="text-sm">
-          <span className="text-slate-600">الفصل</span>
-          <select
-            className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
-            value={classFilter}
-            onChange={(e) => setClassFilter(e.target.value)}
-          >
-            <option value="ALL">الكل</option>
-            {classes.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={unlinkedOnly}
-            onChange={(e) => setUnlinkedOnly(e.target.checked)}
-          />
-          غير مربوط فقط
-        </label>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={medicalOnly}
-            onChange={(e) => setMedicalOnly(e.target.checked)}
-          />
-          حالات مرضية
-        </label>
+      <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 print:hidden dark:bg-slate-800">
         <button
           type="button"
-          disabled={submissions.length === 0}
-          className={buttonVariants({ variant: 'primary', size: 'sm', className: 'ms-auto' })}
-          onClick={printAll}
+          onClick={() => setInboxMode('submissions')}
+          className={cn(
+            'rounded-lg py-2 text-sm font-semibold transition-colors',
+            inboxMode === 'submissions'
+              ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+              : 'text-slate-600 dark:text-slate-400'
+          )}
         >
-          <Printer className="size-4" strokeWidth={1.5} />
-          طباعة الاستمارات (صفحة لكل طالب)
+          المرسلات
+        </button>
+        <button
+          type="button"
+          onClick={() => setInboxMode('changes')}
+          className={cn(
+            'rounded-lg py-2 text-sm font-semibold transition-colors',
+            inboxMode === 'changes'
+              ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+              : 'text-slate-600 dark:text-slate-400'
+          )}
+        >
+          طلبات التعديل
+          {pendingBadge > 0 && (
+            <span className="ms-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+              {pendingBadge}
+            </span>
+          )}
         </button>
       </div>
 
-      <div
-        className={cn(
-          'overflow-hidden rounded-xl border border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-900',
-          refreshing && 'opacity-70'
-        )}
-      >
-        <table className="w-full text-sm">
-          <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-            <tr>
-              <th className="px-3 py-2 text-start">الطالب</th>
-              <th className="px-3 py-2 text-start">الفصل</th>
-              <th className="px-3 py-2 text-start">الحالة</th>
-              <th className="px-3 py-2 text-end">إجراء</th>
-            </tr>
-          </thead>
-          <tbody>
+      {inboxMode === 'submissions' && (
+        <>
+          <div className="flex flex-wrap items-end gap-3 print:hidden">
+            <label className="text-sm">
+              <span className="text-slate-600">الفصل</span>
+              <select
+                className="mt-1 block rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900"
+                value={classFilter}
+                onChange={(e) => setClassFilter(e.target.value)}
+              >
+                <option value="ALL">الكل</option>
+                {classes.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={unlinkedOnly}
+                onChange={(e) => setUnlinkedOnly(e.target.checked)}
+              />
+              غير مربوط فقط
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={medicalOnly}
+                onChange={(e) => setMedicalOnly(e.target.checked)}
+              />
+              حالات مرضية
+            </label>
+            <button
+              type="button"
+              disabled={submissions.length === 0}
+              className={buttonVariants({ variant: 'primary', size: 'sm', className: 'ms-auto' })}
+              onClick={printAll}
+            >
+              <Printer className="size-4" strokeWidth={1.5} />
+              طباعة الاستمارات (صفحة لكل طالب)
+            </button>
+          </div>
+
+          <div
+            className={cn(
+              'overflow-hidden rounded-xl border border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-900',
+              refreshing && 'opacity-70'
+            )}
+          >
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <tr>
+                  <th className="px-3 py-2 text-start">الطالب</th>
+                  <th className="px-3 py-2 text-start">الفصل</th>
+                  <th className="px-3 py-2 text-start">الحالة</th>
+                  <th className="px-3 py-2 text-end">إجراء</th>
+                </tr>
+              </thead>
+              <tbody>
+                {submissions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                      لا توجد استمارات بعد
+                    </td>
+                  </tr>
+                ) : (
+                  submissions.map((s) => (
+                    <tr key={s.id} className="border-t border-slate-100 dark:border-slate-800">
+                      <td className="px-3 py-2">
+                        <div className="font-semibold">{s.studentNameAr || s.payload.nameAr}</div>
+                        <div className="text-xs text-slate-500" dir="ltr">
+                          {s.enteredStudentId}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2">{s.className || s.payload.className || '—'}</td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-wrap gap-1">
+                          <span
+                            className={cn(
+                              'rounded-full px-2 py-0.5 text-xs font-medium',
+                              s.linked
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-900'
+                            )}
+                          >
+                            {s.linked ? 'مربوط' : 'غير مربوط'}
+                          </span>
+                          {s.hasMedical && (
+                            <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800">
+                              حالات مرضية
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-end">
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <button
+                            type="button"
+                            className="text-xs text-slate-700 underline"
+                            onClick={() => printOne(s.id)}
+                          >
+                            طباعة
+                          </button>
+                          <button
+                            type="button"
+                            className="text-xs text-blue-700 underline"
+                            onClick={() => void openLink(s)}
+                          >
+                            عرض / ربط
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <section className="space-y-4 print:hidden">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">معاينة الطباعة</h2>
+              <span className="text-xs text-slate-500">{submissions.length} صفحة</span>
+            </div>
             {submissions.length === 0 ? (
-              <tr>
-                <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
-                  لا توجد استمارات بعد
-                </td>
-              </tr>
+              <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+                لا توجد استمارات للطباعة ضمن الفلتر الحالي.
+              </p>
             ) : (
               submissions.map((s) => (
-                <tr key={s.id} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="px-3 py-2">
-                    <div className="font-semibold">{s.studentNameAr || s.payload.nameAr}</div>
-                    <div className="text-xs text-slate-500" dir="ltr">
-                      {s.enteredStudentId}
-                    </div>
+                <StudentProfilePrintSheet key={`preview-${s.id}`} submission={s} header={schoolHeader} />
+              ))
+            )}
+          </section>
+        </>
+      )}
+
+      {inboxMode === 'changes' && (
+        <div
+          className={cn(
+            'overflow-hidden rounded-xl border border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-900',
+            refreshing && 'opacity-70'
+          )}
+        >
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <tr>
+                <th className="px-3 py-2 text-start">الطالب</th>
+                <th className="px-3 py-2 text-start">الفصل</th>
+                <th className="px-3 py-2 text-start">وقت الطلب</th>
+                <th className="px-3 py-2 text-end">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {changeRequests.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                    لا توجد طلبات تعديل معلّقة
                   </td>
-                  <td className="px-3 py-2">{s.className || s.payload.className || '—'}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      <span
-                        className={cn(
-                          'rounded-full px-2 py-0.5 text-xs font-medium',
-                          s.linked
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-amber-100 text-amber-900'
-                        )}
-                      >
-                        {s.linked ? 'مربوط' : 'غير مربوط'}
-                      </span>
-                      {s.hasMedical && (
-                        <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-800">
+                </tr>
+              ) : (
+                changeRequests.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-3 py-2">
+                      <div className="font-semibold">
+                        {r.studentNameAr || r.proposedPayload.nameAr || '—'}
+                      </div>
+                      <div className="text-xs text-slate-500" dir="ltr">
+                        {r.enteredStudentId}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2">{r.className || r.proposedPayload.className || '—'}</td>
+                    <td className="px-3 py-2 text-xs text-slate-600">
+                      {new Date(r.createdAt).toLocaleString('ar-SA')}
+                      {r.hasMedical && (
+                        <span className="ms-2 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-medium text-rose-800">
                           حالات مرضية
                         </span>
                       )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-end">
-                    <div className="flex flex-wrap justify-end gap-2">
+                    </td>
+                    <td className="px-3 py-2 text-end">
                       <button
                         type="button"
-                        className="text-xs text-slate-700 underline"
-                        onClick={() => printOne(s.id)}
+                        className="text-xs font-semibold text-blue-700 underline"
+                        onClick={() => {
+                          setRejectNote('')
+                          setSelectedChange(r)
+                        }}
                       >
-                        طباعة
+                        مراجعة
                       </button>
-                      <button
-                        type="button"
-                        className="text-xs text-blue-700 underline"
-                        onClick={() => void openLink(s)}
-                      >
-                        عرض / ربط
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Screen preview of printable sheets (scrollable); also used for browser print */}
-      <section className="space-y-4 print:hidden">
-        <div className="flex items-center justify-between gap-2">
-          <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">معاينة الطباعة</h2>
-          <span className="text-xs text-slate-500">{submissions.length} صفحة</span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
-        {submissions.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
-            لا توجد استمارات للطباعة ضمن الفلتر الحالي.
-          </p>
-        ) : (
-          submissions.map((s) => (
-            <StudentProfilePrintSheet key={`preview-${s.id}`} submission={s} header={schoolHeader} />
-          ))
-        )}
-      </section>
+      )}
 
-      {/* Print-only area: one PDF page per student */}
       <div className="hidden print:block report-print-area">
         {sheetsToPrint.map((s) => (
           <StudentProfilePrintSheet key={`print-${s.id}`} submission={s} header={schoolHeader} />
@@ -474,6 +658,67 @@ export function StudentAffairsPage() {
                 type="button"
                 className={buttonVariants({ variant: 'secondary', className: 'flex-1' })}
                 onClick={() => setSelected(null)}
+              >
+                إغلاق
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedChange && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 print:hidden sm:items-center">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="text-lg font-bold">مراجعة طلب التعديل</h2>
+            <p className="mt-1 text-xs text-slate-500" dir="ltr">
+              {selectedChange.enteredStudentId} · {new Date(selectedChange.createdAt).toLocaleString('ar-SA')}
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <PayloadCompare
+                label="الحالي (المعتمد)"
+                payload={selectedChange.liveSubmission?.payload ?? ({} as StudentProfilePayload)}
+                hasMedical={selectedChange.liveSubmission?.hasMedical}
+              />
+              <PayloadCompare
+                label="المقترح (من ولي الأمر)"
+                payload={selectedChange.proposedPayload}
+                hasMedical={selectedChange.hasMedical}
+              />
+            </div>
+            <label className="mt-4 block text-sm">
+              <span className="font-medium">ملاحظة الرفض (اختياري)</span>
+              <textarea
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
+                rows={2}
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                placeholder="تظهر في سجل الطلب عند الرفض"
+              />
+            </label>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                className={buttonVariants({ variant: 'primary', className: 'flex-1' })}
+                onClick={() => void confirmApprove()}
+              >
+                اعتماد التعديل
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className={buttonVariants({ variant: 'danger', className: 'flex-1' })}
+                onClick={() => void confirmReject()}
+              >
+                رفض
+              </button>
+              <button
+                type="button"
+                className={buttonVariants({ variant: 'secondary', className: 'flex-1' })}
+                onClick={() => {
+                  setSelectedChange(null)
+                  setRejectNote('')
+                }}
               >
                 إغلاق
               </button>

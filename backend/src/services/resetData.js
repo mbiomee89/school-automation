@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import JSZip from 'jszip';
-import { UPLOAD_ROOT } from '../middleware/upload.js';
+import { UPLOAD_ROOT, sanitizeUploadRelativePath } from '../middleware/upload.js';
 import { hashPassword } from './auth.js';
 import { badRequest } from '../utils/errors.js';
 
@@ -53,6 +54,15 @@ function restoreAttachmentBytes(row) {
   return null;
 }
 
+/** Non-admin staff roles preserved on restore (never promote to ADMIN here). */
+function mapRestoredStaffRole(role) {
+  if (role === 'COUNSELOR') return 'COUNSELOR';
+  if (role === 'STUDENT_AFFAIRS') return 'STUDENT_AFFAIRS';
+  return 'TEACHER';
+}
+
+const CHANGE_REQUEST_STATUSES = new Set(['PENDING', 'APPROVED', 'REJECTED']);
+
 /**
  * Full operational snapshot for download before wipe.
  * Omits password hashes and OTP codes.
@@ -73,6 +83,9 @@ export async function createDataBackup(prisma) {
     notifications,
     importBatches,
     parentAccounts,
+    studentProfileCampaigns,
+    studentProfileSubmissions,
+    studentProfileChangeRequests,
   ] = await Promise.all([
     prisma.schoolSettings.findMany(),
     prisma.user.findMany({
@@ -107,13 +120,16 @@ export async function createDataBackup(prisma) {
         updatedAt: true,
       },
     }),
+    prisma.studentProfileCampaign.findMany(),
+    prisma.studentProfileSubmission.findMany(),
+    prisma.studentProfileChangeRequest.findMany(),
   ]);
 
   const attendanceSafe = attendance.map(stripAttendanceForBackup);
   const schoolSettingsSafe = schoolSettings.map(stripSchoolSettingsForBackup);
 
   return {
-    version: 1,
+    version: 2,
     kind: 'school-automation-full-backup',
     createdAt: new Date().toISOString(),
     schoolSettings: schoolSettingsSafe,
@@ -130,6 +146,9 @@ export async function createDataBackup(prisma) {
     homework,
     weeklyPlans,
     notifications,
+    studentProfileCampaigns,
+    studentProfileSubmissions,
+    studentProfileChangeRequests,
     reports: {
       dailyAbsence: attendanceSafe.filter((r) => r.status === 'ABSENT' || r.status === 'EXCUSED'),
       attendance: attendanceSafe,
@@ -148,6 +167,9 @@ export async function createDataBackup(prisma) {
       homework: homework.length,
       weeklyPlans: weeklyPlans.length,
       notifications: notifications.length,
+      studentProfileCampaigns: studentProfileCampaigns.length,
+      studentProfileSubmissions: studentProfileSubmissions.length,
+      studentProfileChangeRequests: studentProfileChangeRequests.length,
     },
   };
 }
@@ -274,6 +296,18 @@ export async function resetDataKeepAdmin(db) {
   await wipe('weeklyPlans', async () => (await db.weeklyPlan.deleteMany()).count);
   await wipe('timetableSlots', async () => (await db.timetableSlot.deleteMany()).count);
   await wipe(
+    'studentProfileChangeRequests',
+    async () => (await db.studentProfileChangeRequest.deleteMany()).count
+  );
+  await wipe(
+    'studentProfileSubmissions',
+    async () => (await db.studentProfileSubmission.deleteMany()).count
+  );
+  await wipe(
+    'studentProfileCampaigns',
+    async () => (await db.studentProfileCampaign.deleteMany()).count
+  );
+  await wipe(
     'classEnrollments',
     async () => (await db.classEnrollment.deleteMany()).count
   );
@@ -290,6 +324,7 @@ export async function resetDataKeepAdmin(db) {
   await wipe('subjects', async () => (await db.subject.deleteMany()).count);
   await wipe('parentOtps', async () => (await db.parentOtp.deleteMany()).count);
   await wipe('parentAccounts', async () => (await db.parentAccount.deleteMany()).count);
+  await wipe('teacherDocuments', async () => (await db.teacherDocument.deleteMany()).count);
   await wipe(
     'nonAdminUsers',
     async () => (await db.user.deleteMany({ where: { role: { not: 'ADMIN' } } })).count
@@ -372,6 +407,9 @@ export async function restoreFromBackup(prisma, backup) {
         const batchIdMap = new Map();
         const attendanceIdMap = new Map();
         const lateIdMap = new Map();
+        const campaignIdMap = new Map();
+        const submissionIdMap = new Map();
+        const restoredStudentIds = new Set();
 
         const counts = {
           subjects: 0,
@@ -388,6 +426,9 @@ export async function restoreFromBackup(prisma, backup) {
           attendance: 0,
           notifications: 0,
           parentAccounts: 0,
+          studentProfileCampaigns: 0,
+          studentProfileSubmissions: 0,
+          studentProfileChangeRequests: 0,
           skipped: [],
         };
 
@@ -397,7 +438,7 @@ export async function restoreFromBackup(prisma, backup) {
         if (settingsRow) {
           const logoData = restoreLogoBytes(settingsRow);
           const logoFields = {
-            logoPath: settingsRow.logoPath ?? null,
+            logoPath: sanitizeUploadRelativePath(settingsRow.logoPath),
             logoMime: settingsRow.logoMime ?? null,
             logoData,
           };
@@ -519,7 +560,7 @@ export async function restoreFromBackup(prisma, backup) {
                 name: u.name || email,
                 email,
                 phone: u.phone ?? null,
-                role: u.role === 'COUNSELOR' ? 'COUNSELOR' : 'TEACHER',
+                role: mapRestoredStaffRole(u.role),
                 langPref: u.langPref === 'EN' ? 'EN' : 'AR',
                 isActive: u.isActive !== false,
                 mustChangePassword: true,
@@ -576,9 +617,121 @@ export async function restoreFromBackup(prisma, backup) {
                 createdAt: asDate(s.createdAt) ?? undefined,
               },
             });
+            restoredStudentIds.add(s.id);
             counts.students += 1;
           } catch (err) {
             counts.skipped.push(`student:${s.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const camp of backup.studentProfileCampaigns || []) {
+          let token = String(camp.token || '').trim();
+          if (!token) token = crypto.randomBytes(16).toString('hex');
+          try {
+            const created = await tx.studentProfileCampaign.create({
+              data: {
+                token,
+                title: camp.title || 'استمارة البيانات الشخصية للطالب',
+                isActive: camp.isActive !== false,
+                createdBy: mapUser(camp.createdBy),
+                createdAt: asDate(camp.createdAt) ?? undefined,
+                updatedAt: asDate(camp.updatedAt) ?? undefined,
+              },
+            });
+            campaignIdMap.set(camp.id, created.id);
+            counts.studentProfileCampaigns += 1;
+          } catch (err) {
+            if (err?.code === 'P2002') {
+              try {
+                const created = await tx.studentProfileCampaign.create({
+                  data: {
+                    token: crypto.randomBytes(16).toString('hex'),
+                    title: camp.title || 'استمارة البيانات الشخصية للطالب',
+                    isActive: camp.isActive !== false,
+                    createdBy: mapUser(camp.createdBy),
+                    createdAt: asDate(camp.createdAt) ?? undefined,
+                    updatedAt: asDate(camp.updatedAt) ?? undefined,
+                  },
+                });
+                campaignIdMap.set(camp.id, created.id);
+                counts.studentProfileCampaigns += 1;
+                counts.skipped.push(`profileCampaign:${camp.id}:token-regenerated`);
+              } catch (err2) {
+                counts.skipped.push(
+                  `profileCampaign:${camp.id}:${err2?.code || err2?.message || 'error'}`
+                );
+              }
+            } else {
+              counts.skipped.push(`profileCampaign:${camp.id}:${err?.code || err?.message || 'error'}`);
+            }
+          }
+        }
+
+        for (const sub of backup.studentProfileSubmissions || []) {
+          const campaignId = campaignIdMap.get(sub.campaignId);
+          if (!campaignId) {
+            counts.skipped.push(`profileSubmission:${sub.id}:unmapped-campaign`);
+            continue;
+          }
+          const classId = sub.classId == null ? null : classIdMap.get(sub.classId) ?? null;
+          const studentId =
+            sub.studentId && restoredStudentIds.has(sub.studentId) ? sub.studentId : null;
+          try {
+            const created = await tx.studentProfileSubmission.create({
+              data: {
+                campaignId,
+                enteredStudentId: String(sub.enteredStudentId || '').trim() || String(sub.id),
+                studentId,
+                classId,
+                payload: typeof sub.payload === 'string' ? sub.payload : JSON.stringify(sub.payload || {}),
+                hasMedical: !!sub.hasMedical,
+                submittedAt: asDate(sub.submittedAt) ?? new Date(),
+                updatedAt: asDate(sub.updatedAt) ?? undefined,
+              },
+            });
+            submissionIdMap.set(sub.id, created.id);
+            counts.studentProfileSubmissions += 1;
+          } catch (err) {
+            counts.skipped.push(
+              `profileSubmission:${sub.id}:${err?.code || err?.message || 'error'}`
+            );
+          }
+        }
+
+        for (const cr of backup.studentProfileChangeRequests || []) {
+          const campaignId = campaignIdMap.get(cr.campaignId);
+          const submissionId = submissionIdMap.get(cr.submissionId);
+          if (!campaignId || !submissionId) {
+            counts.skipped.push(
+              `profileChangeRequest:${cr.id}:${!campaignId ? 'unmapped-campaign' : 'unmapped-submission'}`
+            );
+            continue;
+          }
+          const status = CHANGE_REQUEST_STATUSES.has(cr.status) ? cr.status : 'PENDING';
+          try {
+            await tx.studentProfileChangeRequest.create({
+              data: {
+                campaignId,
+                submissionId,
+                enteredStudentId: String(cr.enteredStudentId || '').trim() || 'unknown',
+                proposedPayload:
+                  typeof cr.proposedPayload === 'string'
+                    ? cr.proposedPayload
+                    : JSON.stringify(cr.proposedPayload || {}),
+                hasMedical: !!cr.hasMedical,
+                status,
+                reviewNote: cr.reviewNote ?? null,
+                reviewedBy: mapUser(cr.reviewedBy),
+                reviewedAt: asDate(cr.reviewedAt),
+                createdAt: asDate(cr.createdAt) ?? undefined,
+                updatedAt: asDate(cr.updatedAt) ?? undefined,
+              },
+            });
+            counts.studentProfileChangeRequests += 1;
+          } catch (err) {
+            counts.skipped.push(
+              `profileChangeRequest:${cr.id}:${err?.code || err?.message || 'error'}`
+            );
           }
         }
 
@@ -745,7 +898,7 @@ export async function restoreFromBackup(prisma, backup) {
                 recordedBy,
                 createdAt: asDate(r.createdAt) ?? undefined,
                 absenceReason: r.absenceReason ?? null,
-                absenceAttachmentUrl: r.absenceAttachmentUrl ?? null,
+                absenceAttachmentUrl: sanitizeUploadRelativePath(r.absenceAttachmentUrl),
                 absenceAttachmentData: restoreAttachmentBytes(r),
                 absenceAttachmentMime: r.absenceAttachmentMime ?? null,
                 reasonSubmittedAt: asDate(r.reasonSubmittedAt),
@@ -810,14 +963,16 @@ export async function restoreFromBackup(prisma, backup) {
         return {
           wipeSummary,
           restored: counts,
-          defaultPassword: DEFAULT_RESTORED_PASSWORD,
         };
       },
       { timeout: 300_000, maxWait: 60_000 }
     );
 
     return {
-      ...result,
+      wipeSummary: result.wipeSummary,
+      restored: result.restored,
+      /** Temporary passwords were issued; value is never returned in the API body. */
+      temporaryPasswordIssued: true,
       safetyBackupFileName: safetyStored.fileName,
       safetyBackupDownloadUrl: safetyStored.downloadUrl,
     };

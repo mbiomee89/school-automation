@@ -14,6 +14,7 @@ import {
   tryNormalizeSaudiMobile,
 } from '../../shared/saudiPhone'
 import { countrySelectOptions } from '../../shared/countriesAr'
+import { cn } from '../../shared/utils'
 
 type ClassOpt = { id: number; name: string }
 
@@ -94,6 +95,7 @@ export function StudentProfilePublicPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [step, setStep] = useState<'gate' | 'form' | 'done'>('gate')
+  const [donePending, setDonePending] = useState(false)
   const [studentId, setStudentId] = useState('')
   const [matched, setMatched] = useState(false)
   const [lookupNote, setLookupNote] = useState<string | null>(null)
@@ -141,19 +143,31 @@ export function StudentProfilePublicPage() {
           attested: true,
         })
         setMatched(true)
-        setLookupNote(
-          data.hasPriorSubmission
-            ? 'يوجد إرسال سابق لهذا المعرّف — أعد تعبئة الاستمارة للحفظ (يُحدَّث السجل دون إظهار البيانات السابقة علناً).'
-            : null
-        )
+        if (data.hasPendingChangeRequest) {
+          setLookupNote(
+            'يوجد طلب تعديل قيد مراجعة شؤون الطلاب — إرسال جديد يستبدل الطلب المعلّق دون تغيير البيانات المعتمدة حتى الاعتماد.'
+          )
+        } else if (data.hasPriorSubmission) {
+          setLookupNote(
+            'يوجد إرسال سابق — أي تعديل جديد يُرسل كطلب لمراجعة شؤون الطلاب (لا يُحدَّث السجل مباشرة).'
+          )
+        } else {
+          setLookupNote(null)
+        }
       } else {
         setForm({ ...EMPTY, civilId: id, attested: true })
         setMatched(false)
-        setLookupNote(
-          data.hasPriorSubmission
-            ? 'يوجد إرسال سابق — أعد تعبئة البيانات للحفظ. لم يُعثر على المعرّف في سجل الطلاب.'
-            : 'لم يُعثر على المعرّف في السجل — أكمل البيانات يدوياً.'
-        )
+        if (data.hasPendingChangeRequest) {
+          setLookupNote(
+            'يوجد طلب تعديل قيد المراجعة لهذا المعرّف. لم يُعثر على المعرّف في سجل الطلاب — أكمل يدوياً إن لزم.'
+          )
+        } else if (data.hasPriorSubmission) {
+          setLookupNote(
+            'يوجد إرسال سابق — التعديل يحتاج موافقة شؤون الطلاب. لم يُعثر على المعرّف في سجل الطلاب.'
+          )
+        } else {
+          setLookupNote('لم يُعثر على المعرّف في السجل — أكمل البيانات يدوياً.')
+        }
       }
       setStep('form')
     } catch (err) {
@@ -231,7 +245,7 @@ export function StudentProfilePublicPage() {
 
     setBusy(true)
     try {
-      await submitPublicStudentProfile(token, {
+      const result = await submitPublicStudentProfile(token, {
         enteredStudentId: studentId.trim(),
         payload: {
           ...form,
@@ -246,6 +260,7 @@ export function StudentProfilePublicPage() {
           relativePhone: relative,
         },
       })
+      setDonePending(Boolean(result.pending))
       setStep('done')
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : 'فشل الحفظ')
@@ -300,9 +315,29 @@ export function StudentProfilePublicPage() {
         )}
 
         {step === 'done' && (
-          <div className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
-            <p className="text-lg font-bold text-emerald-900">تم حفظ الاستمارة بنجاح</p>
-            <p className="mt-2 text-sm text-emerald-800">شكراً لكم. يمكنكم إعادة فتح الرابط بنفس المعرّف للتعديل لاحقاً.</p>
+          <div
+            className={cn(
+              'mt-6 rounded-2xl border p-6 text-center',
+              donePending
+                ? 'border-amber-200 bg-amber-50'
+                : 'border-emerald-200 bg-emerald-50'
+            )}
+          >
+            {donePending ? (
+              <>
+                <p className="text-lg font-bold text-amber-950">تم إرسال طلب التعديل</p>
+                <p className="mt-2 text-sm text-amber-900">
+                  شكراً لكم. التعديلات بانتظار مراجعة شؤون الطلاب ولن تُعتمد في السجل إلا بعد الموافقة.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-bold text-emerald-900">تم حفظ الاستمارة بنجاح</p>
+                <p className="mt-2 text-sm text-emerald-800">
+                  شكراً لكم. أي تعديل لاحق عبر نفس المعرّف يُرسل كطلب لموافقة شؤون الطلاب.
+                </p>
+              </>
+            )}
           </div>
         )}
 

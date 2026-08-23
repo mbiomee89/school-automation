@@ -41,7 +41,7 @@ Help with: env checklist, domain/CORS, first-boot smoke (logo on print, form lin
 - `NODE_ENV=production`
 - `DATABASE_URL=postgresql://...` (external URL)
 - `JWT_SECRET` (new strong secret — never use example value)
-- `CORS_ORIGIN=https://your-domain.com` (production)
+- `CORS_ORIGIN=https://your-domain.com` (**required** in production — API will not start without it)
 - `JWT_EXPIRES_IN=8h`
 - `PARENT_JWT_EXPIRES_IN=2h`
 - `UPLOAD_DIR=./backend/uploads` (disk only; **not** publicly served)
@@ -50,7 +50,7 @@ Help with: env checklist, domain/CORS, first-boot smoke (logo on print, form lin
 - `/uploads` is not public; logo via `/api/school-settings/logo`; backups via base64 in admin API
 - Public form rate-limited; lookup returns name/class only
 - Staff with `mustChangePassword` blocked from APIs until password change
-- Optional: `CORS_ORIGIN=https://your-domain` if API and SPA are split
+- `CORS_ORIGIN` required in production (set in Render env / blueprint)
 
 ### Build / start
 - Node ≥ 20, Python 3 + pymupdf (aSc PDF import)
@@ -59,7 +59,7 @@ Help with: env checklist, domain/CORS, first-boot smoke (logo on print, form lin
 - Health: `/health`
 
 ### First login
-- `admin@school.local` / `Password123!` — change immediately
+- `admin@school.local` / documented default password — **must change on first login** (`mustChangePassword` is set for new seed admins)
 - Configure school settings + logo, then import classes/teachers/students
 - Copy parent form link from شؤون الطلاب (uses new domain automatically)
 

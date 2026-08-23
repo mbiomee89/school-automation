@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { UPLOAD_ROOT } from '../middleware/upload.js';
+import { resolveSafeUploadPath } from '../middleware/upload.js';
 import { notFound } from '../utils/errors.js';
 
 const MIME_EXT = {
@@ -36,8 +36,8 @@ export function loadExcuseAttachment(attendance) {
   }
 
   if (attendance.absenceAttachmentUrl) {
-    const absolute = path.join(UPLOAD_ROOT, attendance.absenceAttachmentUrl);
-    if (fs.existsSync(absolute)) {
+    const absolute = resolveSafeUploadPath(attendance.absenceAttachmentUrl);
+    if (absolute && fs.existsSync(absolute)) {
       const rawMime = attendance.absenceAttachmentMime || guessMimeFromPath(attendance.absenceAttachmentUrl);
       const mime = MIME_EXT[rawMime] ? rawMime : 'application/octet-stream';
       return {
