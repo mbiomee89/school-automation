@@ -37,6 +37,9 @@ export type StudentProfilePayload = {
   guardianIdExpiry: string
   guardianHomePhone?: string | null
   guardianMobile: string
+  /** When true, WhatsApp = guardianMobile (auto). */
+  guardianWhatsappSame?: boolean
+  guardianWhatsapp?: string
   guardianWorkPhone?: string | null
   relativeName: string
   relativePhone: string

@@ -9,8 +9,51 @@ import {
 import { ApiError } from '../../api/client'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
+import {
+  SAUDI_MOBILE_HINT,
+  tryNormalizeSaudiMobile,
+} from '../../shared/saudiPhone'
 
 type ClassOpt = { id: number; name: string }
+
+/** Shared Arabic list for الجنسية + مكان الولادة — الدولة. Saudi first, Palestine included, Israel excluded. */
+const COUNTRY_OR_NATIONALITY_OPTIONS = [
+  'المملكة العربية السعودية',
+  'فلسطين',
+  'مصر',
+  'الأردن',
+  'سوريا',
+  'لبنان',
+  'اليمن',
+  'الإمارات',
+  'الكويت',
+  'البحرين',
+  'عمان',
+  'قطر',
+  'العراق',
+  'السودان',
+  'المغرب',
+  'الجزائر',
+  'تونس',
+  'ليبيا',
+  'موريتانيا',
+  'الصومال',
+  'جيبوتي',
+  'جزر القمر',
+  'باكستان',
+  'الهند',
+  'بنغلاديش',
+  'الفلبين',
+  'إندونيسيا',
+  'تركيا',
+  'أفغانستان',
+] as const
+
+function countrySelectOptions(current: string): string[] {
+  const list: string[] = [...COUNTRY_OR_NATIONALITY_OPTIONS]
+  if (current && !list.includes(current)) list.push(current)
+  return list
+}
 
 const EMPTY: StudentProfilePayload = {
   nameAr: '',
@@ -46,6 +89,8 @@ const EMPTY: StudentProfilePayload = {
   guardianIdExpiry: '',
   guardianHomePhone: '',
   guardianMobile: '',
+  guardianWhatsappSame: true,
+  guardianWhatsapp: '',
   guardianWorkPhone: '',
   relativeName: '',
   relativePhone: '',
@@ -125,7 +170,15 @@ export function StudentProfilePublicPage() {
     try {
       const data = await lookupPublicStudent(token, id)
       if (data.submission?.payload) {
-        setForm({ ...EMPTY, ...data.submission.payload, attested: true })
+        const prior = data.submission.payload
+        const same = prior.guardianWhatsappSame !== false
+        setForm({
+          ...EMPTY,
+          ...prior,
+          guardianWhatsappSame: same,
+          guardianWhatsapp: prior.guardianWhatsapp || prior.guardianMobile || '',
+          attested: true,
+        })
         setMatched(Boolean(data.found))
         setLookupNote('تم تحميل بيانات سابقة — يمكنك التعديل والحفظ.')
       } else if (data.found && data.student) {
@@ -153,7 +206,16 @@ export function StudentProfilePublicPage() {
   }
 
   function patch<K extends keyof StudentProfilePayload>(key: K, value: StudentProfilePayload[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }))
+    setForm((prev) => {
+      const next = { ...prev, [key]: value }
+      if (key === 'guardianMobile' && prev.guardianWhatsappSame) {
+        next.guardianWhatsapp = String(value ?? '')
+      }
+      if (key === 'guardianWhatsappSame' && value === true) {
+        next.guardianWhatsapp = prev.guardianMobile
+      }
+      return next
+    })
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -167,6 +229,48 @@ export function StudentProfilePublicPage() {
       window.alert('اختر الصف / الفصل')
       return
     }
+    const whatsappSame = form.guardianWhatsappSame !== false
+    const whatsappRaw = whatsappSame ? form.guardianMobile : (form.guardianWhatsapp ?? '').trim()
+    if (!whatsappSame && !whatsappRaw) {
+      window.alert('يرجى إدخال رقم واتساب')
+      return
+    }
+
+    const mobile = tryNormalizeSaudiMobile(form.guardianMobile)
+    if (!mobile) {
+      window.alert(`الجوال: ${SAUDI_MOBILE_HINT}`)
+      return
+    }
+    const whatsapp = tryNormalizeSaudiMobile(whatsappRaw)
+    if (!whatsapp) {
+      window.alert(`واتساب: ${SAUDI_MOBILE_HINT}`)
+      return
+    }
+    const relative = tryNormalizeSaudiMobile(form.relativePhone)
+    if (!relative) {
+      window.alert(`هاتف القريب: ${SAUDI_MOBILE_HINT}`)
+      return
+    }
+
+    let homePhone: string | null = form.guardianHomePhone?.trim() || null
+    if (homePhone) {
+      const n = tryNormalizeSaudiMobile(homePhone)
+      if (!n) {
+        window.alert(`هاتف المنزل: ${SAUDI_MOBILE_HINT}`)
+        return
+      }
+      homePhone = n
+    }
+    let workPhone: string | null = form.guardianWorkPhone?.trim() || null
+    if (workPhone) {
+      const n = tryNormalizeSaudiMobile(workPhone)
+      if (!n) {
+        window.alert(`هاتف العمل: ${SAUDI_MOBILE_HINT}`)
+        return
+      }
+      workPhone = n
+    }
+
     setBusy(true)
     try {
       await submitPublicStudentProfile(token, {
@@ -176,6 +280,12 @@ export function StudentProfilePublicPage() {
           stage: 'الابتدائية',
           attested: true,
           medicalDetails: form.hasMedicalConditions ? form.medicalDetails : null,
+          guardianMobile: mobile,
+          guardianWhatsappSame: whatsappSame,
+          guardianWhatsapp: whatsapp,
+          guardianHomePhone: homePhone,
+          guardianWorkPhone: workPhone,
+          relativePhone: relative,
         },
       })
       setStep('done')
@@ -278,22 +388,66 @@ export function StudentProfilePublicPage() {
               ) : (
                 <p className="text-sm text-slate-600">الفصل: {form.className || '—'}</p>
               )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Field label="Name" required>
-                  <input className={inputClass} required dir="ltr" value={form.nameEnFirst} onChange={(e) => patch('nameEnFirst', e.target.value)} />
-                </Field>
-                <Field label="FATHER" required>
-                  <input className={inputClass} required dir="ltr" value={form.nameEnFather} onChange={(e) => patch('nameEnFather', e.target.value)} />
-                </Field>
-                <Field label="Grand Father" required>
-                  <input className={inputClass} required dir="ltr" value={form.nameEnGrand} onChange={(e) => patch('nameEnGrand', e.target.value)} />
-                </Field>
-                <Field label="FAMILY" required>
-                  <input className={inputClass} required dir="ltr" value={form.nameEnFamily} onChange={(e) => patch('nameEnFamily', e.target.value)} />
-                </Field>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100">الاسم الإنجليزي</p>
+                  <p className="text-xs text-slate-500" dir="ltr">
+                    English name
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Name" required>
+                    <input
+                      className={inputClass}
+                      required
+                      dir="ltr"
+                      value={form.nameEnFirst}
+                      onChange={(e) => patch('nameEnFirst', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="FATHER" required>
+                    <input
+                      className={inputClass}
+                      required
+                      dir="ltr"
+                      value={form.nameEnFather}
+                      onChange={(e) => patch('nameEnFather', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="Grand Father" required>
+                    <input
+                      className={inputClass}
+                      required
+                      dir="ltr"
+                      value={form.nameEnGrand}
+                      onChange={(e) => patch('nameEnGrand', e.target.value)}
+                    />
+                  </Field>
+                  <Field label="FAMILY" required>
+                    <input
+                      className={inputClass}
+                      required
+                      dir="ltr"
+                      value={form.nameEnFamily}
+                      onChange={(e) => patch('nameEnFamily', e.target.value)}
+                    />
+                  </Field>
+                </div>
               </div>
               <Field label="الجنسية" required>
-                <input className={inputClass} required value={form.nationality} onChange={(e) => patch('nationality', e.target.value)} />
+                <select
+                  className={inputClass}
+                  required
+                  value={form.nationality}
+                  onChange={(e) => patch('nationality', e.target.value)}
+                >
+                  <option value="">اختر…</option>
+                  {countrySelectOptions(form.nationality).map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="رقم السجل المدني / الإقامة" required>
                 <input className={inputClass} required dir="ltr" value={form.civilId} onChange={(e) => patch('civilId', e.target.value)} />
@@ -308,7 +462,19 @@ export function StudentProfilePublicPage() {
                 <input className={inputClass} type="date" required dir="ltr" value={form.birthDate} onChange={(e) => patch('birthDate', e.target.value)} />
               </Field>
               <Field label="مكان الولادة — الدولة" required>
-                <input className={inputClass} required value={form.birthCountry} onChange={(e) => patch('birthCountry', e.target.value)} />
+                <select
+                  className={inputClass}
+                  required
+                  value={form.birthCountry}
+                  onChange={(e) => patch('birthCountry', e.target.value)}
+                >
+                  <option value="">اختر…</option>
+                  {countrySelectOptions(form.birthCountry).map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
               </Field>
               <Field label="مكان الميلاد / المدينة" required>
                 <input className={inputClass} required value={form.birthCity} onChange={(e) => patch('birthCity', e.target.value)} />
@@ -402,13 +568,76 @@ export function StudentProfilePublicPage() {
                 <input className={inputClass} type="date" required dir="ltr" value={form.guardianIdExpiry} onChange={(e) => patch('guardianIdExpiry', e.target.value)} />
               </Field>
               <Field label="هاتف المنزل">
-                <input className={inputClass} dir="ltr" value={form.guardianHomePhone ?? ''} onChange={(e) => patch('guardianHomePhone', e.target.value)} />
+                <input
+                  className={inputClass}
+                  dir="ltr"
+                  inputMode="tel"
+                  placeholder="+9665XXXXXXXX"
+                  value={form.guardianHomePhone ?? ''}
+                  onChange={(e) => patch('guardianHomePhone', e.target.value)}
+                />
               </Field>
               <Field label="الجوال" required>
-                <input className={inputClass} required dir="ltr" value={form.guardianMobile} onChange={(e) => patch('guardianMobile', e.target.value)} />
+                <input
+                  className={inputClass}
+                  required
+                  dir="ltr"
+                  inputMode="tel"
+                  placeholder="+9665XXXXXXXX"
+                  value={form.guardianMobile}
+                  onChange={(e) => patch('guardianMobile', e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">{SAUDI_MOBILE_HINT}</p>
               </Field>
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                  هل رقم الجوال عليه واتساب؟ <span className="text-red-600">*</span>
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className={buttonVariants({
+                      variant: form.guardianWhatsappSame !== false ? 'primary' : 'secondary',
+                      className: 'flex-1',
+                    })}
+                    onClick={() => patch('guardianWhatsappSame', true)}
+                  >
+                    نعم
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonVariants({
+                      variant: form.guardianWhatsappSame === false ? 'primary' : 'secondary',
+                      className: 'flex-1',
+                    })}
+                    onClick={() => patch('guardianWhatsappSame', false)}
+                  >
+                    لا
+                  </button>
+                </div>
+              </div>
+              {form.guardianWhatsappSame === false && (
+                <Field label="رقم واتساب" required>
+                  <input
+                    className={inputClass}
+                    required
+                    dir="ltr"
+                    inputMode="tel"
+                    placeholder="+9665XXXXXXXX"
+                    value={form.guardianWhatsapp ?? ''}
+                    onChange={(e) => patch('guardianWhatsapp', e.target.value)}
+                  />
+                </Field>
+              )}
               <Field label="هاتف العمل">
-                <input className={inputClass} dir="ltr" value={form.guardianWorkPhone ?? ''} onChange={(e) => patch('guardianWorkPhone', e.target.value)} />
+                <input
+                  className={inputClass}
+                  dir="ltr"
+                  inputMode="tel"
+                  placeholder="+9665XXXXXXXX"
+                  value={form.guardianWorkPhone ?? ''}
+                  onChange={(e) => patch('guardianWorkPhone', e.target.value)}
+                />
               </Field>
             </section>
 
@@ -418,7 +647,16 @@ export function StudentProfilePublicPage() {
                 <input className={inputClass} required value={form.relativeName} onChange={(e) => patch('relativeName', e.target.value)} />
               </Field>
               <Field label="الهاتف" required>
-                <input className={inputClass} required dir="ltr" value={form.relativePhone} onChange={(e) => patch('relativePhone', e.target.value)} />
+                <input
+                  className={inputClass}
+                  required
+                  dir="ltr"
+                  inputMode="tel"
+                  placeholder="+9665XXXXXXXX"
+                  value={form.relativePhone}
+                  onChange={(e) => patch('relativePhone', e.target.value)}
+                />
+                <p className="mt-1 text-xs text-slate-500">{SAUDI_MOBILE_HINT}</p>
               </Field>
               <Field label="العنوان">
                 <input className={inputClass} value={form.relativeAddress ?? ''} onChange={(e) => patch('relativeAddress', e.target.value)} />

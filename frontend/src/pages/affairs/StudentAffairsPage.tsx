@@ -13,8 +13,14 @@ import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
 import { cn } from '../../shared/utils'
 
+function whatsappOf(payload: StudentProfileSubmission['payload']) {
+  if (payload.guardianWhatsapp?.trim()) return payload.guardianWhatsapp.trim()
+  return payload.guardianMobile || '—'
+}
+
 export function StudentAffairsPage() {
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [campaign, setCampaign] = useState<{
     token: string
     title: string
@@ -32,6 +38,7 @@ export function StudentAffairsPage() {
   const [studentOptions, setStudentOptions] = useState<Array<{ id: string; nameAr: string }>>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [copyHint, setCopyHint] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -52,24 +59,41 @@ export function StudentAffairsPage() {
   useEffect(() => {
     let cancelled = false
     ;(async () => {
-      setLoading(true)
+      const firstLoad = loading && !campaign
+      if (firstLoad) setLoading(true)
+      else setRefreshing(true)
       try {
         await reload()
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : 'تعذّر التحميل')
       } finally {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+          setRefreshing(false)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first-load flag uses campaign presence
   }, [reload])
 
   const publicUrl = useMemo(() => {
     if (!campaign) return ''
     return `${window.location.origin}${campaign.publicPath}`
   }, [campaign])
+
+  async function copyLink() {
+    if (!publicUrl) return
+    try {
+      await navigator.clipboard.writeText(publicUrl)
+      setCopyHint('تم نسخ الرابط')
+    } catch {
+      setCopyHint('تعذّر النسخ — انسخ الرابط يدوياً')
+    }
+    window.setTimeout(() => setCopyHint(null), 2500)
+  }
 
   async function toggleActive() {
     if (!campaign) return
@@ -117,8 +141,22 @@ export function StudentAffairsPage() {
     )
   }
 
-  if (error) {
-    return <p className="p-6 text-red-700">{error}</p>
+  if (error && !campaign) {
+    return (
+      <div className="space-y-3 p-6">
+        <p className="text-red-700">{error}</p>
+        <button
+          type="button"
+          className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+          onClick={() => {
+            setLoading(true)
+            void reload().finally(() => setLoading(false))
+          }}
+        >
+          إعادة المحاولة
+        </button>
+      </div>
+    )
   }
 
   const classLabel =
@@ -136,17 +174,18 @@ export function StudentAffairsPage() {
       {campaign && (
         <section className="rounded-2xl border border-slate-200 bg-white p-4 print:hidden dark:border-slate-700 dark:bg-slate-900">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="font-bold">{campaign.title}</p>
               <p className="mt-1 break-all text-xs text-slate-500" dir="ltr">
                 {publicUrl}
               </p>
+              {copyHint && <p className="mt-1 text-xs text-emerald-700">{copyHint}</p>}
             </div>
             <div className="flex flex-wrap gap-2">
               <button
                 type="button"
                 className={buttonVariants({ variant: 'secondary', size: 'sm' })}
-                onClick={() => void navigator.clipboard.writeText(publicUrl)}
+                onClick={() => void copyLink()}
               >
                 نسخ الرابط
               </button>
@@ -164,10 +203,17 @@ export function StudentAffairsPage() {
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            الحالة: {campaign.isActive ? 'مفتوحة' : 'مغلقة'} · عدد المرسل:{' '}
-            {campaign.submissionCount ?? submissions.length}
+            الحالة: {campaign.isActive ? 'مفتوحة للولي' : 'مغلقة — الرابط لا يقبل إرسالًا جديدًا'} · عدد
+            المرسل: {campaign.submissionCount ?? submissions.length}
+            {refreshing ? ' · جارٍ التحديث…' : ''}
           </p>
         </section>
+      )}
+
+      {error && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 print:hidden">
+          {error}
+        </p>
       )}
 
       <div className="flex flex-wrap items-end gap-3 print:hidden">
@@ -212,7 +258,12 @@ export function StudentAffairsPage() {
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-900">
+      <div
+        className={cn(
+          'overflow-hidden rounded-xl border border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-900',
+          refreshing && 'opacity-70'
+        )}
+      >
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
             <tr>
@@ -274,7 +325,6 @@ export function StudentAffairsPage() {
         </table>
       </div>
 
-      {/* Formal printable sheet (homework-style) */}
       <section
         className="hidden print:block report-print-area overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900"
         style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
@@ -287,7 +337,7 @@ export function StudentAffairsPage() {
             {medicalOnly ? ' · حالات مرضية' : ''}
           </p>
         </div>
-        <div className="overflow-hidden rounded-xl border border-teal-600/40 m-4">
+        <div className="m-4 overflow-hidden rounded-xl border border-teal-600/40">
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="bg-teal-600 text-white">
@@ -296,6 +346,7 @@ export function StudentAffairsPage() {
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">الفصل</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">ولي الأمر</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">الجوال</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">واتساب</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">الربط</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">طبية</th>
               </tr>
@@ -316,6 +367,9 @@ export function StudentAffairsPage() {
                   <td className="border border-slate-200 px-2 py-2" dir="ltr">
                     {s.payload.guardianMobile}
                   </td>
+                  <td className="border border-slate-200 px-2 py-2" dir="ltr">
+                    {whatsappOf(s.payload)}
+                  </td>
                   <td className="border border-slate-200 px-2 py-2">
                     {s.linked ? 'مربوط' : 'غير مربوط'}
                   </td>
@@ -332,14 +386,13 @@ export function StudentAffairsPage() {
         </div>
       </section>
 
-      {/* Screen preview of formal table */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 print:hidden dark:border-slate-700 dark:bg-slate-900">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-base font-bold text-slate-900 dark:text-slate-50">التقرير الرسمي</h2>
           <span className="text-xs text-slate-500">{submissions.length} سجل</span>
         </div>
         <div className="overflow-x-auto overflow-hidden rounded-xl border border-teal-600/40">
-          <table className="w-full min-w-[40rem] border-collapse text-sm">
+          <table className="w-full min-w-[44rem] border-collapse text-sm">
             <thead>
               <tr className="bg-teal-600 text-white">
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">المعرّف</th>
@@ -347,6 +400,7 @@ export function StudentAffairsPage() {
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">الفصل</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">ولي الأمر</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">الجوال</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">واتساب</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">الربط</th>
                 <th className="border border-teal-700 px-2 py-2.5 font-bold">طبية</th>
               </tr>
@@ -369,6 +423,9 @@ export function StudentAffairsPage() {
                   <td className="border border-slate-200 px-2 py-2 dark:border-slate-700" dir="ltr">
                     {s.payload.guardianMobile}
                   </td>
+                  <td className="border border-slate-200 px-2 py-2 dark:border-slate-700" dir="ltr">
+                    {whatsappOf(s.payload)}
+                  </td>
                   <td className="border border-slate-200 px-2 py-2 dark:border-slate-700">
                     {s.linked ? 'مربوط' : 'غير مربوط'}
                   </td>
@@ -389,7 +446,7 @@ export function StudentAffairsPage() {
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 print:hidden sm:items-center">
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
             <h2 className="text-lg font-bold">تفاصيل الاستمارة</h2>
-            <dl className="mt-3 space-y-1 text-sm">
+            <dl className="mt-3 space-y-1.5 text-sm">
               <div>الاسم: {selected.payload.nameAr}</div>
               <div dir="ltr">
                 EN:{' '}
@@ -402,10 +459,19 @@ export function StudentAffairsPage() {
                   .filter(Boolean)
                   .join(' ')}
               </div>
-              <div>ولي الأمر: {selected.payload.guardianName}</div>
-              <div>الجوال: {selected.payload.guardianMobile}</div>
+              <div>الجنسية: {selected.payload.nationality || '—'}</div>
               <div>
-                قريب الطوارئ: {selected.payload.relativeName} — {selected.payload.relativePhone}
+                الميلاد: {selected.payload.birthCountry || '—'} / {selected.payload.birthCity || '—'}
+              </div>
+              <div>ولي الأمر: {selected.payload.guardianName}</div>
+              <div dir="ltr">الجوال: {selected.payload.guardianMobile}</div>
+              <div dir="ltr">
+                واتساب: {whatsappOf(selected.payload)}
+                {selected.payload.guardianWhatsappSame === false ? ' (رقم مختلف)' : ' (نفس الجوال)'}
+              </div>
+              <div>
+                قريب الطوارئ: {selected.payload.relativeName} —{' '}
+                <span dir="ltr">{selected.payload.relativePhone}</span>
               </div>
               {selected.hasMedical && (
                 <div className="rounded-lg bg-rose-50 p-2 text-rose-900">
@@ -429,11 +495,14 @@ export function StudentAffairsPage() {
                   </option>
                 ))}
               </datalist>
+              {studentOptions.length === 0 && (
+                <p className="mt-1 text-xs text-amber-700">تعذّر تحميل قائمة الطلاب — أدخل المعرّف يدوياً.</p>
+              )}
             </label>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                disabled={busy}
+                disabled={busy || !linkStudentId.trim()}
                 className={buttonVariants({ variant: 'primary', className: 'flex-1' })}
                 onClick={() => void confirmLink()}
               >

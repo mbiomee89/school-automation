@@ -5,7 +5,22 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, idParam } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
-import { badRequest, notFound, forbidden } from '../utils/errors.js';
+import { badRequest, notFound } from '../utils/errors.js';
+
+const SAUDI_MOBILE_STRICT = /^\+9665\d{8}$/;
+
+function requireSaudiMobile(value, label) {
+  const v = String(value ?? '').trim();
+  if (!SAUDI_MOBILE_STRICT.test(v)) {
+    throw badRequest(`${label} يجب أن يكون بالصيغة +9665XXXXXXXX فقط`);
+  }
+  return v;
+}
+
+function optionalSaudiMobile(value, label) {
+  if (value == null || String(value).trim() === '') return null;
+  return requireSaudiMobile(value, label);
+}
 
 const router = Router();
 
@@ -51,6 +66,8 @@ const payloadSchema = z.object({
   guardianIdExpiry: z.string().min(1),
   guardianHomePhone: z.string().optional().nullable(),
   guardianMobile: z.string().min(1),
+  guardianWhatsappSame: z.boolean().default(true),
+  guardianWhatsapp: z.string().optional().nullable(),
   guardianWorkPhone: z.string().optional().nullable(),
   relativeName: z.string().min(1),
   relativePhone: z.string().min(1),
@@ -58,6 +75,15 @@ const payloadSchema = z.object({
   hasMedicalConditions: z.boolean(),
   medicalDetails: z.string().optional().nullable(),
   attested: z.literal(true),
+}).superRefine((data, ctx) => {
+  if (data.guardianWhatsappSame) return;
+  if (!data.guardianWhatsapp || !String(data.guardianWhatsapp).trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'رقم واتساب مطلوب',
+      path: ['guardianWhatsapp'],
+    });
+  }
 });
 
 function serializeSubmission(row) {
@@ -66,6 +92,12 @@ function serializeSubmission(row) {
     payload = JSON.parse(row.payload || '{}');
   } catch {
     payload = {};
+  }
+  if (payload.guardianWhatsappSame == null) {
+    payload.guardianWhatsappSame = true;
+  }
+  if (!payload.guardianWhatsapp && payload.guardianMobile) {
+    payload.guardianWhatsapp = payload.guardianMobile;
   }
   return {
     id: row.id,
@@ -83,11 +115,17 @@ function serializeSubmission(row) {
   };
 }
 
+/** Prefer the active campaign; otherwise reuse the oldest campaign (even if paused). Never spawn a second school-wide link on pause. */
 async function ensureActiveCampaign() {
   let campaign = await prisma.studentProfileCampaign.findFirst({
     where: { isActive: true },
     orderBy: { id: 'asc' },
   });
+  if (!campaign) {
+    campaign = await prisma.studentProfileCampaign.findFirst({
+      orderBy: { id: 'asc' },
+    });
+  }
   if (!campaign) {
     campaign = await prisma.studentProfileCampaign.create({
       data: {
@@ -206,7 +244,7 @@ staffRouter.patch(
       data: {
         studentId: student.id,
         classId: student.classId,
-        enteredStudentId: student.id,
+        // Keep parent-entered key; rewriting enteredStudentId risks unique clashes.
       },
       include: {
         class: { select: { id: true, name: true } },
@@ -306,6 +344,21 @@ publicRouter.post(
     } else {
       payload.medicalDetails = null;
     }
+
+    if (payload.guardianWhatsappSame !== false) {
+      payload.guardianWhatsappSame = true;
+      payload.guardianWhatsapp = payload.guardianMobile;
+    } else {
+      payload.guardianWhatsappSame = false;
+      payload.guardianWhatsapp = String(payload.guardianWhatsapp || '').trim();
+      if (!payload.guardianWhatsapp) throw badRequest('رقم واتساب مطلوب');
+    }
+
+    payload.guardianMobile = requireSaudiMobile(payload.guardianMobile, 'الجوال');
+    payload.guardianWhatsapp = requireSaudiMobile(payload.guardianWhatsapp, 'واتساب');
+    payload.relativePhone = requireSaudiMobile(payload.relativePhone, 'هاتف القريب');
+    payload.guardianHomePhone = optionalSaudiMobile(payload.guardianHomePhone, 'هاتف المنزل');
+    payload.guardianWorkPhone = optionalSaudiMobile(payload.guardianWorkPhone, 'هاتف العمل');
 
     const student = await prisma.student.findFirst({
       where: { id: enteredStudentId, isActive: true },
