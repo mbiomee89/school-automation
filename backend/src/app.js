@@ -22,6 +22,7 @@ import weeklyPlansRoutes from './routes/weeklyPlans.js';
 import absenceReasonsRoutes from './routes/absenceReasons.js';
 import reportsRoutes from './routes/reports.js';
 import parentRoutes from './routes/parent.js';
+import studentProfileRoutes from './routes/studentProfile.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -42,6 +43,7 @@ function mountApiRoutes(app, prefix = '') {
   app.use(`${prefix}/absence-reasons`, absenceReasonsRoutes);
   app.use(`${prefix}/reports`, reportsRoutes);
   app.use(`${prefix}/parent`, parentRoutes);
+  app.use(`${prefix}/student-profile`, studentProfileRoutes);
 }
 
 export function createApp() {

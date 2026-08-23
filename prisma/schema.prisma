@@ -32,6 +32,7 @@ enum Role {
   ADMIN      // principal / admin staff
   TEACHER
   COUNSELOR  // reviews and approves/rejects parent-submitted absence reasons; not tied to specific classes like a teacher
+  STUDENT_AFFAIRS // وكيل شؤون طلاب — reports + student profile forms
 }
 
 enum Language {
@@ -78,6 +79,7 @@ model Class {
   lateReports LateReport[]
   weeklyPlans WeeklyPlan[]
   enrollments ClassEnrollment[]
+  profileSubmissions StudentProfileSubmission[]
 
   @@unique([gradeLevel, section, academicYear])
 }
@@ -145,6 +147,7 @@ model Student {
   lateReports   LateReport[]
   notifications Notification[]
   enrollments   ClassEnrollment[]
+  profileSubmissions StudentProfileSubmission[]
 
   @@index([classId])
   @@index([isActive])
@@ -464,4 +467,40 @@ model ParentOtp {
 
   @@index([phone])
   @@index([phone, createdAt])
+}
+
+// ---------- Student personal-data form (وكيل شؤون طلاب) ----------
+
+model StudentProfileCampaign {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique // public URL segment
+  title     String   @default("استمارة البيانات الشخصية للطالب")
+  isActive  Boolean  @default(true)
+  createdBy Int?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions StudentProfileSubmission[]
+}
+
+model StudentProfileSubmission {
+  id              Int      @id @default(autoincrement())
+  campaignId      Int
+  campaign        StudentProfileCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  /// Parent-entered Student.id key (national ID). Used for upsert even when unlinked.
+  enteredStudentId String
+  /// Linked roster student when matched or manually linked by staff.
+  studentId       String?
+  student         Student? @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  classId         Int?
+  class           Class?   @relation(fields: [classId], references: [id], onDelete: SetNull)
+  payload         String   // JSON matching the locked field map
+  hasMedical      Boolean  @default(false)
+  submittedAt     DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([campaignId, enteredStudentId])
+  @@index([classId])
+  @@index([studentId])
+  @@index([hasMedical])
 }

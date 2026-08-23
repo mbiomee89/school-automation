@@ -8,6 +8,8 @@ import { AdministrationPage } from './pages/admin/AdministrationPage'
 import { TeacherDailyPage } from './pages/teacher/TeacherDailyPage'
 import { CounselorReviewPage } from './pages/counselor/CounselorReviewPage'
 import { ReportsPage } from './pages/reports/ReportsPage'
+import { StudentAffairsPage } from './pages/affairs/StudentAffairsPage'
+import { StudentProfilePublicPage } from './pages/public/StudentProfilePublicPage'
 import { ParentLoginPage } from './pages/parent/ParentLoginPage'
 import { ParentPortalPage } from './pages/parent/ParentPortalPage'
 import { ROLE_HOME } from './shared/accessControl'
@@ -27,6 +29,7 @@ export default function App() {
             <Route path="/login" element={<StaffLoginPage />} />
             <Route path="/parent/login" element={<ParentLoginPage />} />
             <Route path="/parent-portal" element={<ParentPortalPage />} />
+            <Route path="/student-profile/:token" element={<StudentProfilePublicPage />} />
 
             <Route element={<RequireAuth />}>
               <Route element={<StaffLayout />}>
@@ -34,6 +37,7 @@ export default function App() {
                 <Route path="administration" element={<AdministrationPage />} />
                 <Route path="teacher-daily" element={<TeacherDailyPage />} />
                 <Route path="counselor-review" element={<CounselorReviewPage />} />
+                <Route path="student-affairs" element={<StudentAffairsPage />} />
                 <Route path="reports" element={<ReportsPage />} />
               </Route>
             </Route>

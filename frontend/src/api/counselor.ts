@@ -5,6 +5,7 @@ import type {
   DateRangeFilter,
 } from '../sections/counselor-review/types'
 import type {
+  AbsenceDaysReportDetail,
   DailyAbsenceReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
@@ -62,6 +63,19 @@ export async function getHomeworkLogReport(date: string): Promise<HomeworkLogRep
 
 export async function getWeeklyPlanReport(date: string): Promise<WeeklyPlanReportDetail> {
   return apiRequest(`/reports/weekly-plan?date=${encodeURIComponent(date)}`)
+}
+
+export async function getAbsenceDaysReport(opts?: {
+  from?: string
+  to?: string
+  minDays?: number
+}) {
+  const params = new URLSearchParams()
+  if (opts?.from) params.set('from', opts.from)
+  if (opts?.to) params.set('to', opts.to)
+  if (opts?.minDays != null) params.set('minDays', String(opts.minDays))
+  const q = params.toString()
+  return apiRequest<AbsenceDaysReportDetail>(`/reports/absence-days${q ? `?${q}` : ''}`)
 }
 
 export async function getStudentHistoryReport(

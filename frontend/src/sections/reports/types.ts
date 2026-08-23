@@ -9,6 +9,7 @@ export type ReportType =
   | 'HOMEWORK_LOG'
   | 'WEEKLY_PLAN'
   | 'STUDENT_HISTORY'
+  | 'ABSENCE_DAYS'
 
 /** Maps to a lucide-react icon chosen in the component layer. */
 export type ReportIconHint = 'CALENDAR_OFF' | 'CLOCK' | 'BOOK_OPEN' | 'CALENDAR_RANGE' | 'HISTORY'
@@ -165,6 +166,26 @@ export interface StudentSearchOption {
   className: string | null
 }
 
+export interface AbsenceDaysReportDetail {
+  from: string | null
+  to: string | null
+  minDays: number
+  schoolName: string
+  academicYear: string
+  educationAdminName: string
+  logoUrl: string | null
+  principalName?: string | null
+  generatedAt: string
+  rows: Array<{
+    studentId: string
+    studentName: string
+    classId: number | null
+    className: string
+    absenceDays: number
+  }>
+  count: number
+}
+
 export interface ReportsProps {
   reports: ReportSummary[]
   dailyAbsenceDetail?: DailyAbsenceReportDetail | null
@@ -172,6 +193,7 @@ export interface ReportsProps {
   homeworkLogDetail?: HomeworkLogReportDetail | null
   weeklyPlanDetail?: WeeklyPlanReportDetail | null
   studentHistoryDetail?: StudentHistoryReportDetail | null
+  absenceDaysDetail?: AbsenceDaysReportDetail | null
   studentSearchResults?: StudentSearchOption[]
   studentSearchQuery?: string
   studentSearchLoading?: boolean
@@ -198,4 +220,6 @@ export interface ReportsProps {
   onSearchStudent?: (query: string) => void
   /** Load student history for a selected student id (optional date range) */
   onSelectStudent?: (studentId: string, range?: { from?: string; to?: string }) => void
+  /** Reload absence-days report with threshold / date range */
+  onFilterAbsenceDays?: (opts: { from?: string; to?: string; minDays?: number }) => void
 }

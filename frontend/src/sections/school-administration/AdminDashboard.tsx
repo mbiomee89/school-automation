@@ -56,6 +56,7 @@ const ROLE_AR: Record<StaffRole, string> = {
   ADMIN: 'إدارة',
   TEACHER: 'معلم',
   COUNSELOR: 'مرشد طلابي',
+  STUDENT_AFFAIRS: 'وكيل شؤون طلاب',
 }
 
 const EMPTY_STUDENT_FORM: StudentInput = {
@@ -174,6 +175,7 @@ function roleBadge(role: string) {
     ADMIN: 'bg-blue-500/15 text-blue-800 dark:text-blue-300',
     TEACHER: 'bg-sky-500/15 text-sky-800 dark:text-sky-300',
     COUNSELOR: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+    STUDENT_AFFAIRS: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
   }
   return styles[role] ?? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
 }
@@ -207,6 +209,7 @@ export function AdminDashboard({
   onSaveSubject,
   onRemoveSubject,
   onCreateStaff,
+  onUpdateStaff,
   onDeactivateStaff,
   onActivateStaff,
   onSyncAssignments,
@@ -254,6 +257,7 @@ export function AdminDashboard({
   const [deleteSubjectTarget, setDeleteSubjectTarget] = useState<Subject | null>(null)
 
   const [staffForm, setStaffForm] = useState<StaffInput>(EMPTY_STAFF_FORM)
+  const [editingStaffId, setEditingStaffId] = useState<number | null>(null)
   const [showStaffModal, setShowStaffModal] = useState(false)
   const [staffFormError, setStaffFormError] = useState<string | null>(null)
 
@@ -505,7 +509,22 @@ export function AdminDashboard({
 
   function openAddStaff() {
     setStaffFormError(null)
+    setEditingStaffId(null)
     setStaffForm({ ...EMPTY_STAFF_FORM })
+    setShowStaffModal(true)
+  }
+
+  function openEditStaff(u: (typeof staff)[number]) {
+    setStaffFormError(null)
+    setEditingStaffId(u.id)
+    setStaffForm({
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      phone: u.phone ?? '',
+      password: '',
+      langPref: 'AR',
+    })
     setShowStaffModal(true)
   }
 
@@ -515,22 +534,36 @@ export function AdminDashboard({
       return
     }
     const password = staffForm.password?.trim() ?? ''
-    if (password.length < 8) {
+    if (!editingStaffId && password.length < 8) {
       setStaffFormError('كلمة المرور يجب أن تكون 8 أحرف على الأقل.')
+      return
+    }
+    if (editingStaffId && password && password.length < 8) {
+      setStaffFormError('كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل.')
       return
     }
     setStaffFormError(null)
     try {
-      await onCreateStaff?.({
+      const payload = {
         ...staffForm,
         name: staffForm.name.trim(),
         email: staffForm.email.trim(),
-        password,
         phone: staffForm.phone?.trim() || null,
-      })
+        password: password || undefined,
+      }
+      if (editingStaffId) {
+        await onUpdateStaff?.(editingStaffId, payload)
+      } else {
+        await onCreateStaff?.({ ...payload, password })
+      }
       setShowStaffModal(false)
-    } catch {
-      setStaffFormError('تعذّر حفظ الموظف — راجع البيانات أو جرّب بريداً آخر.')
+      setEditingStaffId(null)
+    } catch (err) {
+      setStaffFormError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'تعذّر حفظ الموظف — راجع البيانات أو جرّب بريداً آخر.'
+      )
     }
   }
 
@@ -1301,23 +1334,32 @@ export function AdminDashboard({
                       </td>
                       <td className="px-3 py-2">{u.isActive ? 'نشط' : 'معطّل'}</td>
                       <td className="px-3 py-2 text-end">
-                        {u.isActive ? (
-                          <button
-                            type="button"
-                            className="text-xs text-red-600 underline"
-                            onClick={() => onDeactivateStaff?.(u.id)}
-                          >
-                            تعطيل
-                          </button>
-                        ) : (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
                           <button
                             type="button"
                             className="text-xs text-blue-700 underline dark:text-blue-300"
-                            onClick={() => onActivateStaff?.(u.id)}
+                            onClick={() => openEditStaff(u)}
                           >
-                            إعادة تفعيل
+                            تعديل
                           </button>
-                        )}
+                          {u.isActive ? (
+                            <button
+                              type="button"
+                              className="text-xs text-red-600 underline"
+                              onClick={() => onDeactivateStaff?.(u.id)}
+                            >
+                              تعطيل
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              className="text-xs text-blue-700 underline dark:text-blue-300"
+                              onClick={() => onActivateStaff?.(u.id)}
+                            >
+                              إعادة تفعيل
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -2495,9 +2537,16 @@ export function AdminDashboard({
 
       <Modal
         open={showStaffModal}
-        onClose={() => setShowStaffModal(false)}
-        title="إضافة موظف جديد"
-        description="المعلم أو المرشد أو الإدارة — كلمة المرور مطلوبة لتسجيل الدخول"
+        onClose={() => {
+          setShowStaffModal(false)
+          setEditingStaffId(null)
+        }}
+        title={editingStaffId ? 'تعديل موظف' : 'إضافة موظف جديد'}
+        description={
+          editingStaffId
+            ? 'يمكنك تغيير الدور أو البيانات. كلمة المرور اختيارية عند التعديل.'
+            : 'المعلم أو المرشد أو وكيل شؤون الطلاب أو الإدارة — كلمة المرور مطلوبة لتسجيل الدخول'
+        }
         maxWidthClassName="max-w-lg"
       >
         <form
@@ -2534,7 +2583,7 @@ export function AdminDashboard({
               onChange={(e) => setStaffForm((s) => ({ ...s, role: e.target.value as StaffRole }))}
               className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
-              {(['TEACHER', 'COUNSELOR', 'ADMIN'] as StaffRole[]).map((r) => (
+              {(['TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'ADMIN'] as StaffRole[]).map((r) => (
                 <option key={r} value={r}>
                   {ROLE_AR[r]}
                 </option>
@@ -2544,12 +2593,17 @@ export function AdminDashboard({
           <div className="rounded-lg border-2 border-blue-200 bg-blue-50/80 p-3 dark:border-blue-800 dark:bg-blue-950/40">
             <label className="block text-sm">
               <span className="font-bold text-blue-900 dark:text-blue-100">
-                كلمة المرور <span className="text-red-600">*</span>
+                كلمة المرور{' '}
+                {editingStaffId ? (
+                  <span className="font-normal text-blue-800/80">(اختياري)</span>
+                ) : (
+                  <span className="text-red-600">*</span>
+                )}
               </span>
               <input
-                required
+                required={!editingStaffId}
                 type="text"
-                minLength={8}
+                minLength={editingStaffId ? undefined : 8}
                 value={staffForm.password ?? ''}
                 onChange={(e) => {
                   setStaffFormError(null)
@@ -2558,10 +2612,12 @@ export function AdminDashboard({
                 className="mt-1 w-full rounded-md border border-blue-300 bg-white px-3 py-2.5 text-sm font-medium dark:border-blue-700 dark:bg-slate-900 dark:text-slate-100"
                 dir="ltr"
                 autoComplete="new-password"
-                placeholder="أدخل كلمة مرور قوية"
+                placeholder={editingStaffId ? 'اتركها فارغة للإبقاء على الحالية' : 'أدخل كلمة مرور قوية'}
               />
               <span className="mt-1 block text-xs text-blue-800/80 dark:text-blue-200/80">
-                مطلوبة — 8 أحرف على الأقل. سيُطلب من الموظف تغييرها عند أول تسجيل دخول.
+                {editingStaffId
+                  ? 'إن أدخلت كلمة مرور جديدة سيُطلب من الموظف تغييرها عند تسجيل الدخول.'
+                  : 'مطلوبة — 8 أحرف على الأقل. سيُطلب من الموظف تغييرها عند أول تسجيل دخول.'}
               </span>
             </label>
           </div>

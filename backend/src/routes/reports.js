@@ -10,7 +10,7 @@ import { schoolLogoUrl } from '../services/schoolLogo.js';
 
 const router = Router();
 
-router.use(requireStaff, requireRole('ADMIN', 'COUNSELOR'));
+router.use(requireStaff, requireRole('ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'));
 
 const dateQuery = z.object({
   date: z.string().min(1),
@@ -432,6 +432,88 @@ router.get(
   })
 );
 
+/** GET /reports/absence-days?from=&to=&minDays= — days absent per student */
+router.get(
+  '/absence-days',
+  validateQuery(
+    z.object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      minDays: z.coerce.number().int().min(0).optional(),
+    })
+  ),
+  asyncHandler(async (req, res) => {
+    const header = await schoolHeader();
+    const minDays = req.query.minDays ?? 0;
+    const where = {
+      status: { in: ['ABSENT', 'EXCUSED'] },
+    };
+    if (req.query.from || req.query.to) {
+      where.date = {};
+      if (req.query.from) where.date.gte = toUtcMidnight(req.query.from);
+      if (req.query.to) where.date.lte = toUtcMidnight(req.query.to);
+    }
+
+    const rows = await prisma.attendance.findMany({
+      where,
+      select: {
+        studentId: true,
+        date: true,
+        student: {
+          select: {
+            id: true,
+            nameAr: true,
+            classId: true,
+            class: { select: { id: true, name: true } },
+          },
+        },
+      },
+    });
+
+    const byStudent = new Map();
+    for (const r of rows) {
+      const day = toUtcMidnight(r.date).toISOString().slice(0, 10);
+      let entry = byStudent.get(r.studentId);
+      if (!entry) {
+        entry = {
+          studentId: r.studentId,
+          studentName: r.student.nameAr,
+          classId: r.student.classId,
+          className: r.student.class?.name ?? '—',
+          days: new Set(),
+        };
+        byStudent.set(r.studentId, entry);
+      }
+      entry.days.add(day);
+    }
+
+    const result = [...byStudent.values()]
+      .map((e) => ({
+        studentId: e.studentId,
+        studentName: e.studentName,
+        classId: e.classId,
+        className: e.className,
+        absenceDays: e.days.size,
+      }))
+      .filter((e) => e.absenceDays > minDays)
+      .sort((a, b) => b.absenceDays - a.absenceDays || a.studentName.localeCompare(b.studentName, 'ar'));
+
+    res.json({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      minDays,
+      schoolName: header.schoolName,
+      academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
+      principalName: header.principalName,
+      generatedAt: new Date().toISOString(),
+      rows: result,
+      count: result.length,
+    });
+  })
+);
+
 /** GET /reports/summary?date= — hub card counts for today */
 router.get(
   '/summary',
@@ -491,6 +573,15 @@ router.get(
           iconHint: 'CLOCK',
           context: dateStr,
           count: lateCount,
+          lastGeneratedAt: new Date().toISOString(),
+        },
+        {
+          type: 'ABSENCE_DAYS',
+          title: 'أيام الغياب للطالب',
+          description: 'عدد أيام الغياب مع فلتر أكثر من N يوم',
+          iconHint: 'CALENDAR_OFF',
+          context: dateStr,
+          count: null,
           lastGeneratedAt: new Date().toISOString(),
         },
         {

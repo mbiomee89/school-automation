@@ -4,7 +4,7 @@
  * Hiding UI is not enough — APIs must enforce the same rules server-side.
  */
 
-export type AppRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'PARENT'
+export type AppRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'PARENT'
 
 export interface RoleHome {
   role: AppRole
@@ -31,6 +31,11 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
     homeHref: '/counselor-review',
     homeLabelAr: 'مراجعة الأعذار',
   },
+  STUDENT_AFFAIRS: {
+    role: 'STUDENT_AFFAIRS',
+    homeHref: '/student-affairs',
+    homeLabelAr: 'شؤون الطلاب',
+  },
   PARENT: {
     role: 'PARENT',
     homeHref: '/parent-portal',
@@ -42,15 +47,19 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
  * Arabic nav labels allowed per staff role (must match shell MainNav labels).
  * Parents never use this list — they use Parent Portal bottom tabs only.
  */
-export const STAFF_NAV_BY_ROLE: Record<'ADMIN' | 'TEACHER' | 'COUNSELOR', string[]> = {
-  ADMIN: ['الإدارة المدرسية', 'التقارير'],
+export const STAFF_NAV_BY_ROLE: Record<
+  'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS',
+  string[]
+> = {
+  ADMIN: ['الإدارة المدرسية', 'التقارير', 'شؤون الطلاب'],
   TEACHER: ['أعمال المعلم اليومية', 'الواجبات'],
   COUNSELOR: ['مراجعة الأعذار', 'التقارير'],
+  STUDENT_AFFAIRS: ['شؤون الطلاب', 'التقارير'],
 }
 
 export function filterStaffNavByRole<T extends { label: string }>(
   items: T[],
-  role: 'ADMIN' | 'TEACHER' | 'COUNSELOR'
+  role: 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS'
 ): T[] {
   const allowed = new Set(STAFF_NAV_BY_ROLE[role])
   return items.filter((item) => allowed.has(item.label))
@@ -61,15 +70,15 @@ export const SECTION_ALLOWED_ROLES: Record<string, AppRole[]> = {
   'school-administration': ['ADMIN'],
   'teacher-daily-workflow': ['TEACHER'],
   'counselor-review': ['COUNSELOR'],
-  reports: ['ADMIN', 'COUNSELOR'],
+  'student-affairs': ['ADMIN', 'STUDENT_AFFAIRS'],
+  reports: ['ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'],
   'parent-portal': ['PARENT'],
-  'staff-login': ['ADMIN', 'TEACHER', 'COUNSELOR', 'PARENT'], // public auth surfaces
+  'staff-login': ['ADMIN', 'TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'PARENT'],
 }
 
 export function roleMayAccessSection(role: AppRole, sectionId: string): boolean {
   const allowed = SECTION_ALLOWED_ROLES[sectionId]
   if (!allowed) return false
-  // Login screens are public — any visitor may open them (not "authenticated as")
   if (sectionId === 'staff-login') return true
   return allowed.includes(role)
 }

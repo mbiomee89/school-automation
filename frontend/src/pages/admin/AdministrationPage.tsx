@@ -6,6 +6,7 @@ import {
   backupDataOnly,
   createStudent,
   createUser,
+  updateUser,
   deactivateUser,
   deleteClass,
   deleteSubject,
@@ -373,6 +374,15 @@ export function AdministrationPage() {
           setStaff(await listUsers())
         } catch (err) {
           alertError(err, 'فشل إنشاء حساب الموظف')
+          throw err
+        }
+      }}
+      onUpdateStaff={async (staffId, patch) => {
+        try {
+          await updateUser(staffId, patch)
+          setStaff(await listUsers())
+        } catch (err) {
+          alertError(err, 'فشل تحديث الموظف')
           throw err
         }
       }}

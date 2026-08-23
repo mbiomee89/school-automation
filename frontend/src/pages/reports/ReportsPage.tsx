@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import {
+  getAbsenceDaysReport,
   getDailyAbsenceReport,
   getHomeworkLogReport,
   getLateArrivalsReport,
@@ -13,6 +14,7 @@ import { todayDateStr } from '../../api/teacher'
 import { ApiError } from '../../api/client'
 import { ReportsHub } from '../../sections/reports/ReportsHub'
 import type {
+  AbsenceDaysReportDetail,
   DailyAbsenceReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
@@ -37,6 +39,7 @@ function detailMatchesDate(
   if (type === 'LATE_ARRIVALS') return late?.date === date
   if (type === 'HOMEWORK_LOG') return homework?.date === date
   if (type === 'WEEKLY_PLAN') return weekly?.date === date
+  if (type === 'ABSENCE_DAYS') return true
   return true
 }
 
@@ -53,6 +56,12 @@ export function ReportsPage() {
   const [weeklyPlanDetail, setWeeklyPlanDetail] = useState<WeeklyPlanReportDetail | null>(null)
   const [studentHistoryDetail, setStudentHistoryDetail] =
     useState<StudentHistoryReportDetail | null>(null)
+  const [absenceDaysDetail, setAbsenceDaysDetail] = useState<AbsenceDaysReportDetail | null>(null)
+  const [absenceDaysOpts, setAbsenceDaysOpts] = useState<{
+    from?: string
+    to?: string
+    minDays?: number
+  }>({ minDays: 0 })
   const [studentSearchQuery, setStudentSearchQuery] = useState('')
   const [studentSearchResults, setStudentSearchResults] = useState<StudentSearchOption[]>([])
   const [studentSearchLoading, setStudentSearchLoading] = useState(false)
@@ -112,6 +121,10 @@ export function ReportsPage() {
         const detail = await getWeeklyPlanReport(forDate)
         if (gen !== detailGen.current) return
         setWeeklyPlanDetail(detail)
+      } else if (type === 'ABSENCE_DAYS') {
+        const detail = await getAbsenceDaysReport(absenceDaysOpts)
+        if (gen !== detailGen.current) return
+        setAbsenceDaysDetail(detail)
       }
     } catch (err) {
       if (gen === detailGen.current) {
@@ -120,7 +133,7 @@ export function ReportsPage() {
     } finally {
       if (gen === detailGen.current) setDetailLoading(false)
     }
-  }, [])
+  }, [absenceDaysOpts])
 
   useEffect(() => {
     let cancelled = false
@@ -148,6 +161,11 @@ export function ReportsPage() {
 
   useEffect(() => {
     if (!activeReport || activeReport === 'STUDENT_HISTORY') return
+    if (activeReport === 'ABSENCE_DAYS') {
+      if (absenceDaysDetail) return
+      void loadDetail('ABSENCE_DAYS', date)
+      return
+    }
     if (
       detailMatchesDate(
         activeReport,
@@ -168,6 +186,7 @@ export function ReportsPage() {
     lateArrivalsDetail,
     homeworkLogDetail,
     weeklyPlanDetail,
+    absenceDaysDetail,
     loadDetail,
   ])
 
@@ -228,6 +247,36 @@ export function ReportsPage() {
     }
   }
 
+  async function handleFilterAbsenceDays(opts: {
+    from?: string
+    to?: string
+    minDays?: number
+  }) {
+    setAbsenceDaysOpts(opts)
+    setDetailLoading(true)
+    setActionError(null)
+    try {
+      const detail = await getAbsenceDaysReport(opts)
+      setAbsenceDaysDetail(detail)
+      setReports((prev) =>
+        prev.map((r) =>
+          r.type === 'ABSENCE_DAYS'
+            ? {
+                ...r,
+                count: detail.count,
+                context: `أكثر من ${detail.minDays} يوم`,
+                lastGeneratedAt: detail.generatedAt,
+              }
+            : r
+        )
+      )
+    } catch (err) {
+      setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل تقرير أيام الغياب')
+    } finally {
+      setDetailLoading(false)
+    }
+  }
+
   if (loading && reports.length === 0 && !fatalError) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -257,6 +306,7 @@ export function ReportsPage() {
       homeworkLogDetail={homeworkLogDetail}
       weeklyPlanDetail={weeklyPlanDetail}
       studentHistoryDetail={studentHistoryDetail}
+      absenceDaysDetail={absenceDaysDetail}
       studentSearchQuery={studentSearchQuery}
       studentSearchResults={studentSearchResults}
       studentSearchLoading={studentSearchLoading}
@@ -273,6 +323,7 @@ export function ReportsPage() {
       }}
       onSearchStudent={handleSearchStudent}
       onSelectStudent={handleSelectStudent}
+      onFilterAbsenceDays={handleFilterAbsenceDays}
     />
   )
 }

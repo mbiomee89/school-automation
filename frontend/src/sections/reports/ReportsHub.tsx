@@ -12,6 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type {
+  AbsenceDaysReportDetail,
   DailyAbsenceReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
@@ -76,6 +77,7 @@ export function ReportsHub({
   homeworkLogDetail,
   weeklyPlanDetail,
   studentHistoryDetail,
+  absenceDaysDetail,
   studentSearchResults = [],
   studentSearchQuery = '',
   studentSearchLoading = false,
@@ -89,6 +91,7 @@ export function ReportsHub({
   onFilterByDate,
   onSearchStudent,
   onSelectStudent,
+  onFilterAbsenceDays,
 }: ReportsProps) {
   const [activeReport, setActiveReport] = useState<ReportType | null>(
     controlledActiveReport ?? null
@@ -98,6 +101,9 @@ export function ReportsHub({
   )
   /** `ALL` or stringified classId — scopes homework / weekly sheets to one class. */
   const [classFilter, setClassFilter] = useState<string>('ALL')
+  const [absenceFrom, setAbsenceFrom] = useState(absenceDaysDetail?.from ?? '')
+  const [absenceTo, setAbsenceTo] = useState(absenceDaysDetail?.to ?? '')
+  const [absenceMinDays, setAbsenceMinDays] = useState(String(absenceDaysDetail?.minDays ?? 0))
   /** When set, open that report then trigger browser print once the detail is on screen. */
   const [pendingPrint, setPendingPrint] = useState<ReportType | null>(null)
   const [printHint, setPrintHint] = useState<string | null>(null)
@@ -153,6 +159,18 @@ export function ReportsHub({
   }, [currentActive, homeworkLogDetail?.date, weeklyPlanDetail?.weekStart])
 
   useEffect(() => {
+    if (!absenceDaysDetail) return
+    setAbsenceFrom(absenceDaysDetail.from ?? '')
+    setAbsenceTo(absenceDaysDetail.to ?? '')
+    setAbsenceMinDays(String(absenceDaysDetail.minDays ?? 0))
+  }, [
+    absenceDaysDetail?.from,
+    absenceDaysDetail?.to,
+    absenceDaysDetail?.minDays,
+    absenceDaysDetail?.generatedAt,
+  ])
+
+  useEffect(() => {
     if (classFilter === 'ALL') return
     if (classOptions.length === 0) return
     if (!classOptions.some((c) => c.id === classFilter)) setClassFilter('ALL')
@@ -165,6 +183,11 @@ export function ReportsHub({
     if (pendingPrint === 'STUDENT_HISTORY' && !studentHistoryDetail) {
       setPendingPrint(null)
       setPrintHint('اختر طالبًا أولًا ثم اضغط طباعة.')
+      return
+    }
+    if (pendingPrint === 'ABSENCE_DAYS' && !absenceDaysDetail) {
+      setPendingPrint(null)
+      setPrintHint('طبّق الفلتر أولًا ثم اضغط طباعة.')
       return
     }
     if (printStartedFor.current === pendingPrint) return
@@ -341,7 +364,8 @@ export function ReportsHub({
             </div>
 
             {(DATE_FILTER_TYPES.includes(currentActive) ||
-              (CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0)) && (
+              (CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0) ||
+              currentActive === 'ABSENCE_DAYS') && (
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 print:hidden dark:border-slate-700 dark:bg-slate-900">
                 {DATE_FILTER_TYPES.includes(currentActive) && (
                   <ReportDateNavigator
@@ -373,6 +397,56 @@ export function ReportsHub({
                     </select>
                   </label>
                 )}
+                {currentActive === 'ABSENCE_DAYS' && (
+                  <>
+                    <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <span className="shrink-0">من</span>
+                      <input
+                        type="date"
+                        value={absenceFrom}
+                        disabled={reportsLoading}
+                        onChange={(e) => setAbsenceFrom(e.target.value)}
+                        className="h-10 rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      />
+                    </label>
+                    <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <span className="shrink-0">إلى</span>
+                      <input
+                        type="date"
+                        value={absenceTo}
+                        disabled={reportsLoading}
+                        onChange={(e) => setAbsenceTo(e.target.value)}
+                        className="h-10 rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      />
+                    </label>
+                    <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <span className="shrink-0">أكثر من</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={absenceMinDays}
+                        disabled={reportsLoading}
+                        onChange={(e) => setAbsenceMinDays(e.target.value)}
+                        className="h-10 w-20 rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      />
+                      <span className="shrink-0">يوم</span>
+                    </label>
+                    <button
+                      type="button"
+                      disabled={reportsLoading}
+                      onClick={() =>
+                        onFilterAbsenceDays?.({
+                          from: absenceFrom || undefined,
+                          to: absenceTo || undefined,
+                          minDays: Number(absenceMinDays) || 0,
+                        })
+                      }
+                      className="h-10 rounded-lg bg-blue-600 px-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      تطبيق
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
@@ -384,6 +458,8 @@ export function ReportsHub({
               <HomeworkLogDetailView detail={homeworkLogDetail} classFilter={classFilter} />
             ) : currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail ? (
               <WeeklyPlanDetailView detail={weeklyPlanDetail} classFilter={classFilter} />
+            ) : currentActive === 'ABSENCE_DAYS' && absenceDaysDetail ? (
+              <AbsenceDaysDetailView detail={absenceDaysDetail} />
             ) : currentActive === 'STUDENT_HISTORY' ? (
               <StudentHistoryDetailView
                 detail={studentHistoryDetail}
@@ -423,6 +499,37 @@ export function ReportsHub({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function AbsenceDaysDetailView({ detail }: { detail: AbsenceDaysReportDetail }) {
+  const rangeLabel =
+    detail.from || detail.to
+      ? `${detail.from ? formatReportDate(detail.from) : '…'} — ${detail.to ? formatReportDate(detail.to) : '…'}`
+      : 'كل الفترة المسجّلة'
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        educationAdminName={detail.educationAdminName}
+        logoUrl={detail.logoUrl}
+        subtitle={`أيام الغياب (أكثر من ${detail.minDays} يوم)`}
+        dateLabel={rangeLabel}
+        generatedAt={detail.generatedAt}
+      />
+      <FormalTable
+        headers={['الطالب', 'الفصل', 'أيام الغياب', 'المعرّف']}
+        empty="لا يوجد طلاب ضمن هذا الشرط."
+        rows={detail.rows.map((r) => [
+          r.studentName,
+          r.className || '—',
+          String(r.absenceDays),
+          r.studentId,
+        ])}
+        colWidths={['30%', '25%', '15%', '30%']}
+      />
     </div>
   )
 }

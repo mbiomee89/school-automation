@@ -224,6 +224,25 @@ export async function createUser(input: StaffInput) {
   return mapStaff(data.user)
 }
 
+export async function updateUser(
+  id: number,
+  input: Partial<StaffInput> & { password?: string | null }
+) {
+  const body: Record<string, unknown> = {}
+  if (input.name !== undefined) body.name = input.name
+  if (input.email !== undefined) body.email = input.email
+  if (input.role !== undefined) body.role = input.role
+  if (input.phone !== undefined) body.phone = input.phone || null
+  if (input.langPref !== undefined) body.langPref = input.langPref
+  const password = input.password?.trim()
+  if (password) body.password = password
+  const data = await apiRequest<{ user: ApiUser }>(`/users/${id}`, {
+    method: 'PATCH',
+    body,
+  })
+  return mapStaff(data.user)
+}
+
 export async function deactivateUser(id: number) {
   const data = await apiRequest<{ user: ApiUser }>(`/users/${id}/deactivate`, { method: 'PATCH' })
   return mapStaff(data.user)

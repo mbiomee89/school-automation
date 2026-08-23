@@ -50,7 +50,7 @@ const createUserSchema = z.object({
   email: z.string().email(),
   phone: z.string().optional().nullable(),
   password: z.string().min(8),
-  role: z.enum(['ADMIN', 'TEACHER', 'COUNSELOR']),
+  role: z.enum(['ADMIN', 'TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS']),
   langPref: z.enum(['AR', 'EN']).optional(),
 });
 
@@ -59,7 +59,7 @@ const updateUserSchema = z.object({
   email: z.string().email().optional(),
   phone: z.string().optional().nullable(),
   password: z.string().min(8).optional(),
-  role: z.enum(['ADMIN', 'TEACHER', 'COUNSELOR']).optional(),
+  role: z.enum(['ADMIN', 'TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS']).optional(),
   langPref: z.enum(['AR', 'EN']).optional(),
 });
 
