@@ -13,7 +13,14 @@ if (!process.env.JWT_SECRET) {
 }
 
 if (process.env.NODE_ENV === 'production') {
-  const corsOrigin = process.env.CORS_ORIGIN?.trim();
+  let corsOrigin = process.env.CORS_ORIGIN?.trim();
+  // Render injects RENDER_EXTERNAL_URL (e.g. https://….onrender.com). Use it when
+  // the dashboard env was never set so the process can still listen for health checks.
+  if (!corsOrigin && process.env.RENDER_EXTERNAL_URL?.trim()) {
+    corsOrigin = process.env.RENDER_EXTERNAL_URL.trim().replace(/\/$/, '');
+    process.env.CORS_ORIGIN = corsOrigin;
+    console.warn(`[boot] CORS_ORIGIN unset; defaulting to RENDER_EXTERNAL_URL=${corsOrigin}`);
+  }
   if (!corsOrigin) {
     console.error(
       'CORS_ORIGIN is required in production (comma-separated HTTPS origins, e.g. https://school.example.com)'

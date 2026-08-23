@@ -27,7 +27,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
-        sync: false
+        value: https://school-automation-4q1g.onrender.com
       - key: JWT_EXPIRES_IN
         value: 8h
       - key: PARENT_JWT_EXPIRES_IN

@@ -8,7 +8,7 @@ Short checklist for the school-automation web service + Postgres on Render.
 - `DATABASE_URL` = **External** Postgres URL (not the internal `dpg-…-a` host if regions differ)
 - Web service and Postgres in the **same region**
 - `JWT_SECRET` = long random secret (**never** leave empty or use `.env.example` value)
-- `CORS_ORIGIN` = your public HTTPS origin(s), comma-separated (e.g. `https://school.example.com`) — **required in production** (API will not start without it)
+- `CORS_ORIGIN` = your public HTTPS origin(s), comma-separated (e.g. `https://school.example.com`) — **required in production**. On Render, if unset, the API falls back to `RENDER_EXTERNAL_URL`; set `CORS_ORIGIN` explicitly when using a custom domain.
 - `UPLOAD_DIR` set (e.g. `./backend/uploads`) — used for server-side files only; **not** publicly served
 - Build log shows Prisma provider switched to PostgreSQL
 - Health: `GET /health` (and `/api/health` if used) returns 200 after deploy
