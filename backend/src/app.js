@@ -23,6 +23,7 @@ import reportsRoutes from './routes/reports.js';
 import parentRoutes from './routes/parent.js';
 import studentProfileRoutes from './routes/studentProfile.js';
 import teacherDocumentsRoutes from './routes/teacherDocuments.js';
+import gradebookRoutes from './routes/gradebook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '../..');
@@ -54,6 +55,7 @@ function mountApiRoutes(app, prefix = '') {
   app.use(`${prefix}/parent`, parentRoutes);
   app.use(`${prefix}/student-profile`, studentProfileRoutes);
   app.use(`${prefix}/teacher-documents`, teacherDocumentsRoutes);
+  app.use(`${prefix}/gradebook`, gradebookRoutes);
 }
 
 export function createApp() {

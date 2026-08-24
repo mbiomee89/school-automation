@@ -324,6 +324,8 @@ export async function resetDataKeepAdmin(db) {
   await wipe('subjects', async () => (await db.subject.deleteMany()).count);
   await wipe('parentOtps', async () => (await db.parentOtp.deleteMany()).count);
   await wipe('parentAccounts', async () => (await db.parentAccount.deleteMany()).count);
+  await wipe('gradePeriodScores', async () => (await db.gradePeriodScore.deleteMany()).count);
+  await wipe('gradeTermFinals', async () => (await db.gradeTermFinal.deleteMany()).count);
   await wipe('teacherDocuments', async () => (await db.teacherDocument.deleteMany()).count);
   await wipe(
     'nonAdminUsers',

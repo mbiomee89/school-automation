@@ -14,6 +14,8 @@ import { ParentLoginPage } from './pages/parent/ParentLoginPage'
 import { ParentPortalPage } from './pages/parent/ParentPortalPage'
 import { TeacherDocumentsPage } from './pages/teacher/TeacherDocumentsPage'
 import { TeacherFilesAdminPage } from './pages/admin/TeacherFilesAdminPage'
+import { TeacherGradebookPage } from './pages/teacher/TeacherGradebookPage'
+import { GradebookAdminPage } from './pages/admin/GradebookAdminPage'
 import { ROLE_HOME } from './shared/accessControl'
 
 function HomeRedirect() {
@@ -40,6 +42,8 @@ export default function App() {
                 <Route path="teacher-daily" element={<TeacherDailyPage />} />
                 <Route path="teacher-documents" element={<TeacherDocumentsPage />} />
                 <Route path="teacher-files" element={<TeacherFilesAdminPage />} />
+                <Route path="gradebook" element={<TeacherGradebookPage />} />
+                <Route path="gradebook-reports" element={<GradebookAdminPage />} />
                 <Route path="counselor-review" element={<CounselorReviewPage />} />
                 <Route path="student-affairs" element={<StudentAffairsPage />} />
                 <Route path="reports" element={<ReportsPage />} />
