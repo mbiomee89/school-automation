@@ -4,7 +4,7 @@
  */
 
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'EXCUSED'
-export type TeacherTab = 'attendance' | 'late' | 'homework' | 'weekly-plan'
+export type TeacherTab = 'attendance' | 'homework' | 'weekly-plan'
 
 export interface TeacherAssignmentOption {
   id: number
@@ -79,13 +79,12 @@ export interface TeacherDailyWorkflowProps {
   }>
   /** Students in the class of the currently selected assignment. */
   roster: RosterStudent[]
-  /** Today's date (YYYY-MM-DD), used to label the attendance/late/homework tabs. */
+  /** Today's date (YYYY-MM-DD). */
   todayDate: string
   /** Null/undefined means attendance hasn't been saved yet today for this assignment. */
   attendanceSavedAt: string | null
   /** One entry per roster student; defaults to PRESENT until the teacher changes it. */
   attendanceMarks: AttendanceMark[]
-  lateReportsToday: LateReportEntry[]
   homeworkToday: HomeworkEntry[]
   /** The Saturday currently being viewed on the Weekly Plan tab. */
   currentWeekStart: string
@@ -100,12 +99,6 @@ export interface TeacherDailyWorkflowProps {
   onSelectAssignment?: (assignmentId: number) => void
   /** Save (or re-save) today's full attendance list in one action */
   onSaveAttendance?: (marks: AttendanceMark[]) => void | Promise<void>
-  /** Log a new late arrival for a roster student */
-  onAddLateReport?: (entry: { studentId: string; time: string; reason?: string | null }) => void
-  /** Edit an existing late report logged today */
-  onUpdateLateReport?: (id: number, patch: { time?: string; reason?: string | null }) => void
-  /** Remove a late report logged today */
-  onDeleteLateReport?: (id: number) => void
   /** Post a new homework entry for today */
   onAddHomework?: (entry: { description: string; dueDate?: string | null }) => void | Promise<void>
   /** Edit an existing homework entry posted today */

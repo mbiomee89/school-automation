@@ -8,13 +8,14 @@ import {
   validateQuery,
   idParam,
 } from '../middleware/validate.js';
-import { requireStaff, requireRole, requireTeacherAssignment } from '../middleware/auth.js';
+import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, conflict, notFound } from '../utils/errors.js';
 import { toUtcMidnight, schoolHourRiyadh } from '../utils/dates.js';
 
 const router = Router();
 
-router.use(requireStaff);
+/** Late arrival recording is شؤون الطلاب (+ admin) only — not teachers. */
+router.use(requireStaff, requireRole('STUDENT_AFFAIRS', 'ADMIN'));
 
 const createSchema = z.object({
   studentId: z.string().min(1),
@@ -49,7 +50,6 @@ function serialize(r) {
 router.get(
   '/',
   validateQuery(listQuery),
-  requireTeacherAssignment({ classIdParam: 'classId' }),
   asyncHandler(async (req, res) => {
     const date = toUtcMidnight(req.query.date);
     const rows = await prisma.lateReport.findMany({
@@ -68,9 +68,7 @@ router.get(
 
 router.post(
   '/',
-  requireRole('TEACHER', 'ADMIN'),
   validateBody(createSchema),
-  requireTeacherAssignment({ classIdParam: 'classId' }),
   asyncHandler(async (req, res) => {
     const { studentId, classId, reason } = req.body;
     const date = toUtcMidnight(req.body.date);
@@ -109,19 +107,11 @@ router.post(
 
 router.patch(
   '/:id',
-  requireRole('TEACHER', 'ADMIN'),
   validateParams(idParam),
   validateBody(updateSchema),
   asyncHandler(async (req, res) => {
     const existing = await prisma.lateReport.findUnique({ where: { id: req.params.id } });
     if (!existing) throw notFound('Late report not found');
-
-    if (req.user.role === 'TEACHER') {
-      const assignment = await prisma.teacherAssignment.findFirst({
-        where: { teacherId: req.user.id, classId: existing.classId },
-      });
-      if (!assignment) throw badRequest('Not assigned to this class');
-    }
 
     const data = {};
     if (req.body.time !== undefined) {
@@ -148,18 +138,10 @@ router.patch(
 
 router.delete(
   '/:id',
-  requireRole('TEACHER', 'ADMIN'),
   validateParams(idParam),
   asyncHandler(async (req, res) => {
     const existing = await prisma.lateReport.findUnique({ where: { id: req.params.id } });
     if (!existing) throw notFound('Late report not found');
-
-    if (req.user.role === 'TEACHER') {
-      const assignment = await prisma.teacherAssignment.findFirst({
-        where: { teacherId: req.user.id, classId: existing.classId },
-      });
-      if (!assignment) throw badRequest('Not assigned to this class');
-    }
 
     await prisma.lateReport.delete({ where: { id: req.params.id } });
     res.status(204).send();

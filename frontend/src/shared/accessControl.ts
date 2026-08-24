@@ -23,8 +23,8 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
   },
   TEACHER: {
     role: 'TEACHER',
-    homeHref: '/teacher-daily',
-    homeLabelAr: 'أعمال المعلم اليومية',
+    homeHref: '/teacher-daily?tab=attendance',
+    homeLabelAr: 'الحضور',
   },
   COUNSELOR: {
     role: 'COUNSELOR',
@@ -51,10 +51,10 @@ export const STAFF_NAV_BY_ROLE: Record<
   'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS',
   string[]
 > = {
-  ADMIN: ['الإدارة المدرسية', 'ملفات المعلمين', 'تقارير الدرجات', 'التقارير', 'شؤون الطلاب'],
-  TEACHER: ['أعمال المعلم اليومية', 'الواجبات', 'سجل المتابعة', 'مستندات التوظيف'],
+  ADMIN: ['الإدارة المدرسية', 'ملفات المعلمين', 'تقارير الدرجات', 'التقارير', 'شؤون الطلاب', 'التأخير'],
+  TEACHER: ['الحضور', 'الواجبات', 'الخطة الأسبوعية', 'سجل المتابعة', 'مستندات التوظيف'],
   COUNSELOR: ['مراجعة الأعذار', 'التقارير'],
-  STUDENT_AFFAIRS: ['شؤون الطلاب', 'التقارير'],
+  STUDENT_AFFAIRS: ['شؤون الطلاب', 'التأخير', 'التقارير'],
 }
 
 export function filterStaffNavByRole<T extends { label: string }>(
@@ -73,6 +73,7 @@ export const SECTION_ALLOWED_ROLES: Record<string, AppRole[]> = {
   'teacher-files': ['ADMIN'],
   gradebook: ['TEACHER', 'ADMIN'],
   'gradebook-reports': ['ADMIN'],
+  'late-reports': ['ADMIN', 'STUDENT_AFFAIRS'],
   'counselor-review': ['COUNSELOR'],
   'student-affairs': ['ADMIN', 'STUDENT_AFFAIRS'],
   reports: ['ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'],

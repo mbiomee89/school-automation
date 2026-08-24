@@ -3,19 +3,15 @@ import { useSearchParams } from 'react-router-dom'
 import { AlertTriangle, Inbox } from 'lucide-react'
 import {
   addHomework,
-  addLateReport,
   deleteHomework,
-  deleteLateReport,
   getAttendance,
   getHomework,
-  getLateReports,
   listRoster,
   listTeacherAssignments,
   getTeacherToday,
   saveAttendance,
   todayDateStr,
   updateHomework,
-  updateLateReport,
   weekStartSaturday,
 } from '../../api/teacher'
 import { ApiError } from '../../api/client'
@@ -23,7 +19,6 @@ import { TeacherDailyWorkflow } from '../../sections/teacher-daily-workflow/Teac
 import type {
   AttendanceMark,
   HomeworkEntry,
-  LateReportEntry,
   RosterStudent,
   TeacherAssignmentOption,
   TeacherTab,
@@ -40,7 +35,7 @@ export function TeacherDailyPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
   const initialTab: TeacherTab =
-    tabParam === 'homework' || tabParam === 'late' || tabParam === 'weekly-plan' || tabParam === 'attendance'
+    tabParam === 'homework' || tabParam === 'weekly-plan' || tabParam === 'attendance'
       ? tabParam
       : 'attendance'
   const [activeTab, setActiveTab] = useState<TeacherTab>(initialTab)
@@ -59,7 +54,6 @@ export function TeacherDailyPage() {
   const [roster, setRoster] = useState<RosterStudent[]>([])
   const [attendanceMarks, setAttendanceMarks] = useState<AttendanceMark[]>([])
   const [attendanceSavedAt, setAttendanceSavedAt] = useState<string | null>(null)
-  const [lateReportsToday, setLateReportsToday] = useState<LateReportEntry[]>([])
   const [homeworkToday, setHomeworkToday] = useState<HomeworkEntry[]>([])
   const [currentWeekStart] = useState(weekStartSaturday(today))
   const weeklyPlan = null
@@ -68,16 +62,14 @@ export function TeacherDailyPage() {
 
   const loadAssignmentData = useCallback(
     async (assignment: TeacherAssignmentOption) => {
-      const [students, attendance, late, homework] = await Promise.all([
+      const [students, attendance, homework] = await Promise.all([
         listRoster(assignment.classId),
         getAttendance(assignment.classId, today),
-        getLateReports(assignment.classId, today),
         getHomework(assignment.classId, assignment.subjectId, today),
       ])
       setRoster(students)
       setAttendanceMarks(attendance.marks)
       setAttendanceSavedAt(attendance.savedAt)
-      setLateReportsToday(late)
       setHomeworkToday(homework)
     },
     [today]
@@ -85,10 +77,13 @@ export function TeacherDailyPage() {
 
   useEffect(() => {
     const t = searchParams.get('tab')
-    if (t === 'homework' || t === 'late' || t === 'weekly-plan' || t === 'attendance') {
+    if (t === 'homework' || t === 'weekly-plan' || t === 'attendance') {
       setActiveTab(t)
+    } else if (t === 'late' || !t) {
+      setActiveTab('attendance')
+      setSearchParams({ tab: 'attendance' }, { replace: true })
     }
-  }, [searchParams])
+  }, [searchParams, setSearchParams])
 
   const selectAssignment = useCallback(
     async (assignmentId: number) => {
@@ -103,21 +98,6 @@ export function TeacherDailyPage() {
     },
     [assignments, loadAssignmentData]
   )
-
-  function handleTabChange(tab: TeacherTab) {
-    setActiveTab(tab)
-    if (tab === 'attendance') {
-      setSearchParams({}, { replace: true })
-    } else {
-      setSearchParams({ tab }, { replace: true })
-    }
-    if (tab === 'homework') {
-      const todayIds = todaySlots.map((s) => s.assignmentId).filter((id): id is number => id != null)
-      if (todayIds.length > 0 && (activeAssignmentId == null || !todayIds.includes(activeAssignmentId))) {
-        void selectAssignment(todayIds[0])
-      }
-    }
-  }
 
   useEffect(() => {
     let cancelled = false
@@ -205,12 +185,10 @@ export function TeacherDailyPage() {
       todayDate={today}
       attendanceSavedAt={attendanceSavedAt}
       attendanceMarks={attendanceMarks}
-      lateReportsToday={lateReportsToday}
       homeworkToday={homeworkToday}
       currentWeekStart={currentWeekStart}
       weeklyPlan={weeklyPlan}
       activeTab={activeTab}
-      onTabChange={handleTabChange}
       onSelectAssignment={selectAssignment}
       onSaveAttendance={async (marks) => {
         if (!active) return
@@ -221,37 +199,6 @@ export function TeacherDailyPage() {
         } catch (err) {
           alertError(err, 'فشل حفظ الحضور')
           throw err
-        }
-      }}
-      onAddLateReport={async (entry) => {
-        if (!active) return
-        try {
-          const row = await addLateReport({
-            studentId: entry.studentId,
-            classId: active.classId,
-            date: today,
-            time: entry.time,
-            reason: entry.reason,
-          })
-          setLateReportsToday((prev) => [...prev, row])
-        } catch (err) {
-          alertError(err, 'فشل تسجيل التأخر')
-        }
-      }}
-      onUpdateLateReport={async (id, patch) => {
-        try {
-          const row = await updateLateReport(id, patch)
-          setLateReportsToday((prev) => prev.map((r) => (r.id === id ? row : r)))
-        } catch (err) {
-          alertError(err, 'فشل تعديل التأخر')
-        }
-      }}
-      onDeleteLateReport={async (id) => {
-        try {
-          await deleteLateReport(id)
-          setLateReportsToday((prev) => prev.filter((r) => r.id !== id))
-        } catch (err) {
-          alertError(err, 'فشل حذف التأخر')
         }
       }}
       onAddHomework={async (entry) => {

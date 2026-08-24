@@ -2,13 +2,15 @@ import type { NavItem } from '../shell/components'
 
 /** Full staff nav catalog — AppShell filters by role. */
 export const STAFF_NAV_ITEMS: Omit<NavItem, 'isActive'>[] = [
-  { label: 'أعمال المعلم اليومية', href: '/teacher-daily' },
+  { label: 'الحضور', href: '/teacher-daily?tab=attendance' },
   { label: 'الواجبات', href: '/teacher-daily?tab=homework' },
+  { label: 'الخطة الأسبوعية', href: '/teacher-daily?tab=weekly-plan' },
   { label: 'سجل المتابعة', href: '/gradebook' },
   { label: 'مستندات التوظيف', href: '/teacher-documents' },
   { label: 'الإدارة المدرسية', href: '/administration' },
   { label: 'ملفات المعلمين', href: '/teacher-files' },
   { label: 'تقارير الدرجات', href: '/gradebook-reports' },
+  { label: 'التأخير', href: '/late-reports' },
   { label: 'مراجعة الأعذار', href: '/counselor-review' },
   { label: 'شؤون الطلاب', href: '/student-affairs' },
   { label: 'التقارير', href: '/reports' },
@@ -21,6 +23,7 @@ export const SECTION_BY_HREF: Record<string, string> = {
   '/administration': 'school-administration',
   '/teacher-files': 'teacher-files',
   '/gradebook-reports': 'gradebook-reports',
+  '/late-reports': 'late-reports',
   '/counselor-review': 'counselor-review',
   '/student-affairs': 'student-affairs',
   '/reports': 'reports',
@@ -31,8 +34,10 @@ export function isStaffNavActive(href: string, pathname: string, search: string)
   const url = new URL(href, 'http://local.invalid')
   if (pathname !== url.pathname) return false
   const wantTab = url.searchParams.get('tab')
+  if (!wantTab) return true
   const haveTab = new URLSearchParams(search).get('tab')
-  if (wantTab) return haveTab === wantTab
-  // Default daily link: active when no tab or attendance
-  return !haveTab || haveTab === 'attendance'
+  // Bare /teacher-daily defaults to attendance
+  const effective =
+    haveTab || (pathname === '/teacher-daily' ? 'attendance' : null)
+  return effective === wantTab
 }

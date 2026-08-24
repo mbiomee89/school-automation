@@ -1,20 +1,14 @@
 ﻿import { useMemo, useState } from 'react'
 import {
-  ClipboardCheck,
-  AlarmClock,
-  BookOpenCheck,
-  CalendarRange,
   CheckCircle2,
   Inbox,
   Save,
-  type LucideIcon,
 } from 'lucide-react'
 import type {
   AttendanceMark,
   AttendanceStatus,
   RosterStudent,
   TeacherDailyWorkflowProps,
-  TeacherTab,
 } from './types'
 import { EmptyState } from '../../shared/EmptyState'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
@@ -22,8 +16,6 @@ import { fontArabic } from '../../shared/fonts'
 import { cn } from '../../shared/utils'
 import { AssignmentSelector } from './AssignmentSelector'
 import { AttendanceRosterList } from './AttendanceRosterList'
-import { LateReportForm } from './LateReportForm'
-import { LateReportRow } from './LateReportRow'
 import { TeacherHomeworkGrid } from './TeacherHomeworkGrid'
 import { TeacherWeeklyPlanGrid } from './TeacherWeeklyPlanGrid'
 import { formatLongDate } from './statusMeta'
@@ -35,19 +27,6 @@ function buildInitialMarks(roster: RosterStudent[], marks: AttendanceMark[]): Re
   return map
 }
 
-interface TabDef {
-  id: TeacherTab
-  label: string
-  icon: LucideIcon
-}
-
-const TABS: TabDef[] = [
-  { id: 'attendance', label: 'الحضور', icon: ClipboardCheck },
-  { id: 'late', label: 'التأخير', icon: AlarmClock },
-  { id: 'homework', label: 'الواجبات', icon: BookOpenCheck },
-  { id: 'weekly-plan', label: 'الخطة الأسبوعية', icon: CalendarRange },
-]
-
 export function TeacherDailyWorkflow({
   assignments,
   activeAssignmentId,
@@ -56,17 +35,12 @@ export function TeacherDailyWorkflow({
   todayDate,
   attendanceSavedAt,
   attendanceMarks,
-  lateReportsToday,
   homeworkToday,
   currentWeekStart,
   weeklyPlan,
   activeTab: controlledTab,
-  onTabChange,
   onSelectAssignment,
   onSaveAttendance,
-  onAddLateReport,
-  onUpdateLateReport,
-  onDeleteLateReport,
   onAddHomework: _onAddHomework,
   onUpdateHomework: _onUpdateHomework,
   onDeleteHomework: _onDeleteHomework,
@@ -80,8 +54,8 @@ export function TeacherDailyWorkflow({
   void _onSaveWeeklyPlan
   void currentWeekStart
   void weeklyPlan
-  const [tab, setTab] = useState<TeacherTab>(controlledTab ?? 'attendance')
-  const currentTab = controlledTab ?? tab
+  void homeworkToday
+  const currentTab = controlledTab ?? 'attendance'
 
   // Attendance draft: local until "حفظ الحضور" is pressed, since the whole
   // point of the batch-save flow is editing several students before one
@@ -98,11 +72,6 @@ export function TeacherDailyWorkflow({
     setSyncedAssignmentId(activeAssignmentId)
     setDraftMarks(buildInitialMarks(roster, attendanceMarks))
     setJustSavedAt(null)
-  }
-
-  function switchTab(next: TeacherTab) {
-    setTab(next)
-    onTabChange?.(next)
   }
 
   function handleSetStatus(studentId: string, status: AttendanceStatus) {
@@ -175,7 +144,7 @@ export function TeacherDailyWorkflow({
                   ? 'الواجبات'
                   : currentTab === 'weekly-plan'
                     ? 'الخطة الأسبوعية'
-                    : 'أعمال المعلم اليومية'}
+                    : 'الحضور'}
               </h1>
             </div>
             {currentTab !== 'homework' && currentTab !== 'weekly-plan' && (
@@ -219,39 +188,6 @@ export function TeacherDailyWorkflow({
         </div>
       </div>
 
-      <div className="sticky top-0 z-10 mt-4 border-b border-slate-200 bg-slate-50/95 backdrop-blur-sm dark:border-slate-800 dark:bg-slate-950/95">
-        <div className="mx-auto flex max-w-3xl gap-1 overflow-x-auto px-4 sm:px-6">
-          {TABS.map((t) => {
-            const isActive = currentTab === t.id
-            const Icon = t.icon
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => switchTab(t.id)}
-                aria-current={isActive ? 'true' : undefined}
-                className={cn(
-                  'flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-3 text-sm font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 motion-reduce:transition-none',
-                  isActive
-                    ? 'border-blue-600 font-bold text-blue-700 dark:border-blue-400 dark:text-blue-300'
-                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
-                )}
-              >
-                <Icon className="size-4" strokeWidth={1.75} aria-hidden="true" />
-                {t.label}
-                <TabIndicator
-                  tab={t.id}
-                  attendanceSaved={effectiveSavedAt != null}
-                  lateCount={lateReportsToday.length}
-                  homeworkCount={homeworkToday.length}
-                  hasWeeklyPlan={false}
-                />
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
       <div className={cn('mx-auto max-w-3xl px-4 py-4 sm:px-6', currentTab === 'attendance' && 'pb-28')}>
         {currentTab === 'attendance' && (
           <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
@@ -272,28 +208,6 @@ export function TeacherDailyWorkflow({
               <EmptyState icon={Inbox} title="لا يوجد طلاب في هذا الفصل" />
             ) : (
               <AttendanceRosterList roster={roster} marks={draftMarks} onSetStatus={handleSetStatus} />
-            )}
-          </div>
-        )}
-
-        {currentTab === 'late' && (
-          <div className="space-y-4 animate-in fade-in-0 duration-200 motion-reduce:animate-none">
-            <LateReportForm roster={roster} todayDate={todayDate} onSubmit={(entry) => onAddLateReport?.(entry)} />
-
-            {lateReportsToday.length === 0 ? (
-              <EmptyState icon={AlarmClock} title="لا توجد سجلات تأخير اليوم" description="ستظهر هنا سجلات تأخر الطلاب فور إضافتها." />
-            ) : (
-              <ul className="space-y-2.5">
-                {lateReportsToday.map((entry) => (
-                  <LateReportRow
-                    key={entry.id}
-                    entry={entry}
-                    todayDate={todayDate}
-                    onUpdate={onUpdateLateReport}
-                    onDelete={onDeleteLateReport}
-                  />
-                ))}
-              </ul>
             )}
           </div>
         )}
@@ -328,53 +242,6 @@ export function TeacherDailyWorkflow({
         </div>
       )}
     </div>
-  )
-}
-
-interface TabIndicatorProps {
-  tab: TeacherTab
-  attendanceSaved: boolean
-  lateCount: number
-  homeworkCount: number
-  hasWeeklyPlan: boolean
-}
-
-function TabIndicator({ tab, attendanceSaved, lateCount, homeworkCount, hasWeeklyPlan }: TabIndicatorProps) {
-  if (tab === 'attendance' && attendanceSaved) {
-    return (
-      <CheckCircle2
-        className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
-        strokeWidth={2}
-        aria-label="تم حفظ الحضور"
-      />
-    )
-  }
-  if (tab === 'late' && lateCount > 0) {
-    return <CountPill count={lateCount} />
-  }
-  if (tab === 'homework' && homeworkCount > 0) {
-    return <CountPill count={homeworkCount} />
-  }
-  if (tab === 'weekly-plan' && hasWeeklyPlan) {
-    return (
-      <CheckCircle2
-        className="size-3.5 shrink-0 text-emerald-600 dark:text-emerald-400"
-        strokeWidth={2}
-        aria-label="توجد خطة محفوظة لهذا الأسبوع"
-      />
-    )
-  }
-  return null
-}
-
-function CountPill({ count }: { count: number }) {
-  return (
-    <span
-      className="inline-flex min-w-5 items-center justify-center rounded-full bg-blue-100 px-1 text-[10px] font-bold text-blue-700 dark:bg-blue-500/25 dark:text-blue-300"
-      dir="ltr"
-    >
-      {count}
-    </span>
   )
 }
 

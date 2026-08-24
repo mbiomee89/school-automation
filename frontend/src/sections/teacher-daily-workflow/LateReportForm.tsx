@@ -1,4 +1,4 @@
-﻿import { useState, type FormEvent } from 'react'
+﻿import { useEffect, useState, type FormEvent } from 'react'
 import { Search, AlarmClock, Plus } from 'lucide-react'
 import type { RosterStudent } from './types'
 import { buttonVariants } from '../../shared/buttonVariants'
@@ -16,6 +16,11 @@ export function LateReportForm({ roster, todayDate, onSubmit }: LateReportFormPr
   const [studentId, setStudentId] = useState(roster[0]?.id ?? '')
   const [time, setTime] = useState(nowTimeValue())
   const [reason, setReason] = useState('')
+
+  useEffect(() => {
+    setQuery('')
+    setStudentId(roster[0]?.id ?? '')
+  }, [roster])
 
   const q = query.trim().toLowerCase()
   const matches = q
