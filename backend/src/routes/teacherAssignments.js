@@ -7,6 +7,7 @@ import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, notFound } from '../utils/errors.js';
 import { uploadTimetableFile } from '../middleware/upload.js';
 import { parseTimetableUpload } from '../services/timetablePdfParse.js';
+import { schoolDateOnlyStr } from '../utils/dates.js';
 import {
   applyTimetableImport,
   getTeacherDaySchedule,
@@ -66,11 +67,7 @@ function pairKey(classId, subjectId) {
 }
 
 function todayLocal() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return schoolDateOnlyStr();
 }
 
 /**
@@ -105,6 +102,7 @@ router.get(
         weekEnd: null,
         academicYear: null,
         editable: false,
+        planEditable: false,
         days: [],
       });
     }

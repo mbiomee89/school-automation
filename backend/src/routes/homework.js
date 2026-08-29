@@ -10,8 +10,7 @@ import {
 } from '../middleware/validate.js';
 import { requireStaff, requireRole, requireTeacherAssignment } from '../middleware/auth.js';
 import { badRequest, notFound, forbidden } from '../utils/errors.js';
-import { toUtcMidnight } from '../utils/dates.js';
-import { weekStartSunday } from '../services/timetableImport.js';
+import { toUtcMidnight, schoolDateOnlyStr, isCurrentSchoolWeekEditable } from '../utils/dates.js';
 
 const router = Router();
 
@@ -42,13 +41,8 @@ const listQuery = z.object({
   period: z.string().regex(/^[1-6]$/).optional(),
 });
 
-function todayLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function assertCurrentWeekEditable(dateStr) {
-  if (weekStartSunday(dateStr) !== weekStartSunday(todayLocal())) {
+  if (!isCurrentSchoolWeekEditable(dateStr, schoolDateOnlyStr())) {
     throw forbidden('لا يمكن تعديل واجبات الأسابيع السابقة — للعرض فقط');
   }
 }

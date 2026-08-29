@@ -5,11 +5,8 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, idParam } from '../middleware/validate.js';
 import { requireStaff, requireRole, requireTeacherAssignment } from '../middleware/auth.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
-import { toUtcMidnight } from '../utils/dates.js';
-import {
-  weekStartSunday,
-  weekStartSaturdayFromDate,
-} from '../services/timetableImport.js';
+import { toUtcMidnight, schoolDateOnlyStr, isWeeklyPlanWeekEditable } from '../utils/dates.js';
+import { weekStartSaturdayFromDate } from '../services/timetableImport.js';
 
 const router = Router();
 
@@ -30,14 +27,9 @@ const listCellQuery = z.object({
   period: z.string().regex(/^[1-6]$/),
 });
 
-function todayLocal() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-function assertCurrentWeekEditable(dateStr) {
-  if (weekStartSunday(dateStr) !== weekStartSunday(todayLocal())) {
-    throw forbidden('لا يمكن تعديل خطط الأسابيع السابقة — للعرض فقط');
+function assertWeeklyPlanEditable(dateStr) {
+  if (!isWeeklyPlanWeekEditable(dateStr, schoolDateOnlyStr())) {
+    throw forbidden('خارج فترة تعديل الخطة الأسبوعية — للعرض فقط');
   }
 }
 
@@ -81,7 +73,7 @@ router.post(
   validateBody(cellUpsertSchema),
   requireTeacherAssignment({ classIdParam: 'classId', subjectIdParam: 'subjectId' }),
   asyncHandler(async (req, res) => {
-    assertCurrentWeekEditable(req.body.date);
+    assertWeeklyPlanEditable(req.body.date);
     const date = toUtcMidnight(req.body.date);
     const weekStart = toUtcMidnight(weekStartSaturdayFromDate(req.body.date));
     const title = String(req.body.title).trim();
@@ -135,7 +127,7 @@ router.delete(
       throw forbidden('لا يمكنك حذف خطة معلم آخر');
     }
     if (existing.date) {
-      assertCurrentWeekEditable(toUtcMidnight(existing.date).toISOString().slice(0, 10));
+      assertWeeklyPlanEditable(toUtcMidnight(existing.date).toISOString().slice(0, 10));
     } else if (existing.weekStart) {
       // legacy week row — allow delete without Sunday-week check
     }

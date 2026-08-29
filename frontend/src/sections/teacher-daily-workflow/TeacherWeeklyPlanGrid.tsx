@@ -29,13 +29,22 @@ function addDays(dateStr: string, days: number) {
   return utc.toISOString().slice(0, 10)
 }
 
+/** Saturday opens the upcoming Sun–Thu week; otherwise the week containing today. */
+function defaultPlanAnchor(today: string) {
+  const week = weekStartSunday(today)
+  const [y, m, d] = today.split('-').map(Number)
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay()
+  if (dow === 6) return addDays(week, 7)
+  return week
+}
+
 function alertError(err: unknown, fallback: string) {
   window.alert(err instanceof ApiError ? err.message : fallback)
 }
 
 export function TeacherWeeklyPlanGrid() {
   const today = todayDateStr()
-  const [anchor, setAnchor] = useState(today)
+  const [anchor, setAnchor] = useState(() => defaultPlanAnchor(today))
   const [grid, setGrid] = useState<TeacherWeekGrid | null>(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<TeacherWeekSlot | null>(null)
@@ -59,9 +68,9 @@ export function TeacherWeeklyPlanGrid() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anchor])
 
-  const editable = grid?.editable ?? false
+  const editable = grid?.planEditable ?? grid?.editable ?? false
   const weekStart = grid?.weekStart ?? weekStartSunday(anchor)
-  const currentWeekStart = weekStartSunday(today)
+  const maxEditableWeek = defaultPlanAnchor(today)
 
   const cellMap = useMemo(() => {
     const map = new Map<string, TeacherWeekSlot>()
@@ -128,7 +137,7 @@ export function TeacherWeeklyPlanGrid() {
         <div>
           <h2 className="text-lg font-bold text-slate-900 dark:text-slate-50">الخطة الأسبوعية</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            اضغط حصة لإضافة عنوان الدرس · الأسابيع السابقة للعرض فقط
+            تبدأ إضافة الخطة من السبت للأسبوع القادم (أحد–خميس) · يمكن التعديل حتى الجمعة
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -147,7 +156,7 @@ export function TeacherWeeklyPlanGrid() {
             type="button"
             className={buttonVariants({ variant: 'secondary', size: 'sm' })}
             onClick={() => setAnchor(addDays(weekStart, 7))}
-            disabled={weekStart >= currentWeekStart}
+            disabled={weekStart >= maxEditableWeek}
             aria-label="الأسبوع التالي"
           >
             <ChevronLeft className="size-4" />
@@ -157,7 +166,7 @@ export function TeacherWeeklyPlanGrid() {
 
       {!editable && (
         <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
-          أسبوع سابق — عرض فقط، لا يمكن التعديل
+          خارج فترة التعديل — عرض فقط
         </p>
       )}
 

@@ -1,6 +1,11 @@
 import { prisma } from '../utils/prisma.js';
 import { badRequest } from '../utils/errors.js';
 import { hashPassword } from './auth.js';
+import {
+  schoolDateOnlyStr,
+  isCurrentSchoolWeekEditable,
+  isWeeklyPlanWeekEditable,
+} from '../utils/dates.js';
 
 const SUBJECT_EN = {
   عربي: 'Arabic',
@@ -694,12 +699,9 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
   const settings = await prisma.schoolSettings.findFirst();
   const year = academicYear || settings?.academicYear;
   const weekStart = weekStartSunday(anchorDateStr);
-  const today = (() => {
-    const n = new Date();
-    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-  })();
-  const currentWeekStart = weekStartSunday(today);
-  const editable = weekStart === currentWeekStart;
+  const today = schoolDateOnlyStr();
+  const editable = isCurrentSchoolWeekEditable(weekStart, today);
+  const planEditable = isWeeklyPlanWeekEditable(weekStart, today);
 
   if (!year) {
     return {
@@ -707,6 +709,8 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
       weekEnd: addUtcDays(weekStart, 4),
       academicYear: null,
       editable,
+      planEditable,
+      today,
       days: DAY_ORDER.map((dayOfWeek, i) => ({
         dayOfWeek,
         date: addUtcDays(weekStart, i),
@@ -799,6 +803,7 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
     weekEnd,
     academicYear: year,
     editable,
+    planEditable,
     today,
     days,
   };

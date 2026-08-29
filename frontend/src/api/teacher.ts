@@ -8,10 +8,16 @@ import type {
 } from '../sections/teacher-daily-workflow/types'
 
 export function todayDateStr() {
-  const d = new Date()
-  const y = d.getFullYear()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  // School calendar day in Asia/Riyadh (not browser/server local TZ).
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Riyadh',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date())
+  const y = parts.find((p) => p.type === 'year')?.value
+  const m = parts.find((p) => p.type === 'month')?.value
+  const day = parts.find((p) => p.type === 'day')?.value
   return `${y}-${m}-${day}`
 }
 
@@ -77,7 +83,10 @@ export type TeacherWeekGrid = {
   weekStart: string
   weekEnd: string
   academicYear: string | null
+  /** Homework: current Sun–Thu school week only. */
   editable: boolean
+  /** Weekly plan: Saturday opens next week; Sun–Fri edit current week. */
+  planEditable?: boolean
   today?: string
   days: Array<{
     dayOfWeek: string
