@@ -250,12 +250,12 @@ export function StudentAffairsPage() {
 
   function printAll() {
     setPrintOnlyId(null)
-    window.setTimeout(() => window.print(), 50)
+    window.setTimeout(() => window.print(), 150)
   }
 
   function printOne(id: number) {
     setPrintOnlyId(id)
-    window.setTimeout(() => window.print(), 80)
+    window.setTimeout(() => window.print(), 150)
   }
 
   if (loading) {

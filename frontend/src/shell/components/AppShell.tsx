@@ -90,7 +90,7 @@ export function AppShell({
     <div
       dir={dir}
       lang={lang}
-      className="flex min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50"
+      className="flex min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-50 print:h-auto print:overflow-visible"
       style={fontArabic}
     >
       {/* Desktop / tablet sidebar — sits on the inline-start side (right in RTL). Always a dark surface. */}
@@ -158,7 +158,7 @@ export function AppShell({
         />
       </Drawer>
 
-      <div className="flex min-w-0 flex-1 flex-col print:min-h-screen">
+      <div className="flex min-w-0 flex-1 flex-col print:h-auto print:min-h-screen print:overflow-visible">
         <header className="flex h-[72px] items-center justify-between gap-3 border-b border-slate-200 bg-white px-3 sm:px-6 dark:border-slate-700 dark:bg-slate-800 print:hidden">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -200,7 +200,7 @@ export function AppShell({
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto print:h-auto print:overflow-visible">{children}</main>
       </div>
     </div>
   )

@@ -108,7 +108,7 @@ export function StudentProfilePrintSheet({
 
   return (
     <section
-      className="student-profile-print-sheet mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:mb-0 print:break-after-page print:rounded-none print:border-0 print:shadow-none"
+      className="student-profile-print-sheet mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm print:mb-0 print:overflow-visible print:break-after-page print:rounded-none print:border-0 print:shadow-none"
       style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
     >
       <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-3 border-b border-slate-100 px-4 py-3 sm:px-5">

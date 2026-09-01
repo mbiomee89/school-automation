@@ -71,6 +71,8 @@ body {
     background: white !important;
     color: black !important;
     color-scheme: light !important;
+    height: auto !important;
+    overflow: visible !important;
   }
 
   html.dark,
@@ -83,5 +85,6 @@ body {
     padding: 0 !important;
     background: white !important;
     color: black !important;
+    overflow: visible !important;
   }
 }
