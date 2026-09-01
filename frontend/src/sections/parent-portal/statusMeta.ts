@@ -15,6 +15,7 @@
 } from 'lucide-react'
 import type {
   AttendanceDayStatus,
+  EarlyLeaveStatus,
   ExcuseStatus,
   NotificationEventType,
   NotificationStatus,
@@ -41,6 +42,13 @@ export const EXCUSE_STATUS_META: Record<ExcuseStatus, StatusMeta> = {
   PENDING_REVIEW: { label: 'قيد المراجعة', tone: 'amber', icon: Hourglass },
   APPROVED: { label: 'مقبول', tone: 'emerald', icon: CheckCircle2 },
   REJECTED: { label: 'مرفوض', tone: 'red', icon: XCircle },
+}
+
+export const EARLY_LEAVE_STATUS_META: Record<EarlyLeaveStatus, StatusMeta> = {
+  PENDING: { label: 'قيد المراجعة', tone: 'amber', icon: Hourglass },
+  APPROVED: { label: 'معتمد', tone: 'emerald', icon: CheckCircle2 },
+  REJECTED: { label: 'مرفوض', tone: 'red', icon: XCircle },
+  CANCELLED: { label: 'ملغى', tone: 'slate', icon: Ban },
 }
 
 export const NOTIFICATION_EVENT_META: Record<NotificationEventType, { label: string; icon: LucideIcon }> = {

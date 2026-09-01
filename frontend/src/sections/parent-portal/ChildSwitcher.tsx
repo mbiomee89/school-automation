@@ -42,7 +42,7 @@ export function ChildSwitcher({ children, activeChildId, onSelectChild }: ChildS
 
   const avatar = (
     <span
-      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white"
+      className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--pp-primary)] text-sm font-bold text-white"
       aria-hidden="true"
     >
       {initials(activeChild.nameAr)}

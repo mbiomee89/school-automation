@@ -4,6 +4,7 @@ import type { ParentLoginErrorCode, ParentLoginMode, ParentLoginProps } from './
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { cn } from '../../shared/utils'
+import { PARENT_PORTAL_THEME } from './theme'
 
 const ERROR_AR: Record<ParentLoginErrorCode, string> = {
   INVALID_PHONE: 'تحقق من رقم الجوال — يجب أن يكون سعودياً بصيغة صحيحة.',
@@ -94,15 +95,14 @@ export function ParentLogin({
     <div
       dir="rtl"
       lang="ar"
-      className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-slate-50 px-4 py-10 dark:bg-slate-950"
-      style={fontArabic}
+      className="relative flex min-h-full flex-col items-center justify-center overflow-hidden bg-[color:var(--pp-sky)] px-4 py-10"
+      style={{ ...fontArabic, ...PARENT_PORTAL_THEME }}
     >
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.05] dark:opacity-[0.08]"
+        className="pointer-events-none absolute inset-0 opacity-40"
         style={{
           backgroundImage:
-            'linear-gradient(to left, currentColor 1px, transparent 1px), linear-gradient(to bottom, currentColor 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
+            'radial-gradient(ellipse 80% 50% at 50% -20%, rgba(29,111,168,0.25), transparent)',
         }}
         aria-hidden="true"
       />
@@ -116,30 +116,31 @@ export function ParentLogin({
               className="mx-auto size-16 rounded-2xl object-contain shadow-sm"
             />
           ) : (
-            <span className="mx-auto inline-flex size-16 items-center justify-center rounded-2xl bg-slate-800 text-slate-100 shadow-lg dark:bg-slate-700">
+            <span className="mx-auto inline-flex size-16 items-center justify-center rounded-2xl bg-[color:var(--pp-ink)] text-white shadow-lg">
               <Building2 className="size-8" strokeWidth={1.5} aria-hidden="true" />
             </span>
           )}
-          <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-50">
+          <h1 className="mt-4 text-3xl font-bold tracking-tight text-[color:var(--pp-ink)]">
             {schoolName}
           </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">بوابة أولياء الأمور</p>
+          <p className="mt-1.5 text-sm font-medium text-[color:var(--pp-primary)]">بوابة أولياء الأمور</p>
+          <p className="mt-1 text-xs text-[color:var(--pp-ink)]/50">تابع حضور ابنك وواجباته بسهولة</p>
         </header>
 
         <form
           onSubmit={handleSubmit}
           noValidate
-          className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_8px_24px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900 sm:p-8"
+          className="space-y-5 rounded-3xl bg-[color:var(--pp-sand)] p-6 shadow-sm ring-1 ring-[color:var(--pp-ink)]/8 sm:p-8"
         >
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+          <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/70 p-1">
             <button
               type="button"
               onClick={() => switchMode('login')}
               className={cn(
-                'rounded-lg py-2 text-sm font-semibold transition-colors',
+                'min-h-11 cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors',
                 currentMode === 'login'
-                  ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                  : 'text-slate-600 dark:text-slate-400'
+                  ? 'bg-[color:var(--pp-primary)] text-white shadow-sm'
+                  : 'text-[color:var(--pp-ink)]/55'
               )}
             >
               تسجيل الدخول
@@ -148,10 +149,10 @@ export function ParentLogin({
               type="button"
               onClick={() => switchMode('register')}
               className={cn(
-                'rounded-lg py-2 text-sm font-semibold transition-colors',
+                'min-h-11 cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors',
                 currentMode === 'register'
-                  ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
-                  : 'text-slate-600 dark:text-slate-400'
+                  ? 'bg-[color:var(--pp-primary)] text-white shadow-sm'
+                  : 'text-[color:var(--pp-ink)]/55'
               )}
             >
               إنشاء كلمة مرور
@@ -159,19 +160,19 @@ export function ParentLogin({
           </div>
 
           {currentMode === 'register' && (
-            <p className="rounded-xl border border-blue-100 bg-blue-50/80 px-3 py-2 text-xs text-blue-900 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-200">
+            <p className="rounded-xl bg-[color:var(--pp-primary-soft)] px-3 py-2 text-xs text-[color:var(--pp-ink)]">
               لأول مرة فقط: أدخل رقم الجوال المسجّل لدى المدرسة ومعرّف أحد أبنائك على هذا الجوال، ثم اختر
               كلمة مرور (8 أحرف على الأقل).
             </p>
           )}
 
           <label className="block text-sm" htmlFor={phoneId}>
-            <span className="font-medium text-slate-700 dark:text-slate-300">
-              رقم الجوال <span className="text-red-600">*</span>
+            <span className="font-medium text-[color:var(--pp-ink)]">
+              رقم الجوال <span className="text-[color:var(--pp-danger)]">*</span>
             </span>
             <div className="relative mt-1.5">
               <Smartphone
-                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[color:var(--pp-ink)]/35"
                 strokeWidth={1.75}
                 aria-hidden="true"
               />
@@ -188,7 +189,7 @@ export function ParentLogin({
                   setLocalError(null)
                 }}
                 placeholder="05XXXXXXXX"
-                className="min-h-11 w-full rounded-xl border border-slate-300 bg-white py-2.5 pe-3 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="min-h-11 w-full rounded-xl border border-[color:var(--pp-ink)]/15 bg-white py-2.5 pe-3 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--pp-primary)]"
                 style={fontMono}
                 aria-invalid={!!displayError}
               />
@@ -197,12 +198,12 @@ export function ParentLogin({
 
           {currentMode === 'register' && (
             <label className="block text-sm" htmlFor={studentIdFieldId}>
-              <span className="font-medium text-slate-700 dark:text-slate-300">
-                معرّف الطالب / رقم الهوية <span className="text-red-600">*</span>
+              <span className="font-medium text-[color:var(--pp-ink)]">
+                معرّف الطالب / رقم الهوية <span className="text-[color:var(--pp-danger)]">*</span>
               </span>
               <div className="relative mt-1.5">
                 <IdCard
-                  className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                  className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[color:var(--pp-ink)]/35"
                   strokeWidth={1.75}
                   aria-hidden="true"
                 />
@@ -219,24 +220,24 @@ export function ParentLogin({
                     setLocalError(null)
                   }}
                   placeholder="رقم هوية أحد الأبناء"
-                  className="min-h-11 w-full rounded-xl border border-slate-300 bg-white py-2.5 pe-3 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                  className="min-h-11 w-full rounded-xl border border-[color:var(--pp-ink)]/15 bg-white py-2.5 pe-3 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--pp-primary)]"
                   style={fontMono}
                   aria-invalid={!!displayError}
                 />
               </div>
-              <span className="mt-1.5 block text-xs text-slate-500 dark:text-slate-400">
+              <span className="mt-1.5 block text-xs text-[color:var(--pp-ink)]/50">
                 يجب أن يطابق رقم الجوال المسجّل لهذا الطالب في سجلات المدرسة.
               </span>
             </label>
           )}
 
           <label className="block text-sm" htmlFor={passwordId}>
-            <span className="font-medium text-slate-700 dark:text-slate-300">
-              كلمة المرور <span className="text-red-600">*</span>
+            <span className="font-medium text-[color:var(--pp-ink)]">
+              كلمة المرور <span className="text-[color:var(--pp-danger)]">*</span>
             </span>
             <div className="relative mt-1.5">
               <Lock
-                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-slate-400"
+                className="pointer-events-none absolute start-3 top-1/2 size-4 -translate-y-1/2 text-[color:var(--pp-ink)]/35"
                 strokeWidth={1.75}
                 aria-hidden="true"
               />
@@ -251,14 +252,14 @@ export function ParentLogin({
                   setPassword(e.target.value)
                   setLocalError(null)
                 }}
-                className="min-h-11 w-full rounded-xl border border-slate-300 bg-white py-2.5 pe-12 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
+                className="min-h-11 w-full rounded-xl border border-[color:var(--pp-ink)]/15 bg-white py-2.5 pe-12 ps-10 text-start text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--pp-primary)]"
                 aria-invalid={!!displayError}
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
-                className="absolute end-2 top-1/2 inline-flex size-9 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                className="absolute end-2 top-1/2 inline-flex size-11 -translate-y-1/2 cursor-pointer items-center justify-center rounded-lg text-[color:var(--pp-ink)]/45 hover:bg-[color:var(--pp-sky)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--pp-primary)]"
               >
                 {showPassword ? (
                   <EyeOff className="size-4" strokeWidth={1.75} aria-hidden="true" />
@@ -272,7 +273,7 @@ export function ParentLogin({
           {displayError && (
             <p
               role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+              className="rounded-xl bg-[color:var(--pp-danger-soft)] px-3 py-2 text-sm text-[color:var(--pp-danger)]"
             >
               {displayError}
             </p>
@@ -281,7 +282,7 @@ export function ParentLogin({
           <button
             type="submit"
             disabled={isSubmitting}
-            className={buttonVariants({ variant: 'primary', className: 'w-full' })}
+            className={buttonVariants({ variant: 'primary', className: 'min-h-11 w-full cursor-pointer' })}
           >
             {isSubmitting && <span className={SPINNER_CLASS} aria-hidden="true" />}
             {isSubmitting
@@ -292,12 +293,12 @@ export function ParentLogin({
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-slate-500 dark:text-slate-400">
+        <p className="mt-6 text-center text-sm text-[color:var(--pp-ink)]/50">
           موظف؟{' '}
           <button
             type="button"
             onClick={() => onOpenStaffLogin?.()}
-            className="font-semibold text-blue-700 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-blue-300"
+            className="cursor-pointer font-semibold text-[color:var(--pp-primary)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--pp-primary)]"
           >
             دخول الموظفين
           </button>

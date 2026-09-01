@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import {
+  cancelParentEarlyLeave,
+  createParentEarlyLeave,
   getParentAttendance,
+  getParentEarlyLeave,
   getParentExcuses,
   getParentHomework,
   getParentSummary,
@@ -13,15 +16,20 @@ import {
 import { ApiError } from '../../api/client'
 import { useParentAuth } from '../../lib/parentAuth'
 import { ParentPortal } from '../../sections/parent-portal/ParentPortal'
+import { PARENT_PORTAL_THEME, schoolTodayIso } from '../../sections/parent-portal/theme'
 import type {
   AttendanceDay,
+  EarlyLeaveRequest,
   ExcuseSubmission,
   HomeworkItem,
+  ReportBrand,
   TodaySummary,
+  WeeklyPlanFormalRow,
   WeeklyPlanItem,
 } from '../../sections/parent-portal/types'
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
+import { fontArabic } from '../../shared/fonts'
 
 function toChild(s: ParentChild) {
   return {
@@ -33,26 +41,40 @@ function toChild(s: ParentChild) {
   }
 }
 
+function emptySummary(date: string): TodaySummary {
+  return {
+    date,
+    attendanceStatus: null,
+    homeworkDueCount: 0,
+    newAlertsCount: 0,
+  }
+}
+
 export function ParentPortalPage() {
   const { students, isAuthenticated, bootstrapping, logout } = useParentAuth()
   const navigate = useNavigate()
 
   const [activeChildId, setActiveChildId] = useState<string>('')
-  const [, setLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
+  const [loadedChildId, setLoadedChildId] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [todaySummary, setTodaySummary] = useState<TodaySummary>({
-    date: new Date().toISOString().slice(0, 10),
-    attendanceStatus: null,
-    homeworkDueCount: 0,
-    newAlertsCount: 0,
-  })
+  const [todaySummary, setTodaySummary] = useState<TodaySummary>(() => emptySummary(schoolTodayIso()))
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceDay[]>([])
   const [homeworkItems, setHomeworkItems] = useState<HomeworkItem[]>([])
+  const [homeHomeworkItems, setHomeHomeworkItems] = useState<HomeworkItem[]>([])
   const [weeklyPlans, setWeeklyPlans] = useState<WeeklyPlanItem[]>([])
+  const [weeklyPlanRows, setWeeklyPlanRows] = useState<WeeklyPlanFormalRow[]>([])
+  const [weeklyPlanWeekStart, setWeeklyPlanWeekStart] = useState<string | null>(null)
+  const [weeklyPlanWeekEnd, setWeeklyPlanWeekEnd] = useState<string | null>(null)
+  const [weeklyPlanAnchorDate, setWeeklyPlanAnchorDate] = useState(() => schoolTodayIso())
+  const [reportBrand, setReportBrand] = useState<ReportBrand>({
+    schoolName: 'المدرسة',
+    academicYear: '',
+  })
+  const [reportClassName, setReportClassName] = useState('بدون فصل')
   const [excuseSubmissions, setExcuseSubmissions] = useState<ExcuseSubmission[]>([])
-  const [homeworkBrowseDate, setHomeworkBrowseDate] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  )
+  const [earlyLeaveRequests, setEarlyLeaveRequests] = useState<EarlyLeaveRequest[]>([])
+  const [homeworkBrowseDate, setHomeworkBrowseDate] = useState(() => schoolTodayIso())
 
   useEffect(() => {
     if (students.length === 0) return
@@ -63,17 +85,26 @@ export function ParentPortalPage() {
 
   const loadGen = useRef(0)
 
-  const loadChild = useCallback(async (studentId: string, browseDate: string) => {
+  const loadChild = useCallback(async (studentId: string, browseDate: string, planAnchor: string) => {
     const gen = ++loadGen.current
     setError(null)
-    const [summary, attendance, homework, plans, excuses] = await Promise.all([
+    const [summary, attendance, homeworkRes, plansRes, excuses, earlyLeave] = await Promise.all([
       getParentSummary(studentId),
       getParentAttendance(studentId),
       getParentHomework(studentId, { date: browseDate }),
-      getParentWeeklyPlans(studentId),
+      getParentWeeklyPlans(studentId, { date: planAnchor }),
       getParentExcuses(studentId),
+      getParentEarlyLeave(studentId),
     ])
     if (gen !== loadGen.current) return
+
+    let todayHomework = homeworkRes.homework
+    if (browseDate !== summary.date) {
+      const todayRes = await getParentHomework(studentId, { date: summary.date })
+      if (gen !== loadGen.current) return
+      todayHomework = todayRes.homework
+    }
+
     setTodaySummary({
       date: summary.date,
       attendanceStatus: summary.attendanceStatus,
@@ -81,9 +112,23 @@ export function ParentPortalPage() {
       newAlertsCount: summary.newAlertsCount,
     })
     setAttendanceHistory(attendance)
-    setHomeworkItems(homework)
-    setWeeklyPlans(plans)
+    setHomeworkItems(homeworkRes.homework)
+    setHomeHomeworkItems(todayHomework)
+    setWeeklyPlans(plansRes.weeklyPlans ?? [])
+    setWeeklyPlanRows(plansRes.rows ?? [])
+    setWeeklyPlanWeekStart(plansRes.weekStart ?? null)
+    setWeeklyPlanWeekEnd(plansRes.weekEnd ?? null)
+    setReportBrand({
+      schoolName: homeworkRes.schoolName || plansRes.schoolName || 'المدرسة',
+      academicYear: homeworkRes.academicYear || plansRes.academicYear || '',
+      educationAdminName: homeworkRes.educationAdminName ?? plansRes.educationAdminName ?? null,
+      logoUrl: homeworkRes.logoUrl ?? plansRes.logoUrl ?? null,
+      principalName: homeworkRes.principalName ?? plansRes.principalName ?? null,
+    })
+    setReportClassName(homeworkRes.className || plansRes.className || 'بدون فصل')
     setExcuseSubmissions(excuses)
+    setEarlyLeaveRequests(earlyLeave)
+    setLoadedChildId(studentId)
   }, [])
 
   useEffect(() => {
@@ -95,7 +140,7 @@ export function ParentPortalPage() {
     ;(async () => {
       setLoading(true)
       try {
-        await loadChild(activeChildId, homeworkBrowseDate)
+        await loadChild(activeChildId, homeworkBrowseDate, weeklyPlanAnchorDate)
       } catch (err) {
         if (!cancelled && loadGen.current) {
           if (err instanceof ApiError && err.status === 401) {
@@ -116,7 +161,24 @@ export function ParentPortalPage() {
     return () => {
       cancelled = true
     }
-  }, [activeChildId, homeworkBrowseDate, loadChild, logout, navigate])
+  }, [activeChildId, homeworkBrowseDate, weeklyPlanAnchorDate, loadChild, logout, navigate])
+
+  function selectChild(childId: string) {
+    if (childId === activeChildId) return
+    setLoading(true)
+    setLoadedChildId('')
+    setAttendanceHistory([])
+    setHomeworkItems([])
+    setHomeHomeworkItems([])
+    setWeeklyPlans([])
+    setWeeklyPlanRows([])
+    setExcuseSubmissions([])
+    setEarlyLeaveRequests([])
+    setTodaySummary(emptySummary(schoolTodayIso()))
+    setHomeworkBrowseDate(schoolTodayIso())
+    setWeeklyPlanAnchorDate(schoolTodayIso())
+    setActiveChildId(childId)
+  }
 
   if (bootstrapping) {
     return (
@@ -162,7 +224,7 @@ export function ParentPortalPage() {
           if (activeChildId) {
             setLoading(true)
             setError(null)
-            loadChild(activeChildId, homeworkBrowseDate)
+            loadChild(activeChildId, homeworkBrowseDate, weeklyPlanAnchorDate)
               .catch((err) => {
                 if (err instanceof ApiError && err.status === 401) {
                   logout()
@@ -178,6 +240,23 @@ export function ParentPortalPage() {
     )
   }
 
+  const waitingForChild = loading && loadedChildId !== activeChildId
+  if (waitingForChild) {
+    return (
+      <div
+        dir="rtl"
+        lang="ar"
+        className="flex min-h-screen items-center justify-center bg-[color:var(--pp-sky)]"
+        style={{ ...fontArabic, ...PARENT_PORTAL_THEME }}
+      >
+        <span
+          className={`${SPINNER_CLASS} size-8 rounded-full border-2 border-[color:var(--pp-primary)] border-t-transparent`}
+          aria-label="جارٍ التحميل"
+        />
+      </div>
+    )
+  }
+
   return (
     <ParentPortal
       children={students.map(toChild)}
@@ -185,24 +264,56 @@ export function ParentPortalPage() {
       todaySummary={todaySummary}
       attendanceHistory={attendanceHistory}
       homeworkItems={homeworkItems}
+      homeHomeworkItems={homeHomeworkItems}
       weeklyPlans={weeklyPlans}
+      weeklyPlanRows={weeklyPlanRows}
+      weeklyPlanWeekStart={weeklyPlanWeekStart}
+      weeklyPlanWeekEnd={weeklyPlanWeekEnd}
+      reportBrand={reportBrand}
+      reportClassName={reportClassName}
       excuseSubmissions={excuseSubmissions}
+      earlyLeaveRequests={earlyLeaveRequests}
       homeworkBrowseDate={homeworkBrowseDate}
       onHomeworkBrowseDateChange={setHomeworkBrowseDate}
-      onSelectChild={setActiveChildId}
+      weeklyPlanAnchorDate={weeklyPlanAnchorDate}
+      onWeeklyPlanAnchorDateChange={setWeeklyPlanAnchorDate}
+      onSelectChild={selectChild}
       onSubmitExcuse={async (input) => {
         const day = attendanceHistory.find(
           (d) => d.date === input.attendanceDate && d.status === 'ABSENT'
         )
         if (!day) {
-          window.alert('لم يُعثر على سجل غياب لهذا اليوم')
-          return
+          throw new Error('لم يُعثر على سجل غياب لهذا اليوم')
         }
+        await submitExcuse(day.id, input.reasonText, input.file)
         try {
-          await submitExcuse(day.id, input.reasonText, input.file)
-          await loadChild(activeChildId, homeworkBrowseDate)
-        } catch (err) {
-          window.alert(err instanceof ApiError ? err.message : 'فشل إرسال العذر')
+          await loadChild(activeChildId, homeworkBrowseDate, weeklyPlanAnchorDate)
+        } catch {
+          // Upload already succeeded — keep success toast even if refresh fails.
+        }
+      }}
+      onSubmitEarlyLeave={async (input) => {
+        await createParentEarlyLeave(activeChildId, input)
+        try {
+          const list = await getParentEarlyLeave(activeChildId)
+          setEarlyLeaveRequests(list)
+        } catch {
+          // Create succeeded — keep success toast even if refresh fails.
+        }
+      }}
+      onCancelEarlyLeave={async (requestId) => {
+        await cancelParentEarlyLeave(requestId)
+        try {
+          const list = await getParentEarlyLeave(activeChildId)
+          setEarlyLeaveRequests(list)
+        } catch {
+          setEarlyLeaveRequests((prev) =>
+            prev.map((r) =>
+              r.id === requestId
+                ? { ...r, status: 'CANCELLED', cancelledAt: new Date().toISOString() }
+                : r
+            )
+          )
         }
       }}
       onLogout={() => {

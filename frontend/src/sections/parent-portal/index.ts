@@ -1,3 +1,5 @@
 export { ParentLogin } from './ParentLogin'
 export { ParentPortal } from './ParentPortal'
+export { DayChipStrip } from './DayChipStrip'
+export { EarlyLeavePanel } from './EarlyLeavePanel'
 export type * from './types'

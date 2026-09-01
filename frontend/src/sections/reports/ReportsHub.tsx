@@ -7,6 +7,7 @@ import {
   BookOpen,
   CalendarRange,
   History,
+  LogOut,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -14,6 +15,7 @@ import {
 import type {
   AbsenceDaysReportDetail,
   DailyAbsenceReportDetail,
+  EarlyLeaveReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
   ReportsProps,
@@ -39,6 +41,7 @@ const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   BOOK_OPEN: BookOpen,
   CALENDAR_RANGE: CalendarRange,
   HISTORY: History,
+  LOG_OUT: LogOut,
 }
 
 const STATUS_AR: Record<'PRESENT' | 'ABSENT' | 'EXCUSED', string> = {
@@ -50,6 +53,7 @@ const STATUS_AR: Record<'PRESENT' | 'ABSENT' | 'EXCUSED', string> = {
 const DATE_FILTER_TYPES: ReportType[] = [
   'DAILY_ABSENCE',
   'LATE_ARRIVALS',
+  'EARLY_LEAVE',
   'HOMEWORK_LOG',
   'WEEKLY_PLAN',
 ]
@@ -74,6 +78,7 @@ export function ReportsHub({
   reports,
   dailyAbsenceDetail,
   lateArrivalsDetail,
+  earlyLeaveDetail,
   homeworkLogDetail,
   weeklyPlanDetail,
   studentHistoryDetail,
@@ -142,6 +147,7 @@ export function ReportsHub({
       selectedDate ||
       dailyAbsenceDetail?.date ||
       lateArrivalsDetail?.date ||
+      earlyLeaveDetail?.date ||
       homeworkLogDetail?.date ||
       weeklyPlanDetail?.date ||
       ''
@@ -150,6 +156,7 @@ export function ReportsHub({
     selectedDate,
     dailyAbsenceDetail?.date,
     lateArrivalsDetail?.date,
+    earlyLeaveDetail?.date,
     homeworkLogDetail?.date,
     weeklyPlanDetail?.date,
   ])
@@ -454,6 +461,8 @@ export function ReportsHub({
               <DailyAbsenceDetailView detail={dailyAbsenceDetail} />
             ) : currentActive === 'LATE_ARRIVALS' && lateArrivalsDetail ? (
               <LateArrivalsDetailView detail={lateArrivalsDetail} />
+            ) : currentActive === 'EARLY_LEAVE' && earlyLeaveDetail ? (
+              <EarlyLeaveDetailView detail={earlyLeaveDetail} />
             ) : currentActive === 'HOMEWORK_LOG' && homeworkLogDetail ? (
               <HomeworkLogDetailView detail={homeworkLogDetail} classFilter={classFilter} />
             ) : currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail ? (
@@ -633,6 +642,44 @@ function LateArrivalsDetailView({ detail }: { detail: LateArrivalsReportDetail }
           r.className,
           formatTime(r.time),
           r.reason || '—',
+        ])}
+      />
+    </div>
+  )
+}
+
+const EARLY_LEAVE_STATUS_AR: Record<
+  EarlyLeaveReportDetail['rows'][number]['status'],
+  string
+> = {
+  PENDING: 'قيد المراجعة',
+  APPROVED: 'معتمد',
+  REJECTED: 'مرفوض',
+  CANCELLED: 'ملغى',
+}
+
+function EarlyLeaveDetailView({ detail }: { detail: EarlyLeaveReportDetail }) {
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        educationAdminName={detail.educationAdminName}
+        logoUrl={detail.logoUrl}
+        subtitle="تقرير الاستئذان"
+        dateLabel={formatReportDate(detail.date)}
+        generatedAt={detail.generatedAt}
+      />
+      <SimpleTable
+        headers={['الطالب', 'الفصل', 'الوقت', 'الحالة', 'المستلم', 'السبب']}
+        empty="لا توجد طلبات استئذان لهذا اليوم."
+        rows={detail.rows.map((r) => [
+          r.studentName,
+          r.className,
+          formatTime(r.leaveTime),
+          EARLY_LEAVE_STATUS_AR[r.status],
+          `${r.pickupName} (${r.pickupRelation})`,
+          r.reason,
         ])}
       />
     </div>

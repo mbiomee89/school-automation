@@ -6,13 +6,20 @@
 export type ReportType =
   | 'DAILY_ABSENCE'
   | 'LATE_ARRIVALS'
+  | 'EARLY_LEAVE'
   | 'HOMEWORK_LOG'
   | 'WEEKLY_PLAN'
   | 'STUDENT_HISTORY'
   | 'ABSENCE_DAYS'
 
 /** Maps to a lucide-react icon chosen in the component layer. */
-export type ReportIconHint = 'CALENDAR_OFF' | 'CLOCK' | 'BOOK_OPEN' | 'CALENDAR_RANGE' | 'HISTORY'
+export type ReportIconHint =
+  | 'CALENDAR_OFF'
+  | 'CLOCK'
+  | 'BOOK_OPEN'
+  | 'CALENDAR_RANGE'
+  | 'HISTORY'
+  | 'LOG_OUT'
 
 export interface ReportSummary {
   type: ReportType
@@ -63,6 +70,29 @@ export interface LateArrivalsReportDetail extends ReportBrandFields {
     className: string
     time: string
     reason: string | null
+  }>
+  count: number
+}
+
+export interface EarlyLeaveReportDetail extends ReportBrandFields {
+  date: string
+  generatedAt?: string
+  rows: Array<{
+    id: number
+    studentId: string
+    studentName: string
+    className: string
+    leaveTime: string
+    reason: string
+    pickupName: string
+    pickupRelation: string
+    pickupPhone: string
+    status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
+    requestedAt: string
+    reviewedAt: string | null
+    reviewNote: string | null
+    reviewerName: string | null
+    cancelledAt: string | null
   }>
   count: number
 }
@@ -190,6 +220,7 @@ export interface ReportsProps {
   reports: ReportSummary[]
   dailyAbsenceDetail?: DailyAbsenceReportDetail | null
   lateArrivalsDetail?: LateArrivalsReportDetail | null
+  earlyLeaveDetail?: EarlyLeaveReportDetail | null
   homeworkLogDetail?: HomeworkLogReportDetail | null
   weeklyPlanDetail?: WeeklyPlanReportDetail | null
   studentHistoryDetail?: StudentHistoryReportDetail | null

@@ -215,6 +215,55 @@ router.get(
   })
 );
 
+/** GET /reports/early-leave?date=YYYY-MM-DD */
+router.get(
+  '/early-leave',
+  validateQuery(dateQuery),
+  asyncHandler(async (req, res) => {
+    const date = toUtcMidnight(req.query.date);
+    const header = await schoolHeader();
+
+    const rows = await prisma.earlyLeaveRequest.findMany({
+      where: { date },
+      include: {
+        student: { select: { id: true, nameAr: true } },
+        class: { select: { name: true } },
+        reviewer: { select: { name: true } },
+      },
+      orderBy: [{ leaveTime: 'asc' }, { requestedAt: 'asc' }],
+    });
+
+    const dateStr = date.toISOString().slice(0, 10);
+    res.json({
+      date: dateStr,
+      schoolName: header.schoolName,
+      academicYear: header.academicYear,
+      educationAdminName: header.educationAdminName,
+      logoUrl: header.logoUrl,
+      principalName: header.principalName,
+      generatedAt: new Date().toISOString(),
+      rows: rows.map((r) => ({
+        id: r.id,
+        studentId: r.studentId,
+        studentName: r.student.nameAr,
+        className: r.class.name,
+        leaveTime: r.leaveTime.toISOString(),
+        reason: r.reason,
+        pickupName: r.pickupName,
+        pickupRelation: r.pickupRelation,
+        pickupPhone: r.pickupPhone,
+        status: r.status,
+        requestedAt: r.requestedAt.toISOString(),
+        reviewedAt: r.reviewedAt?.toISOString() ?? null,
+        reviewNote: r.reviewNote ?? null,
+        reviewerName: r.reviewer?.name ?? null,
+        cancelledAt: r.cancelledAt?.toISOString() ?? null,
+      })),
+      count: rows.length,
+    });
+  })
+);
+
 /** GET /reports/homework-log?date=YYYY-MM-DD — flat list for that day, ordered by period */
 router.get(
   '/homework-log',
@@ -523,7 +572,7 @@ router.get(
     const dateStr = date.toISOString().slice(0, 10);
     const weekStart = weekStartSaturdayUtc(date);
 
-    const [absenceCount, lateCount, homeworkCount, weeklyPlans] = await Promise.all([
+    const [absenceCount, lateCount, homeworkCount, weeklyPlans, earlyLeaveCount] = await Promise.all([
       prisma.attendance.count({
         where: { date, status: { in: ['ABSENT', 'EXCUSED'] } },
       }),
@@ -543,6 +592,7 @@ router.get(
           teacher: { select: { name: true } },
         },
       }),
+      prisma.earlyLeaveRequest.count({ where: { date } }),
     ]);
 
     const weeklyLessonCount = weeklyPlans.flatMap((p) =>
@@ -573,6 +623,15 @@ router.get(
           iconHint: 'CLOCK',
           context: dateStr,
           count: lateCount,
+          lastGeneratedAt: new Date().toISOString(),
+        },
+        {
+          type: 'EARLY_LEAVE',
+          title: 'الاستئذان',
+          description: 'طلبات الاستئذان (خروج مبكر) ليوم محدد',
+          iconHint: 'LOG_OUT',
+          context: dateStr,
+          count: earlyLeaveCount,
           lastGeneratedAt: new Date().toISOString(),
         },
         {

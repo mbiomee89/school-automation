@@ -30,7 +30,6 @@ export function ParentLoginPage() {
   return (
     <ParentLogin
       mode={mode}
-      initialPhone="0512345678"
       errorCode={errorCode}
       errorMessage={errorMessage}
       isSubmitting={isSubmitting}

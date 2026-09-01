@@ -7,8 +7,9 @@ export type AttendanceDayStatus = 'PRESENT' | 'ABSENT' | 'LATE' | 'EXCUSED'
 export type ExcuseStatus = 'NONE' | 'PENDING_REVIEW' | 'APPROVED' | 'REJECTED'
 export type NotificationEventType = 'ABSENCE' | 'LATE' | 'HOMEWORK_DIGEST' | 'WEEKLY_PLAN'
 export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'
+export type EarlyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
 
-export type ParentTab = 'home' | 'attendance' | 'homework' | 'notifications' | 'settings'
+export type ParentTab = 'home' | 'attendance' | 'homework' | 'early-leave' | 'notifications' | 'settings'
 
 export interface Child {
   id: string
@@ -47,6 +48,27 @@ export interface HomeworkItem {
   dueDate: string | null
   period?: string | null
   noHomework?: boolean
+  teacherName?: string | null
+  className?: string | null
+}
+
+export interface ReportBrand {
+  schoolName: string
+  academicYear: string
+  educationAdminName?: string | null
+  logoUrl?: string | null
+  principalName?: string | null
+}
+
+export interface WeeklyPlanFormalRow {
+  planId: number
+  dayKey: string
+  dayLabel: string
+  subjectName: string
+  lessonTopic: string
+  notes: string | null
+  period?: string | null
+  teacherName?: string
 }
 
 /** Saudi school weekdays (Sun–Thu). Weekend Fri/Sat are not planned. */
@@ -102,16 +124,54 @@ export interface ExcuseSubmissionInput {
   file: File
 }
 
+export interface EarlyLeaveRequest {
+  id: number
+  studentId: string
+  classId: number
+  className: string | null
+  date: string
+  /** ISO datetime of planned exit. */
+  leaveTime: string
+  reason: string
+  pickupName: string
+  pickupRelation: string
+  pickupPhone: string
+  status: EarlyLeaveStatus
+  requestedAt: string
+  reviewedAt: string | null
+  reviewNote: string | null
+  cancelledAt: string | null
+}
+
+export interface EarlyLeaveSubmitInput {
+  date: string
+  /** HH:mm */
+  leaveTime: string
+  reason: string
+  pickupName: string
+  pickupRelation: string
+  pickupPhone: string
+}
+
 export interface ParentPortalProps {
   children: Child[]
   activeChildId: string
   todaySummary: TodaySummary
   attendanceHistory: AttendanceDay[]
   homeworkItems: HomeworkItem[]
+  /** Today’s homework for the home tab (independent of homeworkBrowseDate). */
+  homeHomeworkItems?: HomeworkItem[]
   weeklyPlans: WeeklyPlanItem[]
+  /** Formal weekly-plan rows for the selected week (report shape). */
+  weeklyPlanRows?: WeeklyPlanFormalRow[]
+  weeklyPlanWeekStart?: string | null
+  weeklyPlanWeekEnd?: string | null
+  reportBrand?: ReportBrand
+  reportClassName?: string
   /** WhatsApp notification log — hidden in UI for now (manual messaging). */
   notifications?: NotificationItem[]
   excuseSubmissions: ExcuseSubmission[]
+  earlyLeaveRequests?: EarlyLeaveRequest[]
   /** WhatsApp opt-in — hidden in UI for now. */
   waOptedIn?: boolean
   /** Active bottom-nav tab for controlled preview */
@@ -123,8 +183,12 @@ export interface ParentPortalProps {
   onSelectChild?: (childId: string) => void
   /** Open a single attendance day's detail (e.g. to start an excuse upload) */
   onSelectAttendanceDay?: (attendanceDayId: number) => void
-  /** Submit an absence excuse — file comes from either "Take Photo" (camera capture) or "Choose File" */
-  onSubmitExcuse?: (input: ExcuseSubmissionInput) => void
+  /** Submit an absence excuse — may return a Promise; rejection shows a toast. */
+  onSubmitExcuse?: (input: ExcuseSubmissionInput) => void | Promise<void>
+  /** Submit an early-leave (استئذان) request. */
+  onSubmitEarlyLeave?: (input: EarlyLeaveSubmitInput) => void | Promise<void>
+  /** Cancel a pending or approved early-leave request. */
+  onCancelEarlyLeave?: (requestId: number) => void | Promise<void>
   /** Toggle WhatsApp notifications — unused while messaging is manual. */
   onToggleWaOptIn?: (optedIn: boolean) => void
   /** Log out of the parent portal */
@@ -132,6 +196,9 @@ export interface ParentPortalProps {
   /** Date used to browse homework (YYYY-MM-DD). Defaults to today on the page. */
   homeworkBrowseDate?: string
   onHomeworkBrowseDateChange?: (date: string) => void
+  /** Anchor date for weekly plan week (YYYY-MM-DD). */
+  weeklyPlanAnchorDate?: string
+  onWeeklyPlanAnchorDateChange?: (date: string) => void
 }
 
 export type ParentLoginMode = 'login' | 'register'

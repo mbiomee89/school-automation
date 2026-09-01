@@ -3,6 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import {
   getAbsenceDaysReport,
   getDailyAbsenceReport,
+  getEarlyLeaveReport,
   getHomeworkLogReport,
   getLateArrivalsReport,
   getReportsSummary,
@@ -16,6 +17,7 @@ import { ReportsHub } from '../../sections/reports/ReportsHub'
 import type {
   AbsenceDaysReportDetail,
   DailyAbsenceReportDetail,
+  EarlyLeaveReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
   ReportSummary,
@@ -32,11 +34,13 @@ function detailMatchesDate(
   date: string,
   daily: DailyAbsenceReportDetail | null,
   late: LateArrivalsReportDetail | null,
+  earlyLeave: EarlyLeaveReportDetail | null,
   homework: HomeworkLogReportDetail | null,
   weekly: WeeklyPlanReportDetail | null
 ): boolean {
   if (type === 'DAILY_ABSENCE') return daily?.date === date
   if (type === 'LATE_ARRIVALS') return late?.date === date
+  if (type === 'EARLY_LEAVE') return earlyLeave?.date === date
   if (type === 'HOMEWORK_LOG') return homework?.date === date
   if (type === 'WEEKLY_PLAN') return weekly?.date === date
   if (type === 'ABSENCE_DAYS') return true
@@ -52,6 +56,7 @@ export function ReportsPage() {
   const [lateArrivalsDetail, setLateArrivalsDetail] = useState<LateArrivalsReportDetail | null>(
     null
   )
+  const [earlyLeaveDetail, setEarlyLeaveDetail] = useState<EarlyLeaveReportDetail | null>(null)
   const [homeworkLogDetail, setHomeworkLogDetail] = useState<HomeworkLogReportDetail | null>(null)
   const [weeklyPlanDetail, setWeeklyPlanDetail] = useState<WeeklyPlanReportDetail | null>(null)
   const [studentHistoryDetail, setStudentHistoryDetail] =
@@ -95,6 +100,7 @@ export function ReportsPage() {
     // Date change invalidates cached detail payloads.
     setDailyAbsenceDetail(null)
     setLateArrivalsDetail(null)
+    setEarlyLeaveDetail(null)
     setHomeworkLogDetail(null)
     setWeeklyPlanDetail(null)
   }, [])
@@ -113,6 +119,10 @@ export function ReportsPage() {
         const detail = await getLateArrivalsReport(forDate)
         if (gen !== detailGen.current) return
         setLateArrivalsDetail(detail)
+      } else if (type === 'EARLY_LEAVE') {
+        const detail = await getEarlyLeaveReport(forDate)
+        if (gen !== detailGen.current) return
+        setEarlyLeaveDetail(detail)
       } else if (type === 'HOMEWORK_LOG') {
         const detail = await getHomeworkLogReport(forDate)
         if (gen !== detailGen.current) return
@@ -172,6 +182,7 @@ export function ReportsPage() {
         date,
         dailyAbsenceDetail,
         lateArrivalsDetail,
+        earlyLeaveDetail,
         homeworkLogDetail,
         weeklyPlanDetail
       )
@@ -184,6 +195,7 @@ export function ReportsPage() {
     date,
     dailyAbsenceDetail,
     lateArrivalsDetail,
+    earlyLeaveDetail,
     homeworkLogDetail,
     weeklyPlanDetail,
     absenceDaysDetail,
@@ -303,6 +315,7 @@ export function ReportsPage() {
       reports={reports}
       dailyAbsenceDetail={dailyAbsenceDetail}
       lateArrivalsDetail={lateArrivalsDetail}
+      earlyLeaveDetail={earlyLeaveDetail}
       homeworkLogDetail={homeworkLogDetail}
       weeklyPlanDetail={weeklyPlanDetail}
       studentHistoryDetail={studentHistoryDetail}

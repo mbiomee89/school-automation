@@ -2,6 +2,8 @@ import { apiRequest } from './client'
 import type {
   AttendanceDay,
   Child,
+  EarlyLeaveRequest,
+  EarlyLeaveSubmitInput,
   ExcuseSubmission,
   HomeworkItem,
   NotificationItem,
@@ -85,19 +87,44 @@ export async function getParentHomework(
     if (opts?.to) qs.set('to', opts.to)
   }
   const q = qs.toString()
-  const data = await apiRequest<{ homework: HomeworkItem[] }>(
-    `/parent/students/${studentId}/homework${q ? `?${q}` : ''}`,
-    { auth: 'parent' }
-  )
-  return data.homework
+  const data = await apiRequest<{
+    homework: HomeworkItem[]
+    schoolName?: string
+    academicYear?: string
+    educationAdminName?: string | null
+    logoUrl?: string | null
+    principalName?: string | null
+    className?: string
+  }>(`/parent/students/${studentId}/homework${q ? `?${q}` : ''}`, { auth: 'parent' })
+  return data
 }
 
-export async function getParentWeeklyPlans(studentId: string) {
-  const data = await apiRequest<{ weeklyPlans: WeeklyPlanItem[] }>(
-    `/parent/students/${studentId}/weekly-plans`,
-    { auth: 'parent' }
-  )
-  return data.weeklyPlans
+export async function getParentWeeklyPlans(studentId: string, opts?: { date?: string }) {
+  const qs = new URLSearchParams()
+  if (opts?.date) qs.set('date', opts.date)
+  const q = qs.toString()
+  const data = await apiRequest<{
+    weeklyPlans: WeeklyPlanItem[]
+    rows?: Array<{
+      planId: number
+      dayKey: string
+      dayLabel: string
+      subjectName: string
+      lessonTopic: string
+      notes: string | null
+      period?: string | null
+      teacherName?: string
+    }>
+    weekStart?: string | null
+    weekEnd?: string | null
+    schoolName?: string
+    academicYear?: string
+    educationAdminName?: string | null
+    logoUrl?: string | null
+    principalName?: string | null
+    className?: string
+  }>(`/parent/students/${studentId}/weekly-plans${q ? `?${q}` : ''}`, { auth: 'parent' })
+  return data
 }
 
 export async function getParentNotifications(studentId: string) {
@@ -134,4 +161,39 @@ export async function setParentWaOptIn(waOptedIn: boolean, studentId?: string) {
     body: { waOptedIn, ...(studentId ? { studentId } : {}) },
   })
   return data.students
+}
+
+export async function getParentEarlyLeave(studentId: string) {
+  const data = await apiRequest<{ earlyLeaveRequests: EarlyLeaveRequest[] }>(
+    `/parent/students/${studentId}/early-leave`,
+    { auth: 'parent' }
+  )
+  return data.earlyLeaveRequests
+}
+
+export async function createParentEarlyLeave(studentId: string, input: EarlyLeaveSubmitInput) {
+  const data = await apiRequest<{ earlyLeaveRequest: EarlyLeaveRequest }>(
+    `/parent/students/${studentId}/early-leave`,
+    {
+      method: 'POST',
+      auth: 'parent',
+      body: {
+        date: input.date,
+        leaveTime: input.leaveTime,
+        reason: input.reason,
+        pickupName: input.pickupName,
+        pickupRelation: input.pickupRelation,
+        pickupPhone: input.pickupPhone,
+      },
+    }
+  )
+  return data.earlyLeaveRequest
+}
+
+export async function cancelParentEarlyLeave(requestId: number) {
+  const data = await apiRequest<{ earlyLeaveRequest: EarlyLeaveRequest }>(
+    `/parent/early-leave/${requestId}/cancel`,
+    { method: 'POST', auth: 'parent' }
+  )
+  return data.earlyLeaveRequest
 }

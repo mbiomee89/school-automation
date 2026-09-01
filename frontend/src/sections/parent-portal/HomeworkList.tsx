@@ -6,7 +6,6 @@ import { formatShortDate } from './statusMeta'
 
 export interface HomeworkListProps {
   items: HomeworkItem[]
-  /** Compact mode drops the date group headers — used in the Home tab preview. */
   compact?: boolean
   emptyTitle?: string
   emptyDescription?: string
@@ -16,38 +15,37 @@ export function HomeworkList({
   items,
   compact,
   emptyTitle = 'لا توجد واجبات لهذا اليوم',
-  emptyDescription = 'جرّب تاريخاً آخر، أو انتظر حتى يُسجّل المعلمون الواجبات.',
+  emptyDescription = 'جرّب يوماً آخر، أو انتظر حتى يُسجّل المعلمون الواجبات.',
 }: HomeworkListProps) {
   if (items.length === 0) {
-    return (
-      <EmptyState
-        icon={BookOpenCheck}
-        title={emptyTitle}
-        description={emptyDescription}
-      />
-    )
+    return <EmptyState icon={BookOpenCheck} title={emptyTitle} description={emptyDescription} />
   }
 
+  const sorted = [...items].sort((a, b) => Number(a.period ?? 99) - Number(b.period ?? 99))
+
   return (
-    <ul className="space-y-3">
-      {items.map((item) => (
+    <ul className="space-y-2.5">
+      {sorted.map((item, i) => (
         <li
           key={item.id}
-          className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"
+          className={cn(
+            'rounded-2xl bg-white px-4 py-3.5 shadow-sm ring-1 ring-[color:var(--pp-ink)]/8 animate-in fade-in-0 slide-in-from-bottom-1 duration-300 motion-reduce:animate-none',
+            item.noHomework && 'bg-[color:var(--pp-sand)] shadow-none'
+          )}
+          style={{ animationDelay: `${Math.min(i, 8) * 40}ms` }}
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <p className="text-sm font-bold text-slate-900 dark:text-slate-50">{item.subjectNameAr}</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{item.subjectNameEn}</p>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-[color:var(--pp-ink)]">{item.subjectNameAr}</p>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
               {item.period ? (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-700/60 dark:text-slate-400">
-                  الحصة {item.period}
+                <span className="shrink-0 whitespace-nowrap rounded-lg bg-[color:var(--pp-sky)] px-2 py-0.5 text-xs font-semibold text-[color:var(--pp-primary)]">
+                  ح{item.period}
                 </span>
               ) : null}
               {!compact && (
-                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500 dark:bg-slate-700/60 dark:text-slate-400">
+                <span className="shrink-0 whitespace-nowrap text-xs text-[color:var(--pp-ink)]/45">
                   {formatShortDate(item.date)}
                 </span>
               )}
@@ -55,9 +53,9 @@ export function HomeworkList({
           </div>
           <p
             className={cn(
-              'mt-2 text-sm text-slate-700 dark:text-slate-300',
+              'mt-1.5 text-sm leading-relaxed text-[color:var(--pp-ink)]/75',
               compact && 'line-clamp-2',
-              item.noHomework && 'font-medium text-slate-500 dark:text-slate-400'
+              item.noHomework && 'font-medium text-[color:var(--pp-ink)]/50'
             )}
           >
             {item.description}

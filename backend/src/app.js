@@ -19,6 +19,7 @@ import lateReportsRoutes from './routes/lateReports.js';
 import homeworkRoutes from './routes/homework.js';
 import weeklyPlansRoutes from './routes/weeklyPlans.js';
 import absenceReasonsRoutes from './routes/absenceReasons.js';
+import earlyLeaveRoutes from './routes/earlyLeave.js';
 import reportsRoutes from './routes/reports.js';
 import parentRoutes from './routes/parent.js';
 import studentProfileRoutes from './routes/studentProfile.js';
@@ -51,6 +52,7 @@ function mountApiRoutes(app, prefix = '') {
   app.use(`${prefix}/homework`, homeworkRoutes);
   app.use(`${prefix}/weekly-plans`, weeklyPlansRoutes);
   app.use(`${prefix}/absence-reasons`, absenceReasonsRoutes);
+  app.use(`${prefix}/early-leave`, earlyLeaveRoutes);
   app.use(`${prefix}/reports`, reportsRoutes);
   app.use(`${prefix}/parent`, parentRoutes);
   app.use(`${prefix}/student-profile`, studentProfileRoutes);

@@ -128,6 +128,7 @@ router.delete(
             homework: true,
             lateReports: true,
             weeklyPlans: true,
+            earlyLeaveRequests: true,
             enrollments: true,
             assignments: true,
           },
@@ -142,6 +143,9 @@ router.delete(
     if (counts._count.attendance > 0) blockers.push(`${counts._count.attendance} سجل حضور`);
     if (counts._count.homework > 0) blockers.push(`${counts._count.homework} واجب`);
     if (counts._count.lateReports > 0) blockers.push(`${counts._count.lateReports} تأخر`);
+    if (counts._count.earlyLeaveRequests > 0) {
+      blockers.push(`${counts._count.earlyLeaveRequests} استئذان`);
+    }
     if (counts._count.weeklyPlans > 0) blockers.push(`${counts._count.weeklyPlans} خطة أسبوعية`);
     if (counts._count.assignments > 0) {
       blockers.push(`${counts._count.assignments} توزيع معلم`);

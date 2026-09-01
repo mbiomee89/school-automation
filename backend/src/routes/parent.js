@@ -12,11 +12,118 @@ import {
 } from '../services/excuseAttachment.js';
 import fs from 'fs';
 import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
-import { toUtcMidnight, schoolTodayUtcMidnight } from '../utils/dates.js';
+import {
+  toUtcMidnight,
+  schoolTodayUtcMidnight,
+  addDaysToDateOnlyStr,
+  weekdayUtcFromDateOnly,
+  weekStartSaturdayUtc,
+} from '../utils/dates.js';
+import { normalizePhone } from '../utils/phone.js';
+import { schoolLogoUrl } from '../services/schoolLogo.js';
 
 const router = Router();
 
 router.use(requireParent);
+
+const SINGLETON_ID = 1;
+
+async function schoolHeader() {
+  const settings = await prisma.schoolSettings.findUnique({
+    where: { id: SINGLETON_ID },
+    select: {
+      name: true,
+      academicYear: true,
+      principalName: true,
+      educationAdminName: true,
+      logoPath: true,
+      logoMime: true,
+      updatedAt: true,
+    },
+  });
+  return {
+    schoolName: settings?.name ?? 'المدرسة',
+    academicYear: settings?.academicYear ?? '',
+    principalName: settings?.principalName ?? null,
+    educationAdminName: settings?.educationAdminName ?? null,
+    logoUrl: schoolLogoUrl(settings),
+  };
+}
+
+const WEEKDAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+const WEEKDAY_LABELS = {
+  sunday: 'الأحد',
+  monday: 'الاثنين',
+  tuesday: 'الثلاثاء',
+  wednesday: 'الأربعاء',
+  thursday: 'الخميس',
+};
+
+function parseWeeklyDays(topics) {
+  try {
+    const parsed = JSON.parse(topics);
+    if (parsed && typeof parsed === 'object' && 'sunday' in parsed) return parsed;
+  } catch {
+    /* legacy */
+  }
+  return {
+    sunday: { topics: String(topics || ''), objectives: null, notes: null },
+    monday: null,
+    tuesday: null,
+    wednesday: null,
+    thursday: null,
+  };
+}
+
+function expandWeeklyLessonRows(plan) {
+  if (plan.date && plan.period && (plan.title || '').trim()) {
+    const dateStr = toUtcMidnight(plan.date).toISOString().slice(0, 10);
+    const dayIdx = new Date(`${dateStr}T00:00:00.000Z`).getUTCDay();
+    const keyByIdx = { 0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday' };
+    const dayKey = keyByIdx[dayIdx];
+    if (!dayKey) return [];
+    return [
+      {
+        planId: plan.id,
+        classId: plan.classId,
+        className: plan.class.name,
+        dayKey,
+        dayLabel: WEEKDAY_LABELS[dayKey],
+        period: plan.period,
+        subjectName: plan.subject.nameAr,
+        teacherName: plan.teacher.name,
+        lessonTopic: plan.title.trim(),
+        notes: null,
+      },
+    ];
+  }
+  const days = parseWeeklyDays(plan.topics);
+  const rows = [];
+  for (const key of WEEKDAY_KEYS) {
+    const lesson = days[key];
+    if (!lesson || typeof lesson !== 'object') continue;
+    const lessonTopic = typeof lesson.topics === 'string' ? lesson.topics.trim() : '';
+    if (!lessonTopic) continue;
+    const notesBits = [];
+    if (typeof lesson.notes === 'string' && lesson.notes.trim()) notesBits.push(lesson.notes.trim());
+    if (typeof lesson.objectives === 'string' && lesson.objectives.trim()) {
+      notesBits.push(lesson.objectives.trim());
+    }
+    rows.push({
+      planId: plan.id,
+      classId: plan.classId,
+      className: plan.class.name,
+      dayKey: key,
+      dayLabel: WEEKDAY_LABELS[key],
+      period: null,
+      subjectName: plan.subject.nameAr,
+      teacherName: plan.teacher.name,
+      lessonTopic,
+      notes: notesBits.length ? notesBits.join(' — ') : null,
+    });
+  }
+  return rows;
+}
 
 const WEEKDAYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
 
@@ -152,8 +259,15 @@ router.get(
   validateQuery(historyQuery),
   asyncHandler(async (req, res) => {
     const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const header = await schoolHeader();
+    const className = student.class?.name ?? 'بدون فصل';
     if (student.classId == null) {
-      return res.json({ homework: [] });
+      return res.json({
+        ...header,
+        className,
+        classId: null,
+        homework: [],
+      });
     }
 
     const where = { classId: student.classId };
@@ -165,17 +279,27 @@ router.get(
 
     const rows = await prisma.homework.findMany({
       where,
-      include: { subject: true },
-      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        subject: true,
+        teacher: { select: { name: true } },
+        class: { select: { name: true } },
+      },
+      orderBy: [{ date: 'asc' }, { period: 'asc' }, { subjectId: 'asc' }],
       take: req.query.limit ?? 60,
     });
 
     res.json({
+      ...header,
+      className: student.class.name,
+      classId: student.classId,
       homework: rows.map((h) => ({
         id: h.id,
         date: toUtcMidnight(h.date).toISOString().slice(0, 10),
         subjectNameAr: h.subject.nameAr,
         subjectNameEn: h.subject.nameEn,
+        subjectName: h.subject.nameAr,
+        teacherName: h.teacher.name,
+        className: h.class.name,
         period: h.period || null,
         noHomework: Boolean(h.noHomework),
         description: h.noHomework ? 'لا يوجد واجب' : h.description,
@@ -185,52 +309,78 @@ router.get(
   })
 );
 
-/** GET /parent/students/:id/weekly-plans */
+const weeklyPlanQuery = z.object({
+  date: z.string().optional(),
+});
+
+/** GET /parent/students/:id/weekly-plans?date=YYYY-MM-DD — formal week sheet for child's class */
 router.get(
   '/students/:id/weekly-plans',
   validateParams(studentIdParam),
+  validateQuery(weeklyPlanQuery),
   asyncHandler(async (req, res) => {
     const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const header = await schoolHeader();
+    const className = student.class?.name ?? 'بدون فصل';
+
     if (student.classId == null) {
-      return res.json({ weeklyPlans: [] });
+      return res.json({
+        ...header,
+        className,
+        classId: null,
+        weekStart: null,
+        weekEnd: null,
+        rows: [],
+        weeklyPlans: [],
+      });
     }
 
-    const rows = await prisma.weeklyPlan.findMany({
-      where: { classId: student.classId },
-      include: { subject: true },
-      orderBy: [{ date: 'desc' }, { weekStart: 'desc' }, { period: 'asc' }],
-      take: 40,
+    const anchor = req.query.date
+      ? toUtcMidnight(req.query.date)
+      : schoolTodayUtcMidnight();
+    const weekStart = weekStartSaturdayUtc(anchor);
+    const weekEnd = new Date(
+      Date.UTC(weekStart.getUTCFullYear(), weekStart.getUTCMonth(), weekStart.getUTCDate() + 5)
+    );
+
+    const plans = await prisma.weeklyPlan.findMany({
+      where: { classId: student.classId, weekStart },
+      include: {
+        class: { select: { id: true, name: true } },
+        subject: { select: { nameAr: true, nameEn: true } },
+        teacher: { select: { name: true } },
+      },
+      orderBy: [{ subjectId: 'asc' }],
     });
 
-    const DAY_LABELS = {
-      0: 'الأحد',
-      1: 'الاثنين',
-      2: 'الثلاثاء',
-      3: 'الأربعاء',
-      4: 'الخميس',
-    };
+    const rows = plans.flatMap(expandWeeklyLessonRows);
+    const dayOrder = Object.fromEntries(WEEKDAY_KEYS.map((k, i) => [k, i]));
+    rows.sort((a, b) => {
+      const dayDiff = (dayOrder[a.dayKey] ?? 99) - (dayOrder[b.dayKey] ?? 99);
+      if (dayDiff !== 0) return dayDiff;
+      const periodDiff = Number(a.period || 0) - Number(b.period || 0);
+      if (periodDiff !== 0) return periodDiff;
+      return a.subjectName.localeCompare(b.subjectName, 'ar');
+    });
 
-    const weeklyPlans = [];
-    for (const p of rows) {
+    // Legacy card shape for older clients
+    const weeklyPlans = plans.map((p) => {
       if (p.date && p.period && (p.title || '').trim()) {
         const dateStr = toUtcMidnight(p.date).toISOString().slice(0, 10);
         const dayIdx = new Date(`${dateStr}T00:00:00.000Z`).getUTCDay();
-        weeklyPlans.push({
+        return {
           id: p.id,
           weekStart: toUtcMidnight(p.weekStart).toISOString().slice(0, 10),
           date: dateStr,
           period: p.period,
-          dayLabel: DAY_LABELS[dayIdx] || '',
+          dayLabel: WEEKDAY_LABELS[WEEKDAY_KEYS[dayIdx]] || '',
           title: p.title.trim(),
           subjectNameAr: p.subject.nameAr,
           subjectNameEn: p.subject.nameEn,
           days: null,
-        });
-        continue;
+        };
       }
-
-      // Legacy week JSON → keep days shape for older parent UI
-      weeklyPlans.push({
+      return {
         id: p.id,
         weekStart: toUtcMidnight(p.weekStart).toISOString().slice(0, 10),
         date: null,
@@ -240,10 +390,19 @@ router.get(
         subjectNameAr: p.subject.nameAr,
         subjectNameEn: p.subject.nameEn,
         days: parseDays(p.topics),
-      });
-    }
+      };
+    });
 
-    res.json({ weeklyPlans });
+    res.json({
+      ...header,
+      className: student.class.name,
+      classId: student.classId,
+      date: anchor.toISOString().slice(0, 10),
+      weekStart: weekStart.toISOString().slice(0, 10),
+      weekEnd: weekEnd.toISOString().slice(0, 10),
+      rows,
+      weeklyPlans,
+    });
   })
 );
 
@@ -498,6 +657,199 @@ router.patch(
     });
 
     res.json({ students: students.map(mapChild) });
+  })
+);
+
+const SCHOOL_DAYS = new Set([0, 1, 2, 3, 4]); // Sun–Thu
+const EARLY_LEAVE_MAX_DAYS_AHEAD = 7;
+
+const earlyLeaveCreateSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  leaveTime: z.string().min(1),
+  reason: z.string().min(1),
+  pickupName: z.string().min(1),
+  pickupRelation: z.string().min(1),
+  pickupPhone: z.string().min(1),
+});
+
+const earlyLeaveCancelParams = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
+function serializeEarlyLeave(row) {
+  return {
+    id: row.id,
+    studentId: row.studentId,
+    classId: row.classId,
+    className: row.class?.name ?? null,
+    date: toUtcMidnight(row.date).toISOString().slice(0, 10),
+    leaveTime: row.leaveTime.toISOString(),
+    reason: row.reason,
+    pickupName: row.pickupName,
+    pickupRelation: row.pickupRelation,
+    pickupPhone: row.pickupPhone,
+    status: row.status,
+    requestedAt: row.requestedAt.toISOString(),
+    reviewedAt: row.reviewedAt?.toISOString() ?? null,
+    reviewNote: row.reviewNote ?? null,
+    cancelledAt: row.cancelledAt?.toISOString() ?? null,
+  };
+}
+
+/** Combine YYYY-MM-DD + HH:mm (or ISO) into a DateTime. HH:mm uses calendar-day UTC components. */
+function parseLeaveDateTime(dateStr, leaveTimeRaw) {
+  const raw = String(leaveTimeRaw).trim();
+  const hm = /^(\d{1,2}):(\d{2})$/.exec(raw);
+  if (hm) {
+    const hour = Number(hm[1]);
+    const minute = Number(hm[2]);
+    if (hour > 23 || minute > 59) throw badRequest('وقت غير صالح');
+    const [y, m, d] = dateStr.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1, d, hour, minute, 0));
+  }
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) throw badRequest('وقت غير صالح');
+  return dt;
+}
+
+function assertValidEarlyLeaveDate(dateStr) {
+  const today = schoolTodayUtcMidnight();
+  const todayStr = today.toISOString().slice(0, 10);
+  const date = toUtcMidnight(dateStr);
+  const dateOnly = date.toISOString().slice(0, 10);
+
+  if (dateOnly < todayStr) {
+    throw badRequest('لا يمكن طلب استئذان لتاريخ ماضٍ');
+  }
+
+  const maxStr = addDaysToDateOnlyStr(todayStr, EARLY_LEAVE_MAX_DAYS_AHEAD);
+  if (dateOnly > maxStr) {
+    throw badRequest('يمكن طلب الاستئذان خلال 7 أيام فقط');
+  }
+
+  const dow = weekdayUtcFromDateOnly(dateOnly);
+  if (!SCHOOL_DAYS.has(dow)) {
+    throw badRequest('الاستئذان متاح لأيام الدوام فقط (الأحد–الخميس)');
+  }
+
+  return date;
+}
+
+/** GET /parent/students/:id/early-leave */
+router.get(
+  '/students/:id/early-leave',
+  validateParams(studentIdParam),
+  asyncHandler(async (req, res) => {
+    const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const rows = await prisma.earlyLeaveRequest.findMany({
+      where: { studentId: student.id },
+      include: { class: { select: { id: true, name: true } } },
+      orderBy: [{ date: 'desc' }, { requestedAt: 'desc' }],
+      take: 60,
+    });
+    res.json({ earlyLeaveRequests: rows.map(serializeEarlyLeave) });
+  })
+);
+
+/** POST /parent/students/:id/early-leave */
+router.post(
+  '/students/:id/early-leave',
+  validateParams(studentIdParam),
+  validateBody(earlyLeaveCreateSchema),
+  asyncHandler(async (req, res) => {
+    const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    if (student.classId == null) {
+      throw badRequest('الطالب غير مسجّل في فصل حالياً');
+    }
+
+    const date = assertValidEarlyLeaveDate(req.body.date);
+    const dateStr = date.toISOString().slice(0, 10);
+    const leaveTime = parseLeaveDateTime(dateStr, req.body.leaveTime);
+
+    const reason = req.body.reason.trim();
+    const pickupName = req.body.pickupName.trim();
+    const pickupRelation = req.body.pickupRelation.trim();
+    if (!reason) throw badRequest('سبب الاستئذان مطلوب');
+    if (!pickupName) throw badRequest('اسم المستلم مطلوب');
+    if (!pickupRelation) throw badRequest('صلة القرابة مطلوبة');
+
+    let pickupPhone;
+    try {
+      pickupPhone = normalizePhone(req.body.pickupPhone);
+    } catch {
+      throw badRequest('رقم جوال المستلم غير صالح');
+    }
+
+    const active = await prisma.earlyLeaveRequest.findFirst({
+      where: {
+        studentId: student.id,
+        date,
+        status: { in: ['PENDING', 'APPROVED'] },
+      },
+    });
+    if (active) {
+      throw conflict('يوجد طلب استئذان معلّق أو معتمد لهذا اليوم');
+    }
+
+    const row = await prisma.earlyLeaveRequest.create({
+      data: {
+        studentId: student.id,
+        classId: student.classId,
+        date,
+        leaveTime,
+        reason,
+        pickupName,
+        pickupRelation,
+        pickupPhone,
+      },
+      include: { class: { select: { id: true, name: true } } },
+    });
+
+    res.status(201).json({ earlyLeaveRequest: serializeEarlyLeave(row) });
+  })
+);
+
+/** POST /parent/early-leave/:id/cancel */
+router.post(
+  '/early-leave/:id/cancel',
+  validateParams(earlyLeaveCancelParams),
+  asyncHandler(async (req, res) => {
+    const existing = await prisma.earlyLeaveRequest.findUnique({
+      where: { id: req.params.id },
+      include: {
+        student: true,
+        class: { select: { id: true, name: true } },
+      },
+    });
+    if (!existing) throw notFound('طلب الاستئذان غير موجود');
+    if (existing.student.parentPhone !== req.parentPhone || !existing.student.isActive) {
+      throw forbidden('غير مصرح');
+    }
+    if (existing.status !== 'PENDING' && existing.status !== 'APPROVED') {
+      throw conflict('لا يمكن إلغاء هذا الطلب');
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      const result = await tx.earlyLeaveRequest.updateMany({
+        where: {
+          id: existing.id,
+          status: { in: ['PENDING', 'APPROVED'] },
+        },
+        data: {
+          status: 'CANCELLED',
+          cancelledAt: new Date(),
+        },
+      });
+      if (result.count === 0) {
+        throw conflict('لا يمكن إلغاء هذا الطلب');
+      }
+      return tx.earlyLeaveRequest.findUnique({
+        where: { id: existing.id },
+        include: { class: { select: { id: true, name: true } } },
+      });
+    });
+
+    res.json({ earlyLeaveRequest: serializeEarlyLeave(updated) });
   })
 );
 

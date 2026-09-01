@@ -61,10 +61,18 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
  * Parents never use this list — they use Parent Portal bottom tabs only.
  */
 export const STAFF_NAV_BY_ROLE: Record<StaffAppRole, string[]> = {
-  ADMIN: ['الإدارة المدرسية', 'ملفات المعلمين', 'تقارير الدرجات', 'التقارير', 'شؤون الطلاب', 'التأخير'],
+  ADMIN: [
+    'الإدارة المدرسية',
+    'ملفات المعلمين',
+    'تقارير الدرجات',
+    'التقارير',
+    'شؤون الطلاب',
+    'التأخير',
+    'طلبات الاستئذان',
+  ],
   TEACHER: ['الحضور', 'الواجبات', 'الخطة الأسبوعية', 'سجل المتابعة', 'مستندات التوظيف'],
-  COUNSELOR: ['مراجعة الأعذار', 'التقارير'],
-  STUDENT_AFFAIRS: ['شؤون الطلاب', 'التأخير', 'التقارير'],
+  COUNSELOR: ['مراجعة الأعذار', 'التقارير', 'طلبات الاستئذان'],
+  STUDENT_AFFAIRS: ['شؤون الطلاب', 'التأخير', 'التقارير', 'طلبات الاستئذان'],
   SECURITY_GUARD: ['التأخير'],
 }
 
@@ -85,6 +93,7 @@ export const SECTION_ALLOWED_ROLES: Record<string, AppRole[]> = {
   gradebook: ['TEACHER', 'ADMIN'],
   'gradebook-reports': ['ADMIN'],
   'late-reports': ['ADMIN', 'STUDENT_AFFAIRS', 'SECURITY_GUARD'],
+  'early-leave': ['ADMIN', 'STUDENT_AFFAIRS', 'COUNSELOR'],
   'counselor-review': ['COUNSELOR'],
   'student-affairs': ['ADMIN', 'STUDENT_AFFAIRS'],
   reports: ['ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'],

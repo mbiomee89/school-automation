@@ -7,6 +7,7 @@ import type {
 import type {
   AbsenceDaysReportDetail,
   DailyAbsenceReportDetail,
+  EarlyLeaveReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
   ReportSummary,
@@ -55,6 +56,10 @@ export async function getDailyAbsenceReport(date: string): Promise<DailyAbsenceR
 
 export async function getLateArrivalsReport(date: string): Promise<LateArrivalsReportDetail> {
   return apiRequest(`/reports/late-arrivals?date=${encodeURIComponent(date)}`)
+}
+
+export async function getEarlyLeaveReport(date: string): Promise<EarlyLeaveReportDetail> {
+  return apiRequest(`/reports/early-leave?date=${encodeURIComponent(date)}`)
 }
 
 export async function getHomeworkLogReport(date: string): Promise<HomeworkLogReportDetail> {
