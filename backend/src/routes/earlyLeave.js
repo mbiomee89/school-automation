@@ -109,6 +109,7 @@ router.patch(
           reviewedBy: req.user.id,
           reviewedAt: now,
           reviewNote: note,
+          ...(decision === 'REJECTED' ? { activeSlotKey: null } : {}),
         },
       });
       if (result.count === 0) {

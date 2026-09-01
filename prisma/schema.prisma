@@ -373,6 +373,9 @@ model EarlyLeaveRequest {
   reviewedAt     DateTime?
   reviewNote     String?
   cancelledAt    DateTime?
+  /// Set while PENDING/APPROVED to `${studentId}|YYYY-MM-DD` so only one active request per student/day.
+  /// Cleared on REJECTED/CANCELLED so a new request can be filed.
+  activeSlotKey  String?          @unique
 
   @@index([studentId, date])
   @@index([status, date])

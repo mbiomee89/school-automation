@@ -84,6 +84,7 @@ export function ParentPortalPage() {
   }, [students, activeChildId])
 
   const loadGen = useRef(0)
+  const lastPlanAnchorLoaded = useRef<string | null>(null)
 
   const loadChild = useCallback(async (studentId: string, browseDate: string, planAnchor: string) => {
     const gen = ++loadGen.current
@@ -129,8 +130,28 @@ export function ParentPortalPage() {
     setExcuseSubmissions(excuses)
     setEarlyLeaveRequests(earlyLeave)
     setLoadedChildId(studentId)
+    lastPlanAnchorLoaded.current = planAnchor
   }, [])
 
+  const loadWeeklyPlanOnly = useCallback(async (studentId: string, planAnchor: string) => {
+    const plansRes = await getParentWeeklyPlans(studentId, { date: planAnchor })
+    setWeeklyPlans(plansRes.weeklyPlans ?? [])
+    setWeeklyPlanRows(plansRes.rows ?? [])
+    setWeeklyPlanWeekStart(plansRes.weekStart ?? null)
+    setWeeklyPlanWeekEnd(plansRes.weekEnd ?? null)
+    if (plansRes.schoolName) {
+      setReportBrand((prev) => ({
+        schoolName: plansRes.schoolName || prev.schoolName,
+        academicYear: plansRes.academicYear || prev.academicYear,
+        educationAdminName: plansRes.educationAdminName ?? prev.educationAdminName,
+        logoUrl: plansRes.logoUrl ?? prev.logoUrl,
+        principalName: plansRes.principalName ?? prev.principalName,
+      }))
+    }
+    if (plansRes.className) setReportClassName(plansRes.className)
+  }, [])
+
+  // Full reload when child or homework browse date changes (includes weekly plan for current anchor).
   useEffect(() => {
     if (!activeChildId) {
       setLoading(false)
@@ -161,12 +182,36 @@ export function ParentPortalPage() {
     return () => {
       cancelled = true
     }
-  }, [activeChildId, homeworkBrowseDate, weeklyPlanAnchorDate, loadChild, logout, navigate])
+    // weeklyPlanAnchorDate read for initial/child/homework loads; week-only nav uses the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeChildId, homeworkBrowseDate, loadChild, logout, navigate])
+
+  // Week-only fetch when parent flips weekly plan week (avoids full portal refetch).
+  useEffect(() => {
+    if (!activeChildId || loadedChildId !== activeChildId) return
+    if (lastPlanAnchorLoaded.current === weeklyPlanAnchorDate) return
+    lastPlanAnchorLoaded.current = weeklyPlanAnchorDate
+    let cancelled = false
+    ;(async () => {
+      try {
+        await loadWeeklyPlanOnly(activeChildId, weeklyPlanAnchorDate)
+      } catch (err) {
+        if (!cancelled && err instanceof ApiError && err.status === 401) {
+          logout()
+          navigate('/parent/login', { replace: true })
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [weeklyPlanAnchorDate, activeChildId, loadedChildId, loadWeeklyPlanOnly, logout, navigate])
 
   function selectChild(childId: string) {
     if (childId === activeChildId) return
     setLoading(true)
     setLoadedChildId('')
+    lastPlanAnchorLoaded.current = null
     setAttendanceHistory([])
     setHomeworkItems([])
     setHomeHomeworkItems([])

@@ -16,7 +16,7 @@ import { DayChipStrip } from './DayChipStrip'
 
 import { EARLY_LEAVE_STATUS_META, formatLongDate, formatDateTime } from './statusMeta'
 
-import { schoolTodayIso } from './theme'
+import { schoolTodayIso, addDaysIso } from './theme'
 
 
 
@@ -224,7 +224,14 @@ export function EarlyLeavePanel({
 
         <form onSubmit={handleSubmit} className="space-y-3">
 
-          <DayChipStrip value={date} today={today} onChange={setDate} label="يوم الاستئذان" />
+          <DayChipStrip
+            value={date}
+            today={today}
+            onChange={setDate}
+            label="يوم الاستئذان"
+            minDate={today}
+            maxDate={addDaysIso(today, 7)}
+          />
 
 
 

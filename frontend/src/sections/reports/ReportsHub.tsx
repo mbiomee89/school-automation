@@ -74,6 +74,20 @@ function formatTime(iso: string) {
   }
 }
 
+/** Leave times are stored as UTC clock components matching the parent’s HH:mm choice. */
+function formatLeaveClockUtc(iso: string) {
+  try {
+    return new Date(iso).toLocaleTimeString('ar-SA', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+      timeZone: 'UTC',
+    })
+  } catch {
+    return iso
+  }
+}
+
 export function ReportsHub({
   reports,
   dailyAbsenceDetail,
@@ -676,7 +690,7 @@ function EarlyLeaveDetailView({ detail }: { detail: EarlyLeaveReportDetail }) {
         rows={detail.rows.map((r) => [
           r.studentName,
           r.className,
-          formatTime(r.leaveTime),
+          formatLeaveClockUtc(r.leaveTime),
           EARLY_LEAVE_STATUS_AR[r.status],
           `${r.pickupName} (${r.pickupRelation})`,
           r.reason,

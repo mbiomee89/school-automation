@@ -780,30 +780,43 @@ router.post(
       throw badRequest('رقم جوال المستلم غير صالح');
     }
 
-    const active = await prisma.earlyLeaveRequest.findFirst({
-      where: {
-        studentId: student.id,
-        date,
-        status: { in: ['PENDING', 'APPROVED'] },
-      },
-    });
-    if (active) {
-      throw conflict('يوجد طلب استئذان معلّق أو معتمد لهذا اليوم');
-    }
+    const activeSlotKey = `${student.id}|${dateStr}`
 
-    const row = await prisma.earlyLeaveRequest.create({
-      data: {
-        studentId: student.id,
-        classId: student.classId,
-        date,
-        leaveTime,
-        reason,
-        pickupName,
-        pickupRelation,
-        pickupPhone,
-      },
-      include: { class: { select: { id: true, name: true } } },
-    });
+    let row
+    try {
+      row = await prisma.$transaction(async (tx) => {
+        const active = await tx.earlyLeaveRequest.findFirst({
+          where: {
+            studentId: student.id,
+            date,
+            status: { in: ['PENDING', 'APPROVED'] },
+          },
+        })
+        if (active) {
+          throw conflict('يوجد طلب استئذان معلّق أو معتمد لهذا اليوم')
+        }
+
+        return tx.earlyLeaveRequest.create({
+          data: {
+            studentId: student.id,
+            classId: student.classId,
+            date,
+            leaveTime,
+            reason,
+            pickupName,
+            pickupRelation,
+            pickupPhone,
+            activeSlotKey,
+          },
+          include: { class: { select: { id: true, name: true } } },
+        })
+      })
+    } catch (err) {
+      if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
+        throw conflict('يوجد طلب استئذان معلّق أو معتمد لهذا اليوم')
+      }
+      throw err
+    }
 
     res.status(201).json({ earlyLeaveRequest: serializeEarlyLeave(row) });
   })
@@ -838,6 +851,7 @@ router.post(
         data: {
           status: 'CANCELLED',
           cancelledAt: new Date(),
+          activeSlotKey: null,
         },
       });
       if (result.count === 0) {
