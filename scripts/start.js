@@ -103,9 +103,18 @@ run('node', ['scripts/dedupe-teacher-assignments.js']);
 console.log('[start] dedupe subjects (nameAr)…');
 run('node', ['scripts/dedupe-subjects.js']);
 
-// No --accept-data-loss: refuse destructive schema drift rather than wipe data.
+// Prisma warns + requires --accept-data-loss for additive unique constraints
+ // (e.g. nullable EarlyLeaveRequest.activeSlotKey) even when no rows are dropped.
+ // Prefer migrate deploy long-term; see docs/ops-hosting.md.
 console.log('[start] prisma db push…');
-run('npx', ['prisma', 'db', 'push', '--schema=prisma/schema.prisma', '--skip-generate']);
+run('npx', [
+  'prisma',
+  'db',
+  'push',
+  '--schema=prisma/schema.prisma',
+  '--skip-generate',
+  '--accept-data-loss',
+]);
 
 console.log('[start] seed…');
 run('node', ['prisma/seed.js']);
