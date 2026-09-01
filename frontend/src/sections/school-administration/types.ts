@@ -2,7 +2,7 @@
  * Types and props for the School Administration section screen designs.
  */
 
-export type StaffRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS'
+export type StaffRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'SECURITY_GUARD'
 export type LangPref = 'AR' | 'EN'
 export type NotificationEventType = 'ABSENCE' | 'LATE' | 'HOMEWORK_DIGEST' | 'WEEKLY_PLAN'
 export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'

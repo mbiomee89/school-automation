@@ -8,6 +8,7 @@ const ROLE_LABELS: Record<StaffRole, string> = {
   TEACHER: 'معلم',
   COUNSELOR: 'مرشد',
   STUDENT_AFFAIRS: 'وكيل شؤون طلاب',
+  SECURITY_GUARD: 'حارس الأمن',
 }
 
 export function roleLabelAr(role: StaffRole) {

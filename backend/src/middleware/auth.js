@@ -10,7 +10,7 @@ function getBearerToken(req) {
 }
 
 /**
- * Staff auth (ADMIN / TEACHER / COUNSELOR / STUDENT_AFFAIRS). Attaches req.user.
+ * Staff auth (ADMIN / TEACHER / COUNSELOR / STUDENT_AFFAIRS / SECURITY_GUARD). Attaches req.user.
  * Users with mustChangePassword may only call password-change and /auth/me.
  */
 export const requireStaff = asyncHandler(async (req, _res, next) => {

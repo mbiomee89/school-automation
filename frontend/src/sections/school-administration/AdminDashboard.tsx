@@ -57,6 +57,7 @@ const ROLE_AR: Record<StaffRole, string> = {
   TEACHER: 'معلم',
   COUNSELOR: 'مرشد طلابي',
   STUDENT_AFFAIRS: 'وكيل شؤون طلاب',
+  SECURITY_GUARD: 'حارس الأمن',
 }
 
 const EMPTY_STUDENT_FORM: StudentInput = {
@@ -176,6 +177,7 @@ function roleBadge(role: string) {
     TEACHER: 'bg-sky-500/15 text-sky-800 dark:text-sky-300',
     COUNSELOR: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
     STUDENT_AFFAIRS: 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300',
+    SECURITY_GUARD: 'bg-slate-500/15 text-slate-800 dark:text-slate-200',
   }
   return styles[role] ?? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
 }
@@ -2580,7 +2582,7 @@ export function AdminDashboard({
               onChange={(e) => setStaffForm((s) => ({ ...s, role: e.target.value as StaffRole }))}
               className="mt-1 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100"
             >
-              {(['TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'ADMIN'] as StaffRole[]).map((r) => (
+              {(['TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'SECURITY_GUARD', 'ADMIN'] as StaffRole[]).map((r) => (
                 <option key={r} value={r}>
                   {ROLE_AR[r]}
                 </option>

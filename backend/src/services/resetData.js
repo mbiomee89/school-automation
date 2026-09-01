@@ -58,6 +58,7 @@ function restoreAttachmentBytes(row) {
 function mapRestoredStaffRole(role) {
   if (role === 'COUNSELOR') return 'COUNSELOR';
   if (role === 'STUDENT_AFFAIRS') return 'STUDENT_AFFAIRS';
+  if (role === 'SECURITY_GUARD') return 'SECURITY_GUARD';
   return 'TEACHER';
 }
 

@@ -27,9 +27,14 @@ async function teacherAssignedClassIds(teacherId) {
   return [...new Set(rows.map((r) => r.classId))];
 }
 
-/** Teachers only see students in their assigned classes; admin/counselor/affairs see all. */
+/** Teachers only see students in their assigned classes; admin/counselor/affairs/guard see all. */
 async function applyStaffStudentScope(user, where) {
-  if (user.role === 'ADMIN' || user.role === 'COUNSELOR' || user.role === 'STUDENT_AFFAIRS') {
+  if (
+    user.role === 'ADMIN' ||
+    user.role === 'COUNSELOR' ||
+    user.role === 'STUDENT_AFFAIRS' ||
+    user.role === 'SECURITY_GUARD'
+  ) {
     return where;
   }
   if (user.role !== 'TEACHER') throw forbidden('غير مصرح');
@@ -50,7 +55,14 @@ async function applyStaffStudentScope(user, where) {
 }
 
 async function assertStaffCanViewStudent(user, student) {
-  if (user.role === 'ADMIN' || user.role === 'COUNSELOR' || user.role === 'STUDENT_AFFAIRS') return;
+  if (
+    user.role === 'ADMIN' ||
+    user.role === 'COUNSELOR' ||
+    user.role === 'STUDENT_AFFAIRS' ||
+    user.role === 'SECURITY_GUARD'
+  ) {
+    return;
+  }
   if (user.role !== 'TEACHER') throw forbidden('غير مصرح');
   const classIds = await teacherAssignedClassIds(user.id);
   if (student.classId == null || !classIds.includes(student.classId)) {

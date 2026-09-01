@@ -14,8 +14,8 @@ import { toUtcMidnight, schoolHourRiyadh } from '../utils/dates.js';
 
 const router = Router();
 
-/** Late arrival recording is شؤون الطلاب (+ admin) only — not teachers. */
-router.use(requireStaff, requireRole('STUDENT_AFFAIRS', 'ADMIN'));
+/** Late arrival recording: حارس الأمن + شؤون الطلاب + admin — not teachers. */
+router.use(requireStaff, requireRole('STUDENT_AFFAIRS', 'ADMIN', 'SECURITY_GUARD'));
 
 const createSchema = z.object({
   studentId: z.string().min(1),

@@ -4,7 +4,15 @@
  * Hiding UI is not enough — APIs must enforce the same rules server-side.
  */
 
-export type AppRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'PARENT'
+export type AppRole =
+  | 'ADMIN'
+  | 'TEACHER'
+  | 'COUNSELOR'
+  | 'STUDENT_AFFAIRS'
+  | 'SECURITY_GUARD'
+  | 'PARENT'
+
+export type StaffAppRole = Exclude<AppRole, 'PARENT'>
 
 export interface RoleHome {
   role: AppRole
@@ -36,6 +44,11 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
     homeHref: '/student-affairs',
     homeLabelAr: 'شؤون الطلاب',
   },
+  SECURITY_GUARD: {
+    role: 'SECURITY_GUARD',
+    homeHref: '/late-reports',
+    homeLabelAr: 'التأخير',
+  },
   PARENT: {
     role: 'PARENT',
     homeHref: '/parent-portal',
@@ -47,19 +60,17 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
  * Arabic nav labels allowed per staff role (must match shell MainNav labels).
  * Parents never use this list — they use Parent Portal bottom tabs only.
  */
-export const STAFF_NAV_BY_ROLE: Record<
-  'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS',
-  string[]
-> = {
+export const STAFF_NAV_BY_ROLE: Record<StaffAppRole, string[]> = {
   ADMIN: ['الإدارة المدرسية', 'ملفات المعلمين', 'تقارير الدرجات', 'التقارير', 'شؤون الطلاب', 'التأخير'],
   TEACHER: ['الحضور', 'الواجبات', 'الخطة الأسبوعية', 'سجل المتابعة', 'مستندات التوظيف'],
   COUNSELOR: ['مراجعة الأعذار', 'التقارير'],
   STUDENT_AFFAIRS: ['شؤون الطلاب', 'التأخير', 'التقارير'],
+  SECURITY_GUARD: ['التأخير'],
 }
 
 export function filterStaffNavByRole<T extends { label: string }>(
   items: T[],
-  role: 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS'
+  role: StaffAppRole
 ): T[] {
   const allowed = new Set(STAFF_NAV_BY_ROLE[role])
   return items.filter((item) => allowed.has(item.label))
@@ -73,12 +84,12 @@ export const SECTION_ALLOWED_ROLES: Record<string, AppRole[]> = {
   'teacher-files': ['ADMIN'],
   gradebook: ['TEACHER', 'ADMIN'],
   'gradebook-reports': ['ADMIN'],
-  'late-reports': ['ADMIN', 'STUDENT_AFFAIRS'],
+  'late-reports': ['ADMIN', 'STUDENT_AFFAIRS', 'SECURITY_GUARD'],
   'counselor-review': ['COUNSELOR'],
   'student-affairs': ['ADMIN', 'STUDENT_AFFAIRS'],
   reports: ['ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'],
   'parent-portal': ['PARENT'],
-  'staff-login': ['ADMIN', 'TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'PARENT'],
+  'staff-login': ['ADMIN', 'TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'SECURITY_GUARD', 'PARENT'],
 }
 
 export function roleMayAccessSection(role: AppRole, sectionId: string): boolean {

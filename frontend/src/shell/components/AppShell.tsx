@@ -29,7 +29,7 @@ export interface AppShellProps {
    * When set, navigation is filtered to that staff role only (admin / teacher /
    * counselor). Parents never use AppShell. See product/access-control.md.
    */
-  role?: 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS'
+  role?: 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'SECURITY_GUARD'
 }
 
 export function AppShell({

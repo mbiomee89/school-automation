@@ -6,7 +6,7 @@
  * route only to ROLE_HOME[role] and filter shell nav with filterStaffNavByRole.
  */
 
-export type StaffRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS'
+export type StaffRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'SECURITY_GUARD'
 
 export type StaffLoginErrorCode =
   | 'INVALID_CREDENTIALS'

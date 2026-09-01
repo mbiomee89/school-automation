@@ -33,6 +33,7 @@ enum Role {
   TEACHER
   COUNSELOR  // reviews and approves/rejects parent-submitted absence reasons; not tied to specific classes like a teacher
   STUDENT_AFFAIRS // وكيل شؤون طلاب — reports + student profile forms
+  SECURITY_GUARD // حارس الأمن — late arrival recording at the gate
 }
 
 enum Language {

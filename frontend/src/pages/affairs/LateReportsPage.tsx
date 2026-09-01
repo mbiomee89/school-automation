@@ -88,10 +88,10 @@ export function LateReportsPage() {
   return (
     <div dir="rtl" lang="ar" className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50" style={fontArabic}>
       <div className="border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-amber-50 px-4 py-6 sm:px-6 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-amber-950/30">
-        <p className="text-sm font-medium text-slate-500">شؤون الطلاب</p>
+        <p className="text-sm font-medium text-slate-500">حارس الأمن · شؤون الطلاب</p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight sm:text-3xl">التأخير</h1>
         <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-          تسجيل تأخر الطلاب حسب الفصل — متاح لشؤون الطلاب والإدارة فقط.
+          تسجيل تأخر الطلاب حسب الفصل — متاح لحارس الأمن وشؤون الطلاب والإدارة.
         </p>
       </div>
 
