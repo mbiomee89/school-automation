@@ -253,6 +253,10 @@ export interface SchoolAdministrationProps {
   importBatches: ImportBatch[]
   importResult: ImportResult | null
   notifications: NotificationLogItem[]
+  /** Pending early-leave (استئذان) requests — shown on overview as an admin alert. */
+  pendingEarlyLeaveCount?: number
+  /** Open the early-leave review queue from the overview alert. */
+  onOpenEarlyLeave?: () => void
   /** Active tab for controlled preview */
   activeTab?: AdminTab
   academicYearFilter?: string

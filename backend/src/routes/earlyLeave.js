@@ -26,6 +26,16 @@ const reviewSchema = z.object({
   note: z.string().optional().nullable(),
 });
 
+/** GET /early-leave/pending-count — badge/notification for staff shell + admin hub */
+router.get(
+  '/pending-count',
+  asyncHandler(async (_req, res) => {
+    const count = await prisma.earlyLeaveRequest.count({
+      where: { status: 'PENDING' },
+    });
+    res.json({ count });
+  })
+);
 function serialize(row) {
   return {
     id: row.id,

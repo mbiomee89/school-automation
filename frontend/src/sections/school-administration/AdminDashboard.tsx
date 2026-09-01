@@ -19,6 +19,7 @@ import {
   MoreHorizontal,
   ChevronRight,
   ChevronLeft,
+  DoorOpen,
 } from 'lucide-react'
 import type {
   AdminTab,
@@ -194,6 +195,8 @@ export function AdminDashboard({
   enrollments,
   importBatches,
   importResult,
+  pendingEarlyLeaveCount = 0,
+  onOpenEarlyLeave,
   activeTab: controlledTab,
   academicYearFilter,
   onTabChange,
@@ -857,6 +860,31 @@ export function AdminDashboard({
       <div className="mx-auto max-w-6xl p-4 sm:p-6">
         {currentTab === 'overview' && (
           <div className="space-y-4">
+            {pendingEarlyLeaveCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => onOpenEarlyLeave?.()}
+                className="flex w-full cursor-pointer items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5 text-start shadow-sm transition-colors hover:bg-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-800 dark:bg-amber-950/40 dark:hover:bg-amber-950/60"
+              >
+                <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
+                  <DoorOpen className="size-5" strokeWidth={1.75} aria-hidden="true" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-bold text-amber-950 dark:text-amber-100">
+                      طلبات استئذان بانتظار المراجعة
+                    </span>
+                    <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold text-white">
+                      {pendingEarlyLeaveCount > 99 ? '99+' : pendingEarlyLeaveCount}
+                    </span>
+                  </span>
+                  <span className="mt-1 block text-xs text-amber-900/80 dark:text-amber-200/80">
+                    اضغط لفتح صفحة طلبات الاستئذان واعتماد أو رفض الطلبات.
+                  </span>
+                </span>
+                <ChevronLeft className="mt-1 size-5 shrink-0 text-amber-800 dark:text-amber-200" strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : null}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {(
                 [

@@ -1,12 +1,15 @@
 import { Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AppShell } from '../shell/components'
 import { ROLE_HOME, roleMayAccessSection } from '../shared/accessControl'
 import { STAFF_NAV_ITEMS, SECTION_BY_HREF, isStaffNavActive } from '../lib/navigation'
 import { roleLabelAr, useAuth } from '../lib/auth'
 import { changeStaffPassword } from '../api/auth'
+import { getEarlyLeavePendingCount } from '../api/earlyLeave'
 import { ApiError } from '../api/client'
 import { SPINNER_CLASS, buttonVariants } from '../shared/buttonVariants'
+
+const EARLY_LEAVE_ROLES = new Set(['ADMIN', 'STUDENT_AFFAIRS', 'COUNSELOR'])
 
 export function RequireAuth() {
   const { isAuthenticated, bootstrapping } = useAuth()
@@ -36,6 +39,29 @@ export function StaffLayout() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [pwError, setPwError] = useState<string | null>(null)
   const [pwBusy, setPwBusy] = useState(false)
+  const [earlyLeavePending, setEarlyLeavePending] = useState(0)
+
+  const refreshEarlyLeaveBadge = useCallback(async () => {
+    if (!role || !EARLY_LEAVE_ROLES.has(role)) {
+      setEarlyLeavePending(0)
+      return
+    }
+    try {
+      const count = await getEarlyLeavePendingCount()
+      setEarlyLeavePending(count)
+    } catch {
+      /* keep last known count */
+    }
+  }, [role])
+
+  useEffect(() => {
+    void refreshEarlyLeaveBadge()
+    if (!role || !EARLY_LEAVE_ROLES.has(role)) return
+    const id = window.setInterval(() => {
+      void refreshEarlyLeaveBadge()
+    }, 60_000)
+    return () => window.clearInterval(id)
+  }, [role, refreshEarlyLeaveBadge, location.pathname])
 
   if (!user || !role) {
     return <Navigate to="/login" replace />
@@ -51,6 +77,7 @@ export function StaffLayout() {
   const navigationItems = STAFF_NAV_ITEMS.map((item) => ({
     ...item,
     isActive: isStaffNavActive(item.href, location.pathname, location.search),
+    badgeCount: item.href === '/early-leave' ? earlyLeavePending : undefined,
   }))
 
   async function submitPasswordChange() {
@@ -82,6 +109,15 @@ export function StaffLayout() {
       navigationItems={navigationItems}
       user={{ name: user.name, role: roleLabelAr(role) }}
       role={role}
+      notificationCount={EARLY_LEAVE_ROLES.has(role) ? earlyLeavePending : undefined}
+      onOpenNotifications={
+        EARLY_LEAVE_ROLES.has(role)
+          ? () => {
+              if (mustChange) return
+              navigate('/early-leave')
+            }
+          : undefined
+      }
       onNavigate={(href) => {
         if (mustChange) return
         navigate(href)

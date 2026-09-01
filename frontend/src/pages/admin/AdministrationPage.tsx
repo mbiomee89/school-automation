@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import {
   activateUser,
   addAssignment,
@@ -40,6 +41,7 @@ import {
   uploadSchoolLogo,
 } from '../../api/admin'
 import { ApiError } from '../../api/client'
+import { getEarlyLeavePendingCount } from '../../api/earlyLeave'
 import { AdminDashboard } from '../../sections/school-administration/AdminDashboard'
 import type {
   AdminTab,
@@ -69,9 +71,11 @@ function alertError(err: unknown, fallback: string) {
 }
 
 export function AdministrationPage() {
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<AdminTab>('overview')
+  const [pendingEarlyLeaveCount, setPendingEarlyLeaveCount] = useState(0)
 
   const [schoolSettings, setSchoolSettings] = useState<SchoolSettings>({
     name: 'منصة إدارة المدرسة',
@@ -138,18 +142,20 @@ export function AdministrationPage() {
   /** Core shell for overview — no full student roster. */
   const loadShell = useCallback(async () => {
     setError(null)
-    const [settings, users, classList, subjectList, stats] = await Promise.all([
+    const [settings, users, classList, subjectList, stats, earlyLeavePending] = await Promise.all([
       getSchoolSettings(),
       listUsers(),
       listClasses(),
       listSubjects(),
       getStudentStats(),
+      getEarlyLeavePendingCount().catch(() => 0),
     ])
     setSchoolSettings(settings)
     setStaff(users)
     setClasses(classList)
     setSubjects(subjectList)
     setActiveStudentCount(stats.activeCount)
+    setPendingEarlyLeaveCount(earlyLeavePending)
     setStudentsLoaded(false)
     setStudents([])
     setAssignmentsLoaded(false)
@@ -245,6 +251,8 @@ export function AdministrationPage() {
       importBatches={importBatches}
       importResult={importResult}
       notifications={[]}
+      pendingEarlyLeaveCount={pendingEarlyLeaveCount}
+      onOpenEarlyLeave={() => navigate('/early-leave')}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       onSearchStudents={async (query) => {

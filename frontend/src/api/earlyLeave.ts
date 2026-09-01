@@ -15,6 +15,11 @@ export async function listEarlyLeave(params: { date: string; status?: EarlyLeave
   return data
 }
 
+export async function getEarlyLeavePendingCount() {
+  const data = await apiRequest<{ count: number }>('/early-leave/pending-count')
+  return data.count
+}
+
 export async function reviewEarlyLeave(
   id: number,
   decision: 'APPROVED' | 'REJECTED',
