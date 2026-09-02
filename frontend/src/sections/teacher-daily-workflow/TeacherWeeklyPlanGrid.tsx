@@ -12,6 +12,7 @@ import {
   type TeacherWeekSlot,
 } from '../../api/teacher'
 import { ApiError } from '../../api/client'
+import { useStaffToast } from '../../shared/StaffToast'
 
 const DAY_LABELS: Record<string, string> = {
   SUN: 'الأحد',
@@ -43,6 +44,7 @@ function alertError(err: unknown, fallback: string) {
 }
 
 export function TeacherWeeklyPlanGrid() {
+  const showToast = useStaffToast()
   const today = todayDateStr()
   const [anchor, setAnchor] = useState(() => defaultPlanAnchor(today))
   const [grid, setGrid] = useState<TeacherWeekGrid | null>(null)
@@ -109,6 +111,7 @@ export function TeacherWeeklyPlanGrid() {
       })
       setSelected(null)
       await reload()
+      showToast('تم حفظ الخطة')
     } catch (err) {
       alertError(err, 'فشل حفظ عنوان الدرس')
     } finally {
@@ -124,6 +127,7 @@ export function TeacherWeeklyPlanGrid() {
       await deleteWeeklyPlan(selected.planId)
       setSelected(null)
       await reload()
+      showToast('تم حذف الخطة')
     } catch (err) {
       alertError(err, 'فشل الحذف')
     } finally {

@@ -25,12 +25,14 @@ import type {
 } from '../../sections/teacher-daily-workflow/types'
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
+import { useStaffToast } from '../../shared/StaffToast'
 
 function alertError(err: unknown, fallback: string) {
   window.alert(err instanceof ApiError ? err.message : fallback)
 }
 
 export function TeacherDailyPage() {
+  const showToast = useStaffToast()
   const today = todayDateStr()
   const [searchParams, setSearchParams] = useSearchParams()
   const tabParam = searchParams.get('tab')
@@ -196,6 +198,7 @@ export function TeacherDailyPage() {
           const result = await saveAttendance(active.classId, today, marks)
           setAttendanceMarks(marks)
           setAttendanceSavedAt(result.savedAt)
+          showToast('تم حفظ الحضور')
         } catch (err) {
           alertError(err, 'فشل حفظ الحضور')
           throw err
@@ -212,6 +215,7 @@ export function TeacherDailyPage() {
             dueDate: entry.dueDate,
           })
           setHomeworkToday((prev) => [row, ...prev])
+          showToast('تم حفظ الواجب')
         } catch (err) {
           alertError(err, 'فشل إضافة الواجب')
         }
@@ -220,6 +224,7 @@ export function TeacherDailyPage() {
         try {
           const row = await updateHomework(id, patch)
           setHomeworkToday((prev) => prev.map((h) => (h.id === id ? row : h)))
+          showToast('تم حفظ الواجب')
         } catch (err) {
           alertError(err, 'فشل تعديل الواجب')
         }
@@ -228,6 +233,7 @@ export function TeacherDailyPage() {
         try {
           await deleteHomework(id)
           setHomeworkToday((prev) => prev.filter((h) => h.id !== id))
+          showToast('تم حذف الواجب')
         } catch (err) {
           alertError(err, 'فشل حذف الواجب')
         }

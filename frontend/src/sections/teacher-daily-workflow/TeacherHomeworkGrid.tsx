@@ -12,6 +12,7 @@ import {
   type TeacherWeekSlot,
 } from '../../api/teacher'
 import { ApiError } from '../../api/client'
+import { useStaffToast } from '../../shared/StaffToast'
 
 const DAY_LABELS: Record<string, string> = {
   SUN: 'الأحد',
@@ -34,6 +35,7 @@ function alertError(err: unknown, fallback: string) {
 }
 
 export function TeacherHomeworkGrid() {
+  const showToast = useStaffToast()
   const today = todayDateStr()
   const [anchor, setAnchor] = useState(today)
   const [grid, setGrid] = useState<TeacherWeekGrid | null>(null)
@@ -102,6 +104,7 @@ export function TeacherHomeworkGrid() {
       })
       setSelected(null)
       await reload()
+      showToast('تم حفظ الواجب')
     } catch (err) {
       alertError(err, 'فشل حفظ الواجب')
     } finally {
@@ -122,6 +125,7 @@ export function TeacherHomeworkGrid() {
       })
       setSelected(null)
       await reload()
+      showToast('تم حفظ الواجب')
     } catch (err) {
       alertError(err, 'فشل التسجيل')
     } finally {
@@ -137,6 +141,7 @@ export function TeacherHomeworkGrid() {
       await deleteHomework(selected.homeworkId)
       setSelected(null)
       await reload()
+      showToast('تم حذف الواجب')
     } catch (err) {
       alertError(err, 'فشل الحذف')
     } finally {

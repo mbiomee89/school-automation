@@ -91,15 +91,18 @@ function StudentRowActions({
   onUnassign,
   onRemove,
   onRestore,
+  dropUp = false,
 }: {
   onEdit: () => void
   onPromote: () => void
   onUnassign?: () => void
   onRemove?: () => void
   onRestore?: () => void
+  /** Open above the button — needed for last table rows clipped by overflow. */
+  dropUp?: boolean
 }) {
   return (
-    <details className="relative text-start">
+    <details className="relative z-10 text-start open:z-40">
       <summary
         className={cn(
           'inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700',
@@ -110,7 +113,12 @@ function StudentRowActions({
         إجراءات
         <MoreHorizontal className="size-3.5 opacity-70" strokeWidth={1.75} />
       </summary>
-      <div className="absolute end-0 z-20 mt-1 min-w-[10rem] rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800">
+      <div
+        className={cn(
+          'absolute end-0 z-40 min-w-[10rem] rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800',
+          dropUp ? 'bottom-full mb-1' : 'top-full mt-1'
+        )}
+      >
         <button
           type="button"
           className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
@@ -1032,7 +1040,7 @@ export function AdminDashboard({
             {studentsLoading && students.length === 0 ? (
               <p className="p-8 text-center text-sm text-slate-500">جارٍ تحميل قائمة الطلاب…</p>
             ) : isMdUp ? (
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
+              <div className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
                 <table className="w-full text-start text-sm">
                   <thead className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                     <tr>
@@ -1045,7 +1053,7 @@ export function AdminDashboard({
                     </tr>
                   </thead>
                   <tbody>
-                    {pagedStudents.map((s) => (
+                    {pagedStudents.map((s, index) => (
                       <tr
                         key={s.id}
                         className="border-t border-slate-100 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800/50"
@@ -1084,8 +1092,9 @@ export function AdminDashboard({
                             {s.isActive ? 'نشط' : 'غير نشط'}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-end">
+                        <td className="relative z-0 px-3 py-2 text-end">
                           <StudentRowActions
+                            dropUp={index >= pagedStudents.length - 3}
                             onEdit={() => openEditStudent(s)}
                             onPromote={() => setPromoteFor(s)}
                             onUnassign={
@@ -1109,7 +1118,7 @@ export function AdminDashboard({
               </div>
             ) : (
               <div className="space-y-3">
-                {pagedStudents.map((s) => (
+                {pagedStudents.map((s, index) => (
                   <div
                     key={s.id}
                     className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100"
@@ -1135,8 +1144,9 @@ export function AdminDashboard({
                         {s.className ?? <span className="text-slate-400">بدون فصل</span>}
                       </div>
                     </button>
-                    <div className="mt-3 flex justify-end border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <div className="relative z-0 mt-3 flex justify-end border-t border-slate-100 pt-3 dark:border-slate-800">
                       <StudentRowActions
+                        dropUp={index >= pagedStudents.length - 2}
                         onEdit={() => openEditStudent(s)}
                         onPromote={() => setPromoteFor(s)}
                         onUnassign={

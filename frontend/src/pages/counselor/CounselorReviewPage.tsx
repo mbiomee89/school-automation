@@ -11,6 +11,7 @@ import type {
 } from '../../sections/counselor-review/types'
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
+import { useStaffToast } from '../../shared/StaffToast'
 
 const TAB_STATUS = {
   pending: 'PENDING_REVIEW',
@@ -46,6 +47,7 @@ async function fetchAttachment(apiPath: string, download: boolean) {
 
 export function CounselorReviewPage() {
   const navigate = useNavigate()
+  const showToast = useStaffToast()
   const [tab, setTab] = useState<CounselorTab>('pending')
   const [items, setItems] = useState<AbsenceReasonItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -131,6 +133,7 @@ export function CounselorReviewPage() {
         setReviewingId(itemId)
         try {
           await reviewAbsenceReason(itemId, 'APPROVED')
+          showToast('تم الاعتماد')
           try {
             await load()
           } catch {
@@ -146,6 +149,7 @@ export function CounselorReviewPage() {
         setReviewingId(itemId)
         try {
           await reviewAbsenceReason(itemId, 'REJECTED', note)
+          showToast('تم الرفض')
           try {
             await load()
           } catch {

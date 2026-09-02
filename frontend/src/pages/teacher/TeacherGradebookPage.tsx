@@ -13,6 +13,7 @@ import {
 import { ApiError } from '../../api/client'
 import { EmptyState } from '../../shared/EmptyState'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
+import { useStaffToast } from '../../shared/StaffToast'
 import { cn } from '../../shared/utils'
 
 type DraftRow = {
@@ -76,6 +77,7 @@ function printReport(report: GradeReport) {
 }
 
 export function TeacherGradebookPage() {
+  const showToast = useStaffToast()
   const [assignments, setAssignments] = useState<GradebookAssignment[]>([])
   const [assignmentId, setAssignmentId] = useState<number | null>(null)
   const [term, setTerm] = useState(1)
@@ -181,6 +183,7 @@ export function TeacherGradebookPage() {
         })),
       })
       await load()
+      showToast('تم حفظ الدرجات')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذّر الحفظ')
     } finally {
@@ -202,6 +205,7 @@ export function TeacherGradebookPage() {
         })),
       })
       await load()
+      showToast('تم حفظ الدرجات')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'تعذّر حفظ نهاية الفصل')
     } finally {

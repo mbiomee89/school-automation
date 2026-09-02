@@ -8,6 +8,7 @@ import { changeStaffPassword } from '../api/auth'
 import { getEarlyLeavePendingCount } from '../api/earlyLeave'
 import { ApiError } from '../api/client'
 import { SPINNER_CLASS, buttonVariants } from '../shared/buttonVariants'
+import { StaffToastProvider } from '../shared/StaffToast'
 
 const EARLY_LEAVE_ROLES = new Set(['ADMIN', 'STUDENT_AFFAIRS', 'COUNSELOR'])
 
@@ -105,6 +106,7 @@ export function StaffLayout() {
   }
 
   return (
+    <StaffToastProvider>
     <AppShell
       navigationItems={navigationItems}
       user={{ name: user.name, role: roleLabelAr(role) }}
@@ -192,5 +194,6 @@ export function StaffLayout() {
         <Outlet />
       )}
     </AppShell>
+    </StaffToastProvider>
   )
 }

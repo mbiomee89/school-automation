@@ -64,6 +64,7 @@ import type {
 } from '../../sections/school-administration/types'
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
+import { useStaffToast } from '../../shared/StaffToast'
 
 function alertError(err: unknown, fallback: string) {
   const message = err instanceof ApiError ? err.message : fallback
@@ -72,6 +73,7 @@ function alertError(err: unknown, fallback: string) {
 
 export function AdministrationPage() {
   const navigate = useNavigate()
+  const showToast = useStaffToast()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<AdminTab>('overview')
@@ -285,6 +287,7 @@ export function AdministrationPage() {
         try {
           await restoreStudent(studentId)
           await Promise.all([loadStudents(), refreshStudentStats()])
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل استعادة الطالب')
         }
@@ -303,6 +306,7 @@ export function AdministrationPage() {
             await createStudent(input)
           }
           await Promise.all([loadStudents(), listClasses().then(setClasses), refreshStudentStats()])
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حفظ الطالب')
         }
@@ -311,6 +315,7 @@ export function AdministrationPage() {
         try {
           await softRemoveStudent(studentId)
           await Promise.all([loadStudents(), refreshStudentStats()])
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل استبعاد الطالب')
         }
@@ -319,6 +324,7 @@ export function AdministrationPage() {
         try {
           await promoteStudent(studentId, classId)
           await Promise.all([loadStudents(), listClasses().then(setClasses)])
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل نقل الطالب')
         }
@@ -327,6 +333,7 @@ export function AdministrationPage() {
         try {
           await unassignStudent(studentId)
           await Promise.all([loadStudents(), listClasses().then(setClasses)])
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل إزالة الطالب من الفصل')
         }
@@ -335,6 +342,7 @@ export function AdministrationPage() {
         try {
           await saveClass(input)
           setClasses(await listClasses())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حفظ الفصل')
         }
@@ -343,6 +351,7 @@ export function AdministrationPage() {
         try {
           await deleteClass(classId)
           setClasses(await listClasses())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حذف الفصل')
         }
@@ -355,6 +364,7 @@ export function AdministrationPage() {
             listClasses().then(setClasses),
             refreshStudentStats(),
           ])
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل تفريغ الفصل')
         }
@@ -363,6 +373,7 @@ export function AdministrationPage() {
         try {
           await saveSubject(input)
           setSubjects(await listSubjects())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حفظ المادة')
         }
@@ -372,6 +383,7 @@ export function AdministrationPage() {
           await deleteSubject(subjectId)
           setSubjects(await listSubjects())
           if (assignmentsLoaded) await loadAssignments()
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حذف المادة')
         }
@@ -380,6 +392,7 @@ export function AdministrationPage() {
         try {
           await createUser(input)
           setStaff(await listUsers())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل إنشاء حساب الموظف')
           throw err
@@ -389,6 +402,7 @@ export function AdministrationPage() {
         try {
           await updateUser(staffId, patch)
           setStaff(await listUsers())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل تحديث الموظف')
           throw err
@@ -398,6 +412,7 @@ export function AdministrationPage() {
         try {
           await deactivateUser(staffId)
           setStaff(await listUsers())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل تعطيل الحساب')
         }
@@ -406,6 +421,7 @@ export function AdministrationPage() {
         try {
           await activateUser(staffId)
           setStaff(await listUsers())
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل تفعيل الحساب')
         }
@@ -414,6 +430,7 @@ export function AdministrationPage() {
         try {
           await addAssignment(input)
           await loadAssignments()
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل إضافة التوزيع')
         }
@@ -422,6 +439,7 @@ export function AdministrationPage() {
         try {
           await syncTeacherAssignments(input)
           await loadAssignments()
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حفظ توزيع المعلم')
           throw err
@@ -431,6 +449,7 @@ export function AdministrationPage() {
         try {
           await removeAssignment(assignmentId)
           await loadAssignments()
+          showToast('تم الحفظ بنجاح')
         } catch (err) {
           alertError(err, 'فشل حذف التوزيع')
         }

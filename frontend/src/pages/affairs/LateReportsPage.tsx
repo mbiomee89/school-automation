@@ -16,8 +16,10 @@ import type { LateReportEntry, RosterStudent } from '../../sections/teacher-dail
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
+import { useStaffToast } from '../../shared/StaffToast'
 
 export function LateReportsPage() {
+  const showToast = useStaffToast()
   const today = todayDateStr()
   const [classes, setClasses] = useState<Array<{ id: number; name: string; academicYear: string }>>([])
   const [classId, setClassId] = useState<number | null>(null)
@@ -132,6 +134,7 @@ export function LateReportsPage() {
                     reason: entry.reason,
                   })
                   setLateReports((prev) => [...prev, row])
+                  showToast('تم تسجيل التأخر')
                 } catch (err) {
                   window.alert(err instanceof ApiError ? err.message : 'فشل تسجيل التأخر')
                 }
