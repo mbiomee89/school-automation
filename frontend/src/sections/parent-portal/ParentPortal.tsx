@@ -86,6 +86,7 @@ export function ParentPortal({
   const [confirmingLogout, setConfirmingLogout] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const mainRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     return () => {
@@ -93,14 +94,19 @@ export function ParentPortal({
     }
   }, [])
 
+  const currentTab = controlledTab ?? tab
+  const safeTab: ParentTab = currentTab === 'notifications' ? 'home' : currentTab
+
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 })
+  }, [safeTab])
+
   function showToast(message: string) {
     setToast(message)
     if (toastTimer.current) clearTimeout(toastTimer.current)
     toastTimer.current = setTimeout(() => setToast(null), 4000)
   }
 
-  const currentTab = controlledTab ?? tab
-  const safeTab: ParentTab = currentTab === 'notifications' ? 'home' : currentTab
   const activeChild = children.find((c) => c.id === activeChildId) ?? children[0]
 
   function switchTab(next: ParentTab) {
@@ -158,16 +164,19 @@ export function ParentPortal({
     <div
       dir="rtl"
       lang="ar"
-      className="flex min-h-screen justify-center bg-[color:var(--pp-sky)] text-[color:var(--pp-ink)] print:block print:bg-white"
+      className="flex h-dvh max-h-dvh justify-center overflow-hidden bg-[color:var(--pp-sky)] text-[color:var(--pp-ink)] print:block print:h-auto print:max-h-none print:overflow-visible print:bg-white"
       style={{ ...fontArabic, ...PARENT_PORTAL_THEME }}
     >
-      <div className="flex min-h-screen w-full max-w-md flex-col bg-[color:var(--pp-sky)] print:max-w-none print:bg-white">
-        <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--pp-ink)]/8 bg-[color:var(--pp-sand)]/90 px-4 py-2.5 backdrop-blur-sm print:hidden">
+      <div className="flex h-dvh max-h-dvh w-full max-w-md flex-col bg-[color:var(--pp-sky)] print:h-auto print:max-h-none print:max-w-none print:bg-white">
+        <header className="z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--pp-ink)]/8 bg-[color:var(--pp-sand)]/90 px-4 py-2.5 backdrop-blur-sm print:hidden">
           <ChildSwitcher children={children} activeChildId={activeChildId} onSelectChild={onSelectChild} />
           <p className="shrink-0 text-xs font-semibold text-[color:var(--pp-ink)]/45">بوابة ولي الأمر</p>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 py-5 print:overflow-visible print:p-0">
+        <main
+          ref={mainRef}
+          className="min-h-0 flex-1 overflow-y-auto px-4 py-5 print:overflow-visible print:p-0"
+        >
           {safeTab === 'home' && (
             <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none">
               <div className="print:hidden">
