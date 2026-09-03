@@ -15,6 +15,15 @@ const DAY_LABELS: Record<string, string> = {
   THU: 'الخميس',
 }
 
+/** Compact day headers so the grid fits phone width. */
+const DAY_LABELS_SHORT: Record<string, string> = {
+  SUN: 'أحد',
+  MON: 'إثن',
+  TUE: 'ثلا',
+  WED: 'أرب',
+  THU: 'خميس',
+}
+
 const DAY_ORDER = ['SUN', 'MON', 'TUE', 'WED', 'THU'] as const
 const PERIODS = ['1', '2', '3', '4', '5', '6'] as const
 
@@ -38,7 +47,10 @@ function LogoBox({
   const [failed, setFailed] = useState(false)
   if (!src || failed) {
     return (
-      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-dashed border-slate-400 text-[9px] text-slate-500 sm:h-20 sm:w-20 sm:text-[10px]">
+      <div
+        className="flex size-12 shrink-0 items-center justify-center rounded-full border border-dashed border-slate-400/80 bg-white/60 text-[8px] text-slate-500 sm:size-16 print:size-14"
+        aria-hidden={!src}
+      >
         {placeholder}
       </div>
     )
@@ -47,9 +59,22 @@ function LogoBox({
     <img
       src={src}
       alt={alt}
-      className="h-14 w-14 object-contain sm:h-20 sm:w-20"
+      className="size-12 shrink-0 object-contain sm:size-16 print:size-14"
       onError={() => setFailed(true)}
     />
+  )
+}
+
+function MetaCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 text-center">
+      <p className="text-[9px] font-medium tracking-wide text-slate-500 sm:text-[10px] print:text-[10px]">
+        {label}
+      </p>
+      <p className="mt-0.5 truncate text-[11px] font-bold text-slate-900 sm:text-sm print:text-sm">
+        {value}
+      </p>
+    </div>
   )
 }
 
@@ -72,6 +97,10 @@ export function ParentClassTimetable({ timetable, loading, error }: ParentClassT
   const schoolName = timetable?.schoolName || 'المدرسة'
   const className = timetable?.className || 'بدون فصل'
   const today = timetable?.today
+  const weekLabel =
+    timetable?.weekStart && timetable?.weekEnd
+      ? `${timetable.weekStart} — ${timetable.weekEnd}`
+      : '—'
 
   function handlePrint() {
     window.print()
@@ -106,7 +135,7 @@ export function ParentClassTimetable({ timetable, loading, error }: ParentClassT
           className={buttonVariants({
             variant: 'secondary',
             size: 'sm',
-            className: 'inline-flex cursor-pointer items-center gap-1.5',
+            className: 'inline-flex min-h-11 cursor-pointer items-center gap-1.5',
           })}
         >
           <Printer className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
@@ -127,103 +156,125 @@ export function ParentClassTimetable({ timetable, loading, error }: ParentClassT
       `}</style>
 
       <section
-        className="parent-class-timetable-sheet overflow-hidden border-2 border-slate-800 bg-[#faf8f2] text-slate-900 shadow-sm print:break-after-page print:border print:shadow-none"
+        className="parent-class-timetable-sheet overflow-hidden border border-slate-800/90 bg-[#faf8f2] text-slate-900 shadow-sm print:break-after-page print:border print:shadow-none"
         style={{ fontFamily: '"Noto Naskh Arabic", "Amiri", "Times New Roman", serif' }}
       >
-        {/* Official header: ministry | school logo | meta */}
-        <div className="grid grid-cols-[1fr_auto_1fr] items-start gap-2 border-b-2 border-slate-800 px-2 py-3 sm:gap-3 sm:px-4">
-          <div className="flex flex-col items-start gap-1.5">
-            <LogoBox src={MINISTRY_LOGO_SRC} alt="شعار الوزارة" placeholder="شعار الوزارة" />
-            <p className="text-[10px] font-semibold leading-snug text-slate-800 sm:text-xs">{adminLabel}</p>
+        {/* Official header — logos row, then identity, then meta strip */}
+        <header className="border-b border-slate-800/80 bg-gradient-to-b from-white to-[#faf8f2]">
+          <div className="flex items-start justify-between gap-4 px-3 pt-3 sm:px-5 sm:pt-4 print:px-5 print:pt-4">
+            <LogoBox src={MINISTRY_LOGO_SRC} alt="شعار وزارة التعليم" placeholder="الوزارة" />
+            <LogoBox src={timetable?.logoUrl} alt={schoolName} placeholder="المدرسة" />
           </div>
 
-          <div className="flex flex-col items-center gap-1 self-center">
-            <LogoBox src={timetable?.logoUrl} alt={schoolName} placeholder="الشعار" />
-            <p className="text-center text-xs font-bold text-slate-900 sm:text-sm">مدرسة {schoolName}</p>
+          <div className="space-y-1 px-3 pb-3 pt-2.5 text-center sm:px-5 print:px-5">
+            <p className="text-[10px] font-medium leading-relaxed text-slate-500 sm:text-xs print:text-xs">
+              {adminLabel}
+            </p>
+            <h3 className="mx-auto max-w-[18rem] text-balance text-[13px] font-bold leading-snug text-slate-900 sm:max-w-lg sm:text-lg print:max-w-none print:text-lg">
+              {schoolName.startsWith('مدرسة') ? schoolName : `مدرسة ${schoolName}`}
+            </h3>
             {timetable?.academicYear ? (
-              <p className="text-[10px] text-slate-600">العام الدراسي {timetable.academicYear}</p>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col items-end gap-1 text-end text-[10px] sm:text-xs">
-            <p className="font-bold text-slate-900">الفصل: {className}</p>
-            {timetable?.studentNameAr ? (
-              <p className="text-slate-700">الطالب: {timetable.studentNameAr}</p>
-            ) : null}
-            {timetable?.weekStart && timetable?.weekEnd ? (
-              <p className="text-slate-600" dir="ltr">
-                {timetable.weekStart} — {timetable.weekEnd}
+              <p className="text-[10px] text-slate-600 sm:text-xs print:text-xs">
+                العام الدراسي {timetable.academicYear}
               </p>
             ) : null}
           </div>
-        </div>
 
-        <div className="border-b-2 border-slate-800 bg-slate-800 px-3 py-2 text-center text-sm font-bold text-white sm:text-base">
+          <div className="mx-3 mb-3 grid grid-cols-3 divide-x divide-x-reverse divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm sm:mx-5 print:mx-5">
+            <div className="px-2 py-2.5 sm:px-3">
+              <MetaCell label="الفصل" value={className} />
+            </div>
+            <div className="px-2 py-2.5 sm:px-3">
+              <div className="min-w-0 text-center">
+                <p className="text-[9px] font-medium tracking-wide text-slate-500 sm:text-[10px] print:text-[10px]">
+                  الطالب
+                </p>
+                <p className="mt-0.5 line-clamp-2 text-[11px] font-bold leading-snug text-slate-900 sm:text-sm print:text-sm">
+                  {timetable?.studentNameAr?.trim() || '—'}
+                </p>
+              </div>
+            </div>
+            <div className="px-2 py-2.5 sm:px-3" dir="ltr">
+              <MetaCell label="الأسبوع" value={weekLabel} />
+            </div>
+          </div>
+        </header>
+
+        <div className="bg-[color:var(--pp-ink,#0F2744)] px-2 py-2 text-center text-xs font-bold text-white sm:px-3 sm:text-base print:px-3 print:text-base">
           الجدول الأسبوعي — {className}
         </div>
 
-        <div className="p-2 sm:p-3">
+        <div className="p-1 sm:p-3 print:p-3">
           {!hasAnySlot ? (
             <p className="py-8 text-center text-sm text-slate-500">لا يوجد جدول لهذا الفصل بعد</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[36rem] border-collapse border border-slate-800 text-[10px] sm:text-xs">
-                <thead>
-                  <tr className="bg-slate-200">
-                    <th className="border border-slate-800 px-1 py-2 font-bold">الحصة</th>
-                    {DAY_ORDER.map((d) => (
-                      <th
-                        key={d}
-                        className={cn(
-                          'border border-slate-800 px-1 py-2 font-bold',
-                          today && timetable?.days.find((x) => x.dayOfWeek === d)?.date === today
-                            ? 'bg-slate-300'
-                            : ''
-                        )}
-                      >
-                        {DAY_LABELS[d]}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {PERIODS.map((period) => (
-                    <tr key={period}>
-                      <th className="border border-slate-800 bg-slate-100 px-1 py-2 font-bold tabular-nums">
-                        ح{period}
-                      </th>
-                      {DAY_ORDER.map((d) => {
-                        const isToday =
-                          !!today && timetable?.days.find((x) => x.dayOfWeek === d)?.date === today
-                        const subject = cellMap.get(`${d}|${period}`) ?? ''
-                        return (
-                          <td
-                            key={`${d}-${period}`}
-                            className={cn(
-                              'border border-slate-800 px-1 py-2 text-center align-middle font-medium text-slate-900',
-                              isToday ? 'bg-amber-50/80 print:bg-slate-50' : 'bg-[#faf8f2]'
-                            )}
-                          >
-                            {subject || '\u00a0'}
-                          </td>
-                        )
-                      })}
-                    </tr>
+            <table className="w-full table-fixed border-collapse border border-slate-800 text-[8px] leading-tight sm:text-xs sm:leading-normal print:text-[11px] print:leading-snug">
+              <colgroup>
+                <col className="w-[11%]" />
+                <col className="w-[17.8%]" />
+                <col className="w-[17.8%]" />
+                <col className="w-[17.8%]" />
+                <col className="w-[17.8%]" />
+                <col className="w-[17.8%]" />
+              </colgroup>
+              <thead>
+                <tr className="bg-slate-200">
+                  <th className="border border-slate-800 px-0.5 py-1 font-bold sm:px-1 sm:py-2 print:px-1 print:py-2">
+                    الحصة
+                  </th>
+                  {DAY_ORDER.map((d) => (
+                    <th
+                      key={d}
+                      className={cn(
+                        'border border-slate-800 px-0.5 py-1 font-bold sm:px-1 sm:py-2 print:px-1 print:py-2',
+                        today && timetable?.days.find((x) => x.dayOfWeek === d)?.date === today
+                          ? 'bg-slate-300'
+                          : ''
+                      )}
+                    >
+                      <span className="sm:hidden print:hidden">{DAY_LABELS_SHORT[d]}</span>
+                      <span className="hidden sm:inline print:inline">{DAY_LABELS[d]}</span>
+                    </th>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </tr>
+              </thead>
+              <tbody>
+                {PERIODS.map((period) => (
+                  <tr key={period}>
+                    <th className="border border-slate-800 bg-slate-100 px-0.5 py-1 font-bold tabular-nums sm:px-1 sm:py-2 print:px-1 print:py-2">
+                      ح{period}
+                    </th>
+                    {DAY_ORDER.map((d) => {
+                      const isToday =
+                        !!today && timetable?.days.find((x) => x.dayOfWeek === d)?.date === today
+                      const subject = cellMap.get(`${d}|${period}`) ?? ''
+                      return (
+                        <td
+                          key={`${d}-${period}`}
+                          className={cn(
+                            'break-words border border-slate-800 px-0.5 py-1 text-center align-middle font-medium text-slate-900 sm:px-1 sm:py-2 print:px-1 print:py-2',
+                            isToday ? 'bg-amber-50/80 print:bg-slate-50' : 'bg-[#faf8f2]'
+                          )}
+                        >
+                          {subject || '\u00a0'}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
 
-        <div className="flex flex-wrap items-stretch gap-2 border-t-2 border-slate-800 px-2 py-3 sm:gap-3 sm:px-4">
-          <p className="text-xs font-bold text-slate-800 sm:text-sm">ملاحظات:</p>
-          <div className="min-w-[10rem] flex-1 border border-slate-700 bg-white px-3 py-2 text-xs leading-6 text-slate-700 sm:text-sm sm:leading-7">
+        <div className="flex flex-wrap items-stretch gap-1.5 border-t-2 border-slate-800 px-1.5 py-2 sm:gap-3 sm:px-4 sm:py-3 print:gap-3 print:px-4 print:py-3">
+          <p className="text-[10px] font-bold text-slate-800 sm:text-sm print:text-sm">ملاحظات:</p>
+          <div className="min-w-0 flex-1 border border-slate-700 bg-white px-2 py-1.5 text-[9px] leading-5 text-slate-700 sm:min-w-[10rem] sm:px-3 sm:py-2 sm:text-sm sm:leading-7 print:px-3 print:py-2 print:text-sm print:leading-7">
             {PARENT_NOTE}
           </div>
-          <div className="flex min-w-[8rem] flex-col justify-center border border-slate-700 bg-white px-3 py-2 text-center text-xs sm:min-w-[10rem] sm:text-sm">
+          <div className="flex w-full flex-col justify-center border border-slate-700 bg-white px-2 py-1.5 text-center text-[9px] sm:w-auto sm:min-w-[10rem] sm:px-3 sm:py-2 sm:text-sm print:min-w-[10rem] print:px-3 print:py-2 print:text-sm">
             <p className="font-bold text-slate-800">قائد المدرسة</p>
-            <p className="mt-1 text-slate-600 sm:mt-2">
+            <p className="mt-0.5 text-slate-600 sm:mt-2 print:mt-2">
               {timetable?.principalName?.trim() || 'اسم القائد'}
             </p>
           </div>
