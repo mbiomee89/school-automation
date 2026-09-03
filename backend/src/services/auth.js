@@ -1,11 +1,18 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../utils/prisma.js';
 import { normalizePhone } from '../utils/phone.js';
-import { badRequest, unauthorized } from '../utils/errors.js';
+import { badRequest, unauthorized, notFound } from '../utils/errors.js';
 
 const SALT_ROUNDS = 10;
 const MIN_PARENT_PASSWORD = 8;
+
+const PARENT_REGISTER_GENERIC =
+  'تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً';
+
+const PARENT_RESET_GENERIC =
+  'تعذّر إعادة التعيين. تحقق من الجوال ومعرّف الطالب، أو تواصل مع المدرسة.';
 
 export async function hashPassword(password) {
   return bcrypt.hash(password, SALT_ROUNDS);
@@ -77,9 +84,6 @@ export async function loginParent(rawPhone, password) {
   return { token, phone, students };
 }
 
-const PARENT_REGISTER_GENERIC =
-  'تعذّر إنشاء الحساب. تحقق من البيانات أو سجّل الدخول إن كان الحساب موجوداً';
-
 /**
  * First-time parent registration — requires an active Student whose id matches
  * studentId and parentPhone matches the phone. Blocks phone-only takeover.
@@ -129,4 +133,106 @@ export async function registerParent(rawPhone, password, rawStudentId) {
   const students = await listActiveStudentsForPhone(phone);
   const token = signParentToken(phone);
   return { token, phone, students };
+}
+
+/**
+ * Forgot-password reset — same proof as register (phone + child national ID),
+ * but requires an existing ParentAccount and updates its passwordHash.
+ */
+export async function resetParentPassword(rawPhone, password, rawStudentId) {
+  let phone;
+  try {
+    phone = normalizePhone(rawPhone);
+  } catch {
+    throw badRequest(PARENT_RESET_GENERIC);
+  }
+
+  if (!password || typeof password !== 'string' || password.length < MIN_PARENT_PASSWORD) {
+    throw badRequest(`Password must be at least ${MIN_PARENT_PASSWORD} characters`);
+  }
+
+  const studentId = String(rawStudentId ?? '').trim();
+  if (!studentId) {
+    throw badRequest(PARENT_RESET_GENERIC);
+  }
+
+  const matched = await prisma.student.findFirst({
+    where: {
+      id: studentId,
+      parentPhone: phone,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+  if (!matched) {
+    throw badRequest(PARENT_RESET_GENERIC);
+  }
+
+  const existing = await prisma.parentAccount.findUnique({ where: { phone } });
+  if (!existing || !existing.isActive) {
+    throw badRequest(PARENT_RESET_GENERIC);
+  }
+
+  const passwordHash = await hashPassword(password);
+  await prisma.parentAccount.update({
+    where: { phone },
+    data: { passwordHash },
+  });
+
+  const students = await listActiveStudentsForPhone(phone);
+  if (students.length === 0) {
+    throw badRequest(PARENT_RESET_GENERIC);
+  }
+
+  const token = signParentToken(phone);
+  return { token, phone, students };
+}
+
+/** Staff-issued temporary password for a student's linked parent phone. */
+export function generateTempParentPassword() {
+  return `Parent${crypto.randomInt(100000, 999999)}`;
+}
+
+/**
+ * Staff: set a temporary password on ParentAccount for the student's parentPhone.
+ * Returns the plaintext password once. Creates no account if none exists.
+ */
+export async function staffResetParentPasswordForStudent(studentId) {
+  const id = String(studentId ?? '').trim();
+  if (!id) throw badRequest('معرّف الطالب مطلوب');
+
+  const student = await prisma.student.findFirst({
+    where: { id, isActive: true },
+    select: { id: true, parentPhone: true, nameAr: true },
+  });
+  if (!student) throw notFound('الطالب غير موجود');
+  if (!student.parentPhone) {
+    throw badRequest('لا يوجد جوال ولي أمر مسجّل لهذا الطالب');
+  }
+
+  const account = await prisma.parentAccount.findUnique({
+    where: { phone: student.parentPhone },
+  });
+  if (!account) {
+    throw badRequest(
+      'لا يوجد حساب ولي أمر لهذا الجوال بعد — يمكن لولي الأمر إنشاء كلمة مرور من التطبيق'
+    );
+  }
+  if (!account.isActive) {
+    throw badRequest('حساب ولي الأمر موقوف');
+  }
+
+  const temporaryPassword = generateTempParentPassword();
+  const passwordHash = await hashPassword(temporaryPassword);
+  await prisma.parentAccount.update({
+    where: { phone: student.parentPhone },
+    data: { passwordHash },
+  });
+
+  return {
+    phone: student.parentPhone,
+    studentId: student.id,
+    studentNameAr: student.nameAr,
+    temporaryPassword,
+  };
 }

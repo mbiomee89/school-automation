@@ -52,6 +52,24 @@ export async function registerParent(phone: string, password: string, studentId:
   })
 }
 
+export async function resetParentPassword(phone: string, password: string, studentId: string) {
+  return apiRequest<{
+    token: string
+    phone: string
+    students: Array<{
+      id: string
+      nameAr: string
+      nameEn: string
+      classId: number | null
+      class: { id: number; name: string; academicYear: string } | null
+    }>
+  }>('/auth/parent/reset-password', {
+    method: 'POST',
+    auth: false,
+    body: { phone, password, studentId },
+  })
+}
+
 export async function listParentStudents() {
   const data = await apiRequest<{ students: ParentChild[]; phone: string }>('/parent/students', {
     auth: 'parent',
@@ -125,6 +143,41 @@ export async function getParentWeeklyPlans(studentId: string, opts?: { date?: st
     className?: string
   }>(`/parent/students/${studentId}/weekly-plans${q ? `?${q}` : ''}`, { auth: 'parent' })
   return data
+}
+
+export async function getParentTimetable(studentId: string, opts?: { date?: string }) {
+  const qs = new URLSearchParams()
+  if (opts?.date) qs.set('date', opts.date)
+  const q = qs.toString()
+  return apiRequest<{
+    weekStart: string
+    weekEnd: string
+    academicYear: string | null
+    today: string
+    classId: number | null
+    className: string
+    studentId: string
+    studentNameAr: string
+    schoolName: string
+    educationAdminName?: string | null
+    logoUrl?: string | null
+    principalName?: string | null
+    days: Array<{
+      dayOfWeek: string
+      date: string
+      slots: Array<{
+        id: number
+        period: string
+        dayOfWeek: string
+        date: string
+        subjectId: number
+        subjectNameAr: string
+        subjectNameEn: string
+        teacherId?: number
+        teacherName?: string | null
+      }>
+    }>
+  }>(`/parent/students/${studentId}/timetable${q ? `?${q}` : ''}`, { auth: 'parent' })
 }
 
 export async function getParentNotifications(studentId: string) {

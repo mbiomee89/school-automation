@@ -60,6 +60,40 @@ export interface ReportBrand {
   principalName?: string | null
 }
 
+export interface ClassTimetableSlot {
+  id: number
+  period: string
+  dayOfWeek: string
+  date: string
+  subjectId: number
+  subjectNameAr: string
+  subjectNameEn: string
+  teacherId?: number
+  teacherName?: string | null
+}
+
+export interface ClassTimetableDay {
+  dayOfWeek: string
+  date: string
+  slots: ClassTimetableSlot[]
+}
+
+export interface ClassTimetable {
+  weekStart: string
+  weekEnd: string
+  academicYear: string | null
+  today: string
+  classId: number | null
+  className: string
+  studentId: string
+  studentNameAr: string
+  schoolName: string
+  educationAdminName?: string | null
+  logoUrl?: string | null
+  principalName?: string | null
+  days: ClassTimetableDay[]
+}
+
 export interface WeeklyPlanFormalRow {
   planId: number
   dayKey: string
@@ -168,6 +202,10 @@ export interface ParentPortalProps {
   weeklyPlanWeekEnd?: string | null
   reportBrand?: ReportBrand
   reportClassName?: string
+  /** Class weekly timetable for home (paper sheet). */
+  classTimetable?: ClassTimetable | null
+  classTimetableError?: string | null
+  classTimetableLoading?: boolean
   /** WhatsApp notification log — hidden in UI for now (manual messaging). */
   notifications?: NotificationItem[]
   excuseSubmissions: ExcuseSubmission[]
@@ -201,7 +239,7 @@ export interface ParentPortalProps {
   onWeeklyPlanAnchorDateChange?: (date: string) => void
 }
 
-export type ParentLoginMode = 'login' | 'register'
+export type ParentLoginMode = 'login' | 'register' | 'reset'
 
 export type ParentLoginErrorCode =
   | 'INVALID_PHONE'
@@ -210,6 +248,7 @@ export type ParentLoginErrorCode =
   | 'ACCOUNT_EXISTS'
   | 'WEAK_PASSWORD'
   | 'STUDENT_ID_REQUIRED'
+  | 'RESET_FAILED'
   | 'NETWORK'
 
 export interface ParentLoginBrand {
@@ -220,7 +259,7 @@ export interface ParentLoginBrand {
 export interface ParentLoginProps {
   /** Optional school branding stamped on the login screen. */
   brand?: ParentLoginBrand
-  /** login = existing account; register = first-time password setup. */
+  /** login = existing account; register = first-time; reset = forgot password. */
   mode?: ParentLoginMode
   /** Prefill phone for demos. */
   initialPhone?: string
@@ -233,8 +272,8 @@ export interface ParentLoginProps {
 
   onModeChange?: (mode: ParentLoginMode) => void
   /**
-   * Submit credentials. `studentId` is required in register mode (national ID
-   * of one child linked to this phone).
+   * Submit credentials. `studentId` is required in register and reset modes
+   * (national ID of one child linked to this phone).
    */
   onSubmit?: (credentials: {
     phone: string

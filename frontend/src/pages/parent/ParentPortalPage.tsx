@@ -9,6 +9,7 @@ import {
   getParentExcuses,
   getParentHomework,
   getParentSummary,
+  getParentTimetable,
   getParentWeeklyPlans,
   submitExcuse,
   type ParentChild,
@@ -19,6 +20,7 @@ import { ParentPortal } from '../../sections/parent-portal/ParentPortal'
 import { PARENT_PORTAL_THEME, schoolTodayIso } from '../../sections/parent-portal/theme'
 import type {
   AttendanceDay,
+  ClassTimetable,
   EarlyLeaveRequest,
   ExcuseSubmission,
   HomeworkItem,
@@ -75,6 +77,9 @@ export function ParentPortalPage() {
   const [excuseSubmissions, setExcuseSubmissions] = useState<ExcuseSubmission[]>([])
   const [earlyLeaveRequests, setEarlyLeaveRequests] = useState<EarlyLeaveRequest[]>([])
   const [homeworkBrowseDate, setHomeworkBrowseDate] = useState(() => schoolTodayIso())
+  const [classTimetable, setClassTimetable] = useState<ClassTimetable | null>(null)
+  const [classTimetableError, setClassTimetableError] = useState<string | null>(null)
+  const [classTimetableLoading, setClassTimetableLoading] = useState(false)
 
   useEffect(() => {
     if (students.length === 0) return
@@ -89,48 +94,99 @@ export function ParentPortalPage() {
   const loadChild = useCallback(async (studentId: string, browseDate: string, planAnchor: string) => {
     const gen = ++loadGen.current
     setError(null)
-    const [summary, attendance, homeworkRes, plansRes, excuses, earlyLeave] = await Promise.all([
-      getParentSummary(studentId),
-      getParentAttendance(studentId),
-      getParentHomework(studentId, { date: browseDate }),
-      getParentWeeklyPlans(studentId, { date: planAnchor }),
-      getParentExcuses(studentId),
-      getParentEarlyLeave(studentId),
-    ])
-    if (gen !== loadGen.current) return
+    setClassTimetableLoading(true)
+    setClassTimetableError(null)
 
-    let todayHomework = homeworkRes.homework
-    if (browseDate !== summary.date) {
-      const todayRes = await getParentHomework(studentId, { date: summary.date })
+    try {
+      const [summary, attendance, homeworkRes, plansRes, excuses, earlyLeave, timetableResult] =
+        await Promise.all([
+          getParentSummary(studentId),
+          getParentAttendance(studentId),
+          getParentHomework(studentId, { date: browseDate }),
+          getParentWeeklyPlans(studentId, { date: planAnchor }),
+          getParentExcuses(studentId),
+          getParentEarlyLeave(studentId),
+          getParentTimetable(studentId).then(
+            (data) => ({ ok: true as const, data }),
+            (err) => ({ ok: false as const, err })
+          ),
+        ])
       if (gen !== loadGen.current) return
-      todayHomework = todayRes.homework
-    }
 
-    setTodaySummary({
-      date: summary.date,
-      attendanceStatus: summary.attendanceStatus,
-      homeworkDueCount: summary.homeworkDueCount,
-      newAlertsCount: summary.newAlertsCount,
-    })
-    setAttendanceHistory(attendance)
-    setHomeworkItems(homeworkRes.homework)
-    setHomeHomeworkItems(todayHomework)
-    setWeeklyPlans(plansRes.weeklyPlans ?? [])
-    setWeeklyPlanRows(plansRes.rows ?? [])
-    setWeeklyPlanWeekStart(plansRes.weekStart ?? null)
-    setWeeklyPlanWeekEnd(plansRes.weekEnd ?? null)
-    setReportBrand({
-      schoolName: homeworkRes.schoolName || plansRes.schoolName || 'المدرسة',
-      academicYear: homeworkRes.academicYear || plansRes.academicYear || '',
-      educationAdminName: homeworkRes.educationAdminName ?? plansRes.educationAdminName ?? null,
-      logoUrl: homeworkRes.logoUrl ?? plansRes.logoUrl ?? null,
-      principalName: homeworkRes.principalName ?? plansRes.principalName ?? null,
-    })
-    setReportClassName(homeworkRes.className || plansRes.className || 'بدون فصل')
-    setExcuseSubmissions(excuses)
-    setEarlyLeaveRequests(earlyLeave)
-    setLoadedChildId(studentId)
-    lastPlanAnchorLoaded.current = planAnchor
+      let todayHomework = homeworkRes.homework
+      if (browseDate !== summary.date) {
+        const todayRes = await getParentHomework(studentId, { date: summary.date })
+        if (gen !== loadGen.current) return
+        todayHomework = todayRes.homework
+      }
+
+      setTodaySummary({
+        date: summary.date,
+        attendanceStatus: summary.attendanceStatus,
+        homeworkDueCount: summary.homeworkDueCount,
+        newAlertsCount: summary.newAlertsCount,
+      })
+      setAttendanceHistory(attendance)
+      setHomeworkItems(homeworkRes.homework)
+      setHomeHomeworkItems(todayHomework)
+      setWeeklyPlans(plansRes.weeklyPlans ?? [])
+      setWeeklyPlanRows(plansRes.rows ?? [])
+      setWeeklyPlanWeekStart(plansRes.weekStart ?? null)
+      setWeeklyPlanWeekEnd(plansRes.weekEnd ?? null)
+      setReportBrand({
+        schoolName: homeworkRes.schoolName || plansRes.schoolName || 'المدرسة',
+        academicYear: homeworkRes.academicYear || plansRes.academicYear || '',
+        educationAdminName: homeworkRes.educationAdminName ?? plansRes.educationAdminName ?? null,
+        logoUrl: homeworkRes.logoUrl ?? plansRes.logoUrl ?? null,
+        principalName: homeworkRes.principalName ?? plansRes.principalName ?? null,
+      })
+      setReportClassName(homeworkRes.className || plansRes.className || 'بدون فصل')
+      setExcuseSubmissions(excuses)
+      setEarlyLeaveRequests(earlyLeave)
+
+      if (timetableResult.ok) {
+        const t = timetableResult.data
+        setClassTimetable({
+          weekStart: t.weekStart,
+          weekEnd: t.weekEnd,
+          academicYear: t.academicYear,
+          today: t.today,
+          classId: t.classId,
+          className: t.className,
+          studentId: t.studentId,
+          studentNameAr: t.studentNameAr,
+          schoolName: t.schoolName,
+          educationAdminName: t.educationAdminName,
+          logoUrl: t.logoUrl,
+          principalName: t.principalName,
+          days: t.days,
+        })
+        setClassTimetableError(null)
+        if (t.schoolName) {
+          setReportBrand((prev) => ({
+            ...prev,
+            schoolName: t.schoolName || prev.schoolName,
+            academicYear: t.academicYear || prev.academicYear,
+            educationAdminName: t.educationAdminName ?? prev.educationAdminName,
+            logoUrl: t.logoUrl ?? prev.logoUrl,
+            principalName: t.principalName ?? prev.principalName,
+          }))
+        }
+        if (t.className) setReportClassName(t.className)
+      } else {
+        setClassTimetable(null)
+        setClassTimetableError(
+          timetableResult.err instanceof ApiError
+            ? timetableResult.err.message
+            : 'تعذّر تحميل الجدول الأسبوعي'
+        )
+      }
+
+      setLoadedChildId(studentId)
+      lastPlanAnchorLoaded.current = planAnchor
+    } finally {
+      if (gen === loadGen.current) setClassTimetableLoading(false)
+    }
   }, [])
 
   const loadWeeklyPlanOnly = useCallback(async (studentId: string, planAnchor: string) => {
@@ -316,6 +372,9 @@ export function ParentPortalPage() {
       weeklyPlanWeekEnd={weeklyPlanWeekEnd}
       reportBrand={reportBrand}
       reportClassName={reportClassName}
+      classTimetable={classTimetable}
+      classTimetableError={classTimetableError}
+      classTimetableLoading={classTimetableLoading}
       excuseSubmissions={excuseSubmissions}
       earlyLeaveRequests={earlyLeaveRequests}
       homeworkBrowseDate={homeworkBrowseDate}

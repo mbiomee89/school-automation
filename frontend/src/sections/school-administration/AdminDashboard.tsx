@@ -41,6 +41,7 @@ import { Modal } from '../../shared/Modal'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { ApiError } from '../../api/client'
 import { PhoneText } from '../../shared/PhoneText'
+import { resetParentPasswordForStudent } from '../../api/admin'
 
 const TABS: { id: AdminTab; label: string }[] = [
   { id: 'overview', label: 'نظرة عامة' },
@@ -243,6 +244,13 @@ export function AdminDashboard({
   const [tab, setTab] = useState<AdminTab>(controlledTab ?? 'overview')
   const [query, setQuery] = useState('')
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null)
+  const [parentResetBusy, setParentResetBusy] = useState(false)
+  const [parentResetResult, setParentResetResult] = useState<{
+    phone: string
+    studentNameAr: string
+    temporaryPassword: string
+  } | null>(null)
+  const [parentResetError, setParentResetError] = useState<string | null>(null)
   const [promoteFor, setPromoteFor] = useState<Student | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<Student | null>(null)
   const [studentClassFilter, setStudentClassFilter] = useState<'ALL' | 'UNASSIGNED' | number>('ALL')
@@ -2152,7 +2160,10 @@ export function AdminDashboard({
             type="button"
             className="absolute inset-0 bg-slate-950/40"
             aria-label="إغلاق"
-            onClick={() => setSelectedStudentId(null)}
+            onClick={() => {
+              setSelectedStudentId(null)
+              setParentResetError(null)
+            }}
           />
           <aside className="relative z-50 flex h-full w-full max-w-md flex-col border-e border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
             <div className="flex items-start justify-between border-b border-slate-100 px-4 py-4 dark:border-slate-800">
@@ -2165,7 +2176,10 @@ export function AdminDashboard({
               </div>
               <button
                 type="button"
-                onClick={() => setSelectedStudentId(null)}
+                onClick={() => {
+                  setSelectedStudentId(null)
+                  setParentResetError(null)
+                }}
                 className="rounded p-1 hover:bg-slate-100 dark:hover:bg-slate-800"
                 aria-label="إغلاق"
               >
@@ -2189,6 +2203,55 @@ export function AdminDashboard({
                   تعديل البيانات
                 </button>
               </div>
+              <div className="mt-4 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  كلمة مرور بوابة ولي الأمر
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  إذا نسي ولي الأمر كلمة المرور ولا يستطيع إعادة التعيين بنفسه، عيّن كلمة مرور مؤقتة
+                  وأخبروه بها مرة واحدة.
+                </p>
+                {parentResetError && (
+                  <p className="mt-2 text-sm text-rose-600" role="alert">
+                    {parentResetError}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  disabled={parentResetBusy}
+                  className={buttonVariants({
+                    variant: 'secondary',
+                    className: 'mt-3 min-h-10 w-full cursor-pointer',
+                  })}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        'تعيين كلمة مرور مؤقتة لولي الأمر؟ ستُلغى كلمة المرور الحالية فوراً.'
+                      )
+                    ) {
+                      return
+                    }
+                    setParentResetBusy(true)
+                    setParentResetError(null)
+                    try {
+                      const result = await resetParentPasswordForStudent(selectedStudent.id)
+                      setParentResetResult({
+                        phone: result.phone,
+                        studentNameAr: result.studentNameAr,
+                        temporaryPassword: result.temporaryPassword,
+                      })
+                    } catch (err) {
+                      setParentResetError(
+                        err instanceof ApiError ? err.message : 'فشل إعادة تعيين كلمة المرور'
+                      )
+                    } finally {
+                      setParentResetBusy(false)
+                    }
+                  }}
+                >
+                  {parentResetBusy ? 'جارٍ التعيين…' : 'إعادة تعيين كلمة مرور ولي الأمر'}
+                </button>
+              </div>
               <h3 className="mt-6 mb-2 font-bold">سجل الالتحاق بالفصول</h3>
               <ul className="space-y-2">
                 {studentEnrollments.map((e) => (
@@ -2210,6 +2273,47 @@ export function AdminDashboard({
           </aside>
         </div>
       )}
+
+      <Modal
+        open={!!parentResetResult}
+        onClose={() => setParentResetResult(null)}
+        title="كلمة المرور المؤقتة لولي الأمر"
+        description="انسخها وأبلغ ولي الأمر الآن — لن تُعرض مرة أخرى."
+      >
+        {parentResetResult && (
+          <div className="space-y-3 text-sm">
+            <p>
+              الطالب: <span className="font-semibold">{parentResetResult.studentNameAr}</span>
+            </p>
+            <p>
+              الجوال:{' '}
+              <span dir="ltr" style={fontMono}>
+                {parentResetResult.phone}
+              </span>
+            </p>
+            <div className="rounded-xl bg-slate-100 px-3 py-3 dark:bg-slate-900">
+              <p className="text-xs text-slate-500">كلمة المرور المؤقتة</p>
+              <p className="mt-1 text-lg font-bold tracking-wide" dir="ltr" style={fontMono}>
+                {parentResetResult.temporaryPassword}
+              </p>
+            </div>
+            <button
+              type="button"
+              className={buttonVariants({ variant: 'primary', className: 'min-h-10 w-full' })}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(parentResetResult.temporaryPassword)
+                } catch {
+                  /* ignore */
+                }
+                setParentResetResult(null)
+              }}
+            >
+              نسخ وإغلاق
+            </button>
+          </div>
+        )}
+      </Modal>
 
       <Modal
         open={showStudentModal}

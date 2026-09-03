@@ -11,6 +11,7 @@ import {
   signStaffToken,
   loginParent,
   registerParent,
+  resetParentPassword,
 } from '../services/auth.js';
 import { unauthorized, badRequest } from '../utils/errors.js';
 
@@ -104,6 +105,20 @@ router.post(
   asyncHandler(async (req, res) => {
     const result = await registerParent(req.body.phone, req.body.password, req.body.studentId);
     res.status(201).json(result);
+  })
+);
+
+/**
+ * POST /auth/parent/reset-password — forgot password. Same proof as register
+ * (phone + studentId) but updates an existing ParentAccount.
+ */
+router.post(
+  '/parent/reset-password',
+  authLimiter,
+  validateBody(parentRegisterSchema),
+  asyncHandler(async (req, res) => {
+    const result = await resetParentPassword(req.body.phone, req.body.password, req.body.studentId);
+    res.json(result);
   })
 );
 

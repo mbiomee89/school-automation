@@ -8,7 +8,7 @@ import type { ParentLoginErrorCode, ParentLoginMode } from '../../sections/paren
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
 
 export function ParentLoginPage() {
-  const { login, register, isAuthenticated, bootstrapping } = useParentAuth()
+  const { login, register, resetPassword, isAuthenticated, bootstrapping } = useParentAuth()
   const navigate = useNavigate()
   const [mode, setMode] = useState<ParentLoginMode>('login')
   const [errorCode, setErrorCode] = useState<ParentLoginErrorCode | null>(null)
@@ -45,6 +45,8 @@ export function ParentLoginPage() {
         try {
           if (submitMode === 'register') {
             await register(phone, password, studentId ?? '')
+          } else if (submitMode === 'reset') {
+            await resetPassword(phone, password, studentId ?? '')
           } else {
             await login(phone, password)
           }
@@ -58,7 +60,10 @@ export function ParentLoginPage() {
             } else if (err.status === 400) {
               const msg = err.message.toLowerCase()
               if (msg.includes('password')) setErrorCode('WEAK_PASSWORD')
-              else setErrorMessage(err.message)
+              else if (submitMode === 'reset') {
+                setErrorCode('RESET_FAILED')
+                setErrorMessage(err.message)
+              } else setErrorMessage(err.message)
             } else {
               setErrorCode('NETWORK')
             }

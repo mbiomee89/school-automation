@@ -18,9 +18,11 @@ import {
   addDaysToDateOnlyStr,
   weekdayUtcFromDateOnly,
   weekStartSaturdayUtc,
+  schoolDateOnlyStr,
 } from '../utils/dates.js';
 import { normalizePhone } from '../utils/phone.js';
 import { schoolLogoUrl } from '../services/schoolLogo.js';
+import { getClassWeekSchedule } from '../services/timetableImport.js';
 
 const router = Router();
 
@@ -402,6 +404,43 @@ router.get(
       weekEnd: weekEnd.toISOString().slice(0, 10),
       rows,
       weeklyPlans,
+    });
+  })
+);
+
+const timetableQuery = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+});
+
+/** GET /parent/students/:id/timetable — class weekly schedule for parent home */
+router.get(
+  '/students/:id/timetable',
+  validateParams(studentIdParam),
+  validateQuery(timetableQuery),
+  asyncHandler(async (req, res) => {
+    const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const header = await schoolHeader();
+    const anchor = req.query.date || schoolDateOnlyStr();
+
+    if (student.classId == null) {
+      const empty = await getClassWeekSchedule(null, anchor, header.academicYear || undefined);
+      return res.json({
+        ...header,
+        ...empty,
+        classId: null,
+        className: 'بدون فصل',
+        studentId: student.id,
+        studentNameAr: student.nameAr,
+      });
+    }
+
+    const schedule = await getClassWeekSchedule(student.classId, anchor);
+    res.json({
+      ...header,
+      ...schedule,
+      className: schedule.className || student.class?.name || 'بدون فصل',
+      studentId: student.id,
+      studentNameAr: student.nameAr,
     });
   })
 );

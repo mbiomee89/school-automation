@@ -13,6 +13,7 @@ const ERROR_AR: Record<ParentLoginErrorCode, string> = {
   ACCOUNT_EXISTS: 'يوجد حساب لهذا الرقم مسبقاً — سجّل الدخول بدل الإنشاء.',
   WEAK_PASSWORD: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.',
   STUDENT_ID_REQUIRED: 'أدخل معرّف / رقم هوية أحد أبنائك المسجّلين على هذا الجوال.',
+  RESET_FAILED: 'تعذّر إعادة التعيين. تحقق من الجوال ومعرّف الطالب، أو تواصل مع المدرسة.',
   NETWORK: 'تعذّر الاتصال. تحقق من الإنترنت وحاول مرة أخرى.',
 }
 
@@ -74,12 +75,12 @@ export function ParentLogin({
       setLocalError('INVALID_CREDENTIALS')
       return
     }
-    if (currentMode === 'register' && password.length < 8) {
+    if ((currentMode === 'register' || currentMode === 'reset') && password.length < 8) {
       setLocalError('WEAK_PASSWORD')
       return
     }
     const trimmedStudentId = studentId.trim()
-    if (currentMode === 'register' && !trimmedStudentId) {
+    if ((currentMode === 'register' || currentMode === 'reset') && !trimmedStudentId) {
       setLocalError('STUDENT_ID_REQUIRED')
       return
     }
@@ -87,7 +88,9 @@ export function ParentLogin({
       phone: trimmedPhone,
       password,
       mode: currentMode,
-      ...(currentMode === 'register' ? { studentId: trimmedStudentId } : {}),
+      ...((currentMode === 'register' || currentMode === 'reset')
+        ? { studentId: trimmedStudentId }
+        : {}),
     })
   }
 
@@ -132,37 +135,58 @@ export function ParentLogin({
           noValidate
           className="space-y-5 rounded-3xl bg-[color:var(--pp-sand)] p-6 shadow-sm ring-1 ring-[color:var(--pp-ink)]/8 sm:p-8"
         >
-          <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/70 p-1">
-            <button
-              type="button"
-              onClick={() => switchMode('login')}
-              className={cn(
-                'min-h-11 cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors',
-                currentMode === 'login'
-                  ? 'bg-[color:var(--pp-primary)] text-white shadow-sm'
-                  : 'text-[color:var(--pp-ink)]/55'
-              )}
-            >
-              تسجيل الدخول
-            </button>
-            <button
-              type="button"
-              onClick={() => switchMode('register')}
-              className={cn(
-                'min-h-11 cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors',
-                currentMode === 'register'
-                  ? 'bg-[color:var(--pp-primary)] text-white shadow-sm'
-                  : 'text-[color:var(--pp-ink)]/55'
-              )}
-            >
-              إنشاء كلمة مرور
-            </button>
-          </div>
+          {currentMode !== 'reset' && (
+            <div className="grid grid-cols-2 gap-1 rounded-xl bg-white/70 p-1">
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className={cn(
+                  'min-h-11 cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors',
+                  currentMode === 'login'
+                    ? 'bg-[color:var(--pp-primary)] text-white shadow-sm'
+                    : 'text-[color:var(--pp-ink)]/55'
+                )}
+              >
+                تسجيل الدخول
+              </button>
+              <button
+                type="button"
+                onClick={() => switchMode('register')}
+                className={cn(
+                  'min-h-11 cursor-pointer rounded-lg py-2 text-sm font-semibold transition-colors',
+                  currentMode === 'register'
+                    ? 'bg-[color:var(--pp-primary)] text-white shadow-sm'
+                    : 'text-[color:var(--pp-ink)]/55'
+                )}
+              >
+                إنشاء كلمة مرور
+              </button>
+            </div>
+          )}
+
+          {currentMode === 'reset' && (
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-base font-bold text-[color:var(--pp-ink)]">نسيت كلمة المرور</h2>
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className="cursor-pointer text-sm font-semibold text-[color:var(--pp-primary)] hover:underline"
+              >
+                رجوع لتسجيل الدخول
+              </button>
+            </div>
+          )}
 
           {currentMode === 'register' && (
             <p className="rounded-xl bg-[color:var(--pp-primary-soft)] px-3 py-2 text-xs text-[color:var(--pp-ink)]">
               لأول مرة فقط: أدخل رقم الجوال المسجّل لدى المدرسة ومعرّف أحد أبنائك على هذا الجوال، ثم اختر
               كلمة مرور (8 أحرف على الأقل).
+            </p>
+          )}
+
+          {currentMode === 'reset' && (
+            <p className="rounded-xl bg-[color:var(--pp-primary-soft)] px-3 py-2 text-xs text-[color:var(--pp-ink)]">
+              أدخل رقم الجوال ومعرّف أحد أبنائك المسجّلين عليه، ثم اختر كلمة مرور جديدة (8 أحرف على الأقل).
             </p>
           )}
 
@@ -196,7 +220,7 @@ export function ParentLogin({
             </div>
           </label>
 
-          {currentMode === 'register' && (
+          {(currentMode === 'register' || currentMode === 'reset') && (
             <label className="block text-sm" htmlFor={studentIdFieldId}>
               <span className="font-medium text-[color:var(--pp-ink)]">
                 معرّف الطالب / رقم الهوية <span className="text-[color:var(--pp-danger)]">*</span>
@@ -233,7 +257,8 @@ export function ParentLogin({
 
           <label className="block text-sm" htmlFor={passwordId}>
             <span className="font-medium text-[color:var(--pp-ink)]">
-              كلمة المرور <span className="text-[color:var(--pp-danger)]">*</span>
+              {currentMode === 'reset' ? 'كلمة المرور الجديدة' : 'كلمة المرور'}{' '}
+              <span className="text-[color:var(--pp-danger)]">*</span>
             </span>
             <div className="relative mt-1.5">
               <Lock
@@ -270,6 +295,18 @@ export function ParentLogin({
             </div>
           </label>
 
+          {currentMode === 'login' && (
+            <div className="text-start">
+              <button
+                type="button"
+                onClick={() => switchMode('reset')}
+                className="cursor-pointer text-sm font-semibold text-[color:var(--pp-primary)] hover:underline"
+              >
+                نسيت كلمة المرور؟
+              </button>
+            </div>
+          )}
+
           {displayError && (
             <p
               role="alert"
@@ -289,7 +326,9 @@ export function ParentLogin({
               ? 'جارٍ المتابعة…'
               : currentMode === 'login'
                 ? 'تسجيل الدخول'
-                : 'إنشاء الحساب والدخول'}
+                : currentMode === 'reset'
+                  ? 'تعيين كلمة المرور والدخول'
+                  : 'إنشاء الحساب والدخول'}
           </button>
         </form>
 

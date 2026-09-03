@@ -3,6 +3,7 @@ import {
   listParentStudents,
   loginParent,
   registerParent,
+  resetParentPassword,
   type ParentChild,
 } from '../api/parent'
 import { getParentToken, setParentToken } from '../api/client'
@@ -75,6 +76,14 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
     [applySession]
   )
 
+  const resetPassword = useCallback(
+    async (rawPhone: string, password: string, studentId: string) => {
+      const result = await resetParentPassword(rawPhone, password, studentId)
+      await applySession(result.token, result.phone)
+    },
+    [applySession]
+  )
+
   const logout = useCallback(() => {
     setParentToken(null)
     setTokenState(null)
@@ -91,11 +100,12 @@ export function ParentAuthProvider({ children }: { children: ReactNode }) {
       isAuthenticated: !!token && !!phone,
       login,
       register,
+      resetPassword,
       logout,
       refreshStudents,
       setStudents,
     }),
-    [token, phone, students, bootstrapping, login, register, logout, refreshStudents]
+    [token, phone, students, bootstrapping, login, register, resetPassword, logout, refreshStudents]
   )
 
   return <ParentAuthContext.Provider value={value}>{children}</ParentAuthContext.Provider>

@@ -808,3 +808,87 @@ export async function getTeacherWeekSchedule(teacherId, anchorDateStr, academicY
     days,
   };
 }
+
+/**
+ * Read-only Sun–Thu week grid for a class (parent portal / class timetable).
+ * Cells are subject-focused; teacher name is included for optional future use.
+ */
+export async function getClassWeekSchedule(classId, anchorDateStr, academicYear) {
+  const settings = await prisma.schoolSettings.findFirst();
+  const year = academicYear || settings?.academicYear;
+  const weekStart = weekStartSunday(anchorDateStr || schoolDateOnlyStr());
+  const weekEnd = addUtcDays(weekStart, 4);
+  const today = schoolDateOnlyStr();
+
+  const emptyDays = () =>
+    DAY_ORDER.map((dayOfWeek, i) => ({
+      dayOfWeek,
+      date: addUtcDays(weekStart, i),
+      slots: [],
+    }));
+
+  if (!classId || !year) {
+    return {
+      weekStart,
+      weekEnd,
+      academicYear: year ?? null,
+      today,
+      classId: classId ?? null,
+      className: null,
+      days: emptyDays(),
+    };
+  }
+
+  const cls = await prisma.class.findUnique({
+    where: { id: classId },
+    select: { id: true, name: true },
+  });
+  if (!cls) {
+    return {
+      weekStart,
+      weekEnd,
+      academicYear: year,
+      today,
+      classId,
+      className: null,
+      days: emptyDays(),
+    };
+  }
+
+  const slots = await prisma.timetableSlot.findMany({
+    where: { classId, academicYear: year, dayOfWeek: { in: DAY_ORDER } },
+    include: {
+      subject: { select: { id: true, nameAr: true, nameEn: true } },
+      teacher: { select: { id: true, name: true } },
+    },
+  });
+
+  const days = DAY_ORDER.map((dayOfWeek, i) => {
+    const date = addUtcDays(weekStart, i);
+    const daySlots = slots
+      .filter((s) => s.dayOfWeek === dayOfWeek)
+      .map((s) => ({
+        id: s.id,
+        period: s.period,
+        dayOfWeek: s.dayOfWeek,
+        date,
+        subjectId: s.subjectId,
+        subjectNameAr: s.subject.nameAr,
+        subjectNameEn: s.subject.nameEn,
+        teacherId: s.teacherId,
+        teacherName: s.teacher?.name ?? null,
+      }))
+      .sort((a, b) => Number(a.period) - Number(b.period));
+    return { dayOfWeek, date, slots: daySlots };
+  });
+
+  return {
+    weekStart,
+    weekEnd,
+    academicYear: year,
+    today,
+    classId: cls.id,
+    className: cls.name,
+    days,
+  };
+}

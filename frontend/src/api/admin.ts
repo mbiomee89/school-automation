@@ -406,6 +406,18 @@ export async function updateStudent(id: string, input: Omit<StudentInput, 'id' |
   return mapStudent(data.student)
 }
 
+/** Staff: issue a temporary parent portal password for the student's linked phone. */
+export async function resetParentPasswordForStudent(studentId: string) {
+  return apiRequest<{
+    phone: string
+    studentId: string
+    studentNameAr: string
+    temporaryPassword: string
+  }>(`/students/${studentId}/reset-parent-password`, {
+    method: 'POST',
+  })
+}
+
 export async function softRemoveStudent(id: string) {
   const data = await apiRequest<{ student: ApiStudent }>(`/students/${id}`, { method: 'DELETE' })
   return mapStudent(data.student)

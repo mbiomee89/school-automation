@@ -22,6 +22,7 @@ import { ExcuseSubmissionsList } from './ExcuseSubmissionsList'
 import { HomeworkList } from './HomeworkList'
 import { ParentHomeworkSheet } from './ParentHomeworkSheet'
 import { ParentWeeklyPlanSheet } from './ParentWeeklyPlanSheet'
+import { ParentClassTimetable } from './ParentClassTimetable'
 import { SegmentedTabs } from './SegmentedTabs'
 import { DayChipStrip } from './DayChipStrip'
 import { EarlyLeavePanel } from './EarlyLeavePanel'
@@ -59,6 +60,9 @@ export function ParentPortal({
   weeklyPlanWeekEnd,
   reportBrand,
   reportClassName,
+  classTimetable = null,
+  classTimetableError = null,
+  classTimetableLoading = false,
   excuseSubmissions,
   earlyLeaveRequests = [],
   activeTab: controlledTab,
@@ -154,33 +158,41 @@ export function ParentPortal({
     <div
       dir="rtl"
       lang="ar"
-      className="flex min-h-screen justify-center bg-[color:var(--pp-sky)] text-[color:var(--pp-ink)]"
+      className="flex min-h-screen justify-center bg-[color:var(--pp-sky)] text-[color:var(--pp-ink)] print:block print:bg-white"
       style={{ ...fontArabic, ...PARENT_PORTAL_THEME }}
     >
-      <div className="flex min-h-screen w-full max-w-md flex-col bg-[color:var(--pp-sky)]">
-        <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--pp-ink)]/8 bg-[color:var(--pp-sand)]/90 px-4 py-2.5 backdrop-blur-sm">
+      <div className="flex min-h-screen w-full max-w-md flex-col bg-[color:var(--pp-sky)] print:max-w-none print:bg-white">
+        <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-3 border-b border-[color:var(--pp-ink)]/8 bg-[color:var(--pp-sand)]/90 px-4 py-2.5 backdrop-blur-sm print:hidden">
           <ChildSwitcher children={children} activeChildId={activeChildId} onSelectChild={onSelectChild} />
           <p className="shrink-0 text-xs font-semibold text-[color:var(--pp-ink)]/45">بوابة ولي الأمر</p>
         </header>
 
-        <main className="flex-1 overflow-y-auto px-4 py-5">
+        <main className="flex-1 overflow-y-auto px-4 py-5 print:overflow-visible print:p-0">
           {safeTab === 'home' && (
             <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none">
-              <TodayScene
-                date={todaySummary.date}
-                attendanceStatus={todaySummary.attendanceStatus}
-                childName={activeChild?.nameAr}
-                className={activeChild?.className}
-                homeworkDueCount={todaySummary.homeworkDueCount}
-                needsExcuseCount={needsExcuseDays.length}
-                onOpenHomework={() => switchTab('homework')}
-                onOpenExcuse={() => {
-                  if (needsExcuseDays[0]) openExcuseFlow(needsExcuseDays[0])
-                  else switchTab('attendance')
-                }}
+              <div className="print:hidden">
+                <TodayScene
+                  date={todaySummary.date}
+                  attendanceStatus={todaySummary.attendanceStatus}
+                  childName={activeChild?.nameAr}
+                  className={activeChild?.className}
+                  homeworkDueCount={todaySummary.homeworkDueCount}
+                  needsExcuseCount={needsExcuseDays.length}
+                  onOpenHomework={() => switchTab('homework')}
+                  onOpenExcuse={() => {
+                    if (needsExcuseDays[0]) openExcuseFlow(needsExcuseDays[0])
+                    else switchTab('attendance')
+                  }}
+                />
+              </div>
+
+              <ParentClassTimetable
+                timetable={classTimetable}
+                loading={classTimetableLoading}
+                error={classTimetableError}
               />
 
-              <section>
+              <section className="print:hidden">
                 {todaysHomework.length > 0 ? (
                   <div className="mb-2 flex items-center justify-between">
                     <h2 className="text-sm font-bold text-[color:var(--pp-ink)]">واجبات اليوم</h2>
@@ -205,7 +217,7 @@ export function ParentPortal({
           )}
 
           {safeTab === 'attendance' && (
-            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none print:hidden">
               <SegmentedTabs
                 label="عرض الغياب"
                 value={attendanceView}
@@ -242,7 +254,7 @@ export function ParentPortal({
           )}
 
           {safeTab === 'homework' && (
-            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none print:hidden">
               <SegmentedTabs
                 label="الواجبات والخطط"
                 value={homeworkView}
@@ -286,17 +298,19 @@ export function ParentPortal({
           )}
 
           {safeTab === 'early-leave' && (
-            <EarlyLeavePanel
-              today={todaySummary.date}
-              requests={earlyLeaveRequests}
-              onSubmit={onSubmitEarlyLeave}
-              onCancel={onCancelEarlyLeave}
-              onToast={showToast}
-            />
+            <div className="print:hidden">
+              <EarlyLeavePanel
+                today={todaySummary.date}
+                requests={earlyLeaveRequests}
+                onSubmit={onSubmitEarlyLeave}
+                onCancel={onCancelEarlyLeave}
+                onToast={showToast}
+              />
+            </div>
           )}
 
           {safeTab === 'settings' && (
-            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none">
+            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none print:hidden">
               <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[color:var(--pp-ink)]/8">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-[color:var(--pp-primary-soft)] text-[color:var(--pp-primary)]">
@@ -336,13 +350,15 @@ export function ParentPortal({
           )}
         </main>
 
-        <BottomTabBar activeTab={safeTab} onSelect={switchTab} />
+        <div className="print:hidden">
+          <BottomTabBar activeTab={safeTab} onSelect={switchTab} />
+        </div>
       </div>
 
       {toast ? (
         <div
           role="status"
-          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-full max-w-md px-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200 motion-reduce:animate-none"
+          className="fixed inset-x-0 bottom-24 z-50 mx-auto w-full max-w-md px-4 animate-in fade-in-0 slide-in-from-bottom-2 duration-200 motion-reduce:animate-none print:hidden"
         >
           <p className="rounded-2xl bg-[color:var(--pp-ink)] px-4 py-3 text-center text-sm font-medium text-white shadow-lg">
             {toast}

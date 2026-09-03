@@ -12,6 +12,7 @@ import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { normalizePhone } from '../utils/phone.js';
 import { migrateParentPhoneOnStudentChange } from '../services/parentPhoneSync.js';
+import { staffResetParentPasswordForStudent } from '../services/auth.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.js';
 import { closeOpenEnrollments, openEnrollment } from '../services/enrollment.js';
@@ -326,6 +327,20 @@ router.patch(
       select: studentSelect,
     });
     res.json({ student });
+  })
+);
+
+/**
+ * POST /students/:id/reset-parent-password — staff issues a temporary parent password.
+ * ADMIN + STUDENT_AFFAIRS only. Returns plaintext password once.
+ */
+router.post(
+  '/:id/reset-parent-password',
+  requireRole('ADMIN', 'STUDENT_AFFAIRS'),
+  validateParams(studentIdParam),
+  asyncHandler(async (req, res) => {
+    const result = await staffResetParentPasswordForStudent(req.params.id);
+    res.json(result);
   })
 );
 

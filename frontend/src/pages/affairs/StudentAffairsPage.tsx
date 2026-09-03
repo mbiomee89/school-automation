@@ -15,7 +15,7 @@ import {
   type StudentProfilePayload,
   type StudentProfileSubmission,
 } from '../../api/studentProfile'
-import { getSchoolSettings, listClasses, listStudents } from '../../api/admin'
+import { getSchoolSettings, listClasses, listStudents, resetParentPasswordForStudent } from '../../api/admin'
 import { ApiError } from '../../api/client'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
@@ -107,6 +107,15 @@ export function StudentAffairsPage() {
   const [phoneSyncDiffs, setPhoneSyncDiffs] = useState<ParentPhoneSyncDiff[]>([])
   const [phoneSyncSelected, setPhoneSyncSelected] = useState<Record<string, boolean>>({})
   const [phoneSyncError, setPhoneSyncError] = useState<string | null>(null)
+  const [parentResetOpen, setParentResetOpen] = useState(false)
+  const [parentResetStudentId, setParentResetStudentId] = useState('')
+  const [parentResetBusy, setParentResetBusy] = useState(false)
+  const [parentResetError, setParentResetError] = useState<string | null>(null)
+  const [parentResetResult, setParentResetResult] = useState<{
+    phone: string
+    studentNameAr: string
+    temporaryPassword: string
+  } | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -383,6 +392,19 @@ export function StudentAffairsPage() {
                 onClick={() => void openPhoneSync()}
               >
                 مزامنة جوال البطاقات
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                onClick={() => {
+                  setParentResetOpen(true)
+                  setParentResetStudentId('')
+                  setParentResetError(null)
+                  setParentResetResult(null)
+                }}
+              >
+                كلمة مرور ولي الأمر
               </button>
               <button
                 type="button"
@@ -796,6 +818,101 @@ export function StudentAffairsPage() {
                 إغلاق
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {parentResetOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 print:hidden sm:items-center">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-900">
+            <h2 className="text-lg font-bold">إعادة تعيين كلمة مرور ولي الأمر</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              أدخل رقم هوية الطالب المرتبط بالحساب. تُعرض كلمة المرور المؤقتة مرة واحدة فقط.
+            </p>
+            {parentResetResult ? (
+              <div className="mt-4 space-y-3 text-sm">
+                <p>
+                  الطالب: <span className="font-semibold">{parentResetResult.studentNameAr}</span>
+                </p>
+                <p dir="ltr">الجوال: {parentResetResult.phone}</p>
+                <div className="rounded-xl bg-slate-100 px-3 py-3 dark:bg-slate-950">
+                  <p className="text-xs text-slate-500">كلمة المرور المؤقتة</p>
+                  <p className="mt-1 text-lg font-bold tracking-wide" dir="ltr">
+                    {parentResetResult.temporaryPassword}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className={buttonVariants({ variant: 'primary', className: 'w-full' })}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(parentResetResult.temporaryPassword)
+                      showToast('تم النسخ')
+                    } catch {
+                      /* ignore */
+                    }
+                    setParentResetOpen(false)
+                    setParentResetResult(null)
+                  }}
+                >
+                  نسخ وإغلاق
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm">
+                  <span className="font-medium">رقم هوية الطالب</span>
+                  <input
+                    value={parentResetStudentId}
+                    onChange={(e) => setParentResetStudentId(e.target.value)}
+                    dir="ltr"
+                    className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-950"
+                    placeholder="1099…"
+                  />
+                </label>
+                {parentResetError && (
+                  <p className="text-sm text-rose-600" role="alert">
+                    {parentResetError}
+                  </p>
+                )}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={parentResetBusy || !parentResetStudentId.trim()}
+                    className={buttonVariants({ variant: 'primary', className: 'flex-1' })}
+                    onClick={async () => {
+                      setParentResetBusy(true)
+                      setParentResetError(null)
+                      try {
+                        const result = await resetParentPasswordForStudent(
+                          parentResetStudentId.trim()
+                        )
+                        setParentResetResult({
+                          phone: result.phone,
+                          studentNameAr: result.studentNameAr,
+                          temporaryPassword: result.temporaryPassword,
+                        })
+                      } catch (err) {
+                        setParentResetError(
+                          err instanceof ApiError ? err.message : 'فشل إعادة التعيين'
+                        )
+                      } finally {
+                        setParentResetBusy(false)
+                      }
+                    }}
+                  >
+                    {parentResetBusy ? 'جارٍ…' : 'تعيين كلمة مرور مؤقتة'}
+                  </button>
+                  <button
+                    type="button"
+                    className={buttonVariants({ variant: 'secondary' })}
+                    onClick={() => setParentResetOpen(false)}
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
