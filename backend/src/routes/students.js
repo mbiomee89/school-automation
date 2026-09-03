@@ -11,6 +11,7 @@ import {
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { normalizePhone } from '../utils/phone.js';
+import { migrateParentPhoneOnStudentChange } from '../services/parentPhoneSync.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.js';
 import { closeOpenEnrollments, openEnrollment } from '../services/enrollment.js';
@@ -301,6 +302,22 @@ router.patch(
       } catch (e) {
         throw badRequest(e.message);
       }
+    }
+
+    if (data.parentPhone !== undefined && data.parentPhone !== existing.parentPhone) {
+      const student = await prisma.$transaction(async (tx) => {
+        await migrateParentPhoneOnStudentChange(tx, {
+          oldPhone: existing.parentPhone,
+          newPhone: data.parentPhone,
+          excludeStudentId: existing.id,
+        });
+        return tx.student.update({
+          where: { id: req.params.id },
+          data,
+          select: studentSelect,
+        });
+      });
+      return res.json({ student });
     }
 
     const student = await prisma.student.update({

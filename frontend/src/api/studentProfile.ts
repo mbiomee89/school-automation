@@ -195,3 +195,28 @@ export async function rejectProfileChangeRequest(id: number, note?: string) {
   )
   return data.changeRequest
 }
+
+export type ParentPhoneSyncDiff = {
+  studentId: string
+  nameAr: string
+  currentPhone: string
+  cardPhone: string
+  warning: string | null
+}
+
+export async function previewParentPhoneSync() {
+  return apiRequest<{ diffs: ParentPhoneSyncDiff[]; campaignId: number | null }>(
+    '/student-profile/staff/sync-parent-phones/preview'
+  )
+}
+
+export async function applyParentPhoneSync(studentIds: string[]) {
+  return apiRequest<{
+    updated: number
+    skipped: number
+    failed: Array<{ studentId: string; error: string }>
+  }>('/student-profile/staff/sync-parent-phones/apply', {
+    method: 'POST',
+    body: { studentIds },
+  })
+}

@@ -7,6 +7,11 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, idParam } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { badRequest, notFound } from '../utils/errors.js';
+import {
+  applyParentPhoneDiffsFromCards,
+  previewParentPhoneDiffsFromCards,
+  syncStudentParentPhoneFromGuardianMobile,
+} from '../services/parentPhoneSync.js';
 
 const SAUDI_MOBILE_STRICT = /^\+9665\d{8}$/;
 
@@ -325,17 +330,37 @@ staffRouter.patch(
       where: { id: req.body.studentId.trim(), isActive: true },
     });
     if (!student) throw notFound('الطالب غير موجود');
-    const row = await prisma.studentProfileSubmission.update({
-      where: { id: existing.id },
-      data: {
-        studentId: student.id,
-        classId: student.classId,
-      },
-      include: {
-        class: { select: { id: true, name: true } },
-        student: { select: { id: true, nameAr: true } },
-      },
+
+    const row = await prisma.$transaction(async (tx) => {
+      const updated = await tx.studentProfileSubmission.update({
+        where: { id: existing.id },
+        data: {
+          studentId: student.id,
+          classId: student.classId,
+        },
+        include: {
+          class: { select: { id: true, name: true } },
+          student: { select: { id: true, nameAr: true } },
+        },
+      });
+
+      let payload = null;
+      try {
+        payload = JSON.parse(existing.payload);
+      } catch {
+        payload = null;
+      }
+      if (payload?.guardianMobile) {
+        await syncStudentParentPhoneFromGuardianMobile(tx, {
+          studentId: student.id,
+          guardianMobile: payload.guardianMobile,
+          student,
+        });
+      }
+
+      return updated;
     });
+
     res.json({ submission: serializeSubmission(row) });
   })
 );
@@ -382,16 +407,16 @@ staffRouter.post(
     if (row.status !== 'PENDING') throw badRequest('تمت مراجعة هذا الطلب مسبقاً');
 
     const now = new Date();
-    await prisma.$transaction([
-      prisma.studentProfileSubmission.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.studentProfileSubmission.update({
         where: { id: row.submissionId },
         data: {
           payload: row.proposedPayload,
           hasMedical: row.hasMedical,
           submittedAt: now,
         },
-      }),
-      prisma.studentProfileChangeRequest.update({
+      });
+      await tx.studentProfileChangeRequest.update({
         where: { id: row.id },
         data: {
           status: 'APPROVED',
@@ -399,8 +424,24 @@ staffRouter.post(
           reviewedAt: now,
           reviewNote: null,
         },
-      }),
-    ]);
+      });
+
+      const studentId = row.submission?.studentId || null;
+      if (studentId) {
+        let proposed = null;
+        try {
+          proposed = JSON.parse(row.proposedPayload);
+        } catch {
+          proposed = null;
+        }
+        if (proposed?.guardianMobile) {
+          await syncStudentParentPhoneFromGuardianMobile(tx, {
+            studentId,
+            guardianMobile: proposed.guardianMobile,
+          });
+        }
+      }
+    });
 
     const updated = await prisma.studentProfileChangeRequest.findUnique({
       where: { id: row.id },
@@ -433,6 +474,27 @@ staffRouter.post(
       include: changeRequestInclude,
     });
     res.json({ changeRequest: serializeChangeRequest(updated) });
+  })
+);
+
+staffRouter.get(
+  '/sync-parent-phones/preview',
+  asyncHandler(async (_req, res) => {
+    const result = await previewParentPhoneDiffsFromCards();
+    res.json(result);
+  })
+);
+
+staffRouter.post(
+  '/sync-parent-phones/apply',
+  validateBody(
+    z.object({
+      studentIds: z.array(z.string().min(1)).max(500),
+    })
+  ),
+  asyncHandler(async (req, res) => {
+    const result = await applyParentPhoneDiffsFromCards(req.body.studentIds);
+    res.json(result);
   })
 );
 
@@ -547,16 +609,26 @@ publicRouter.post(
     const hasMedical = Boolean(payload.hasMedicalConditions);
 
     if (!existing) {
-      const row = await prisma.studentProfileSubmission.create({
-        data: {
-          campaignId: campaign.id,
-          enteredStudentId,
-          studentId: student?.id ?? null,
-          classId,
-          payload: payloadJson,
-          hasMedical,
-          submittedAt: new Date(),
-        },
+      const row = await prisma.$transaction(async (tx) => {
+        const created = await tx.studentProfileSubmission.create({
+          data: {
+            campaignId: campaign.id,
+            enteredStudentId,
+            studentId: student?.id ?? null,
+            classId,
+            payload: payloadJson,
+            hasMedical,
+            submittedAt: new Date(),
+          },
+        });
+        if (student?.id) {
+          await syncStudentParentPhoneFromGuardianMobile(tx, {
+            studentId: student.id,
+            guardianMobile: payload.guardianMobile,
+            student,
+          });
+        }
+        return created;
       });
       return res.status(200).json({ ok: true, submissionId: row.id, pending: false });
     }

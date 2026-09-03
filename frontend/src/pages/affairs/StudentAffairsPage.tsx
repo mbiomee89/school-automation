@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Printer } from 'lucide-react'
 import {
   approveProfileChangeRequest,
+  applyParentPhoneSync,
   getStaffProfileCampaign,
   listProfileChangeRequests,
   listProfileSubmissions,
   linkProfileSubmission,
   patchStaffProfileCampaign,
+  previewParentPhoneSync,
   rejectProfileChangeRequest,
+  type ParentPhoneSyncDiff,
   type StudentProfileChangeRequest,
   type StudentProfilePayload,
   type StudentProfileSubmission,
@@ -16,6 +19,7 @@ import { getSchoolSettings, listClasses, listStudents } from '../../api/admin'
 import { ApiError } from '../../api/client'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
+import { useStaffToast } from '../../shared/StaffToast'
 import { cn } from '../../shared/utils'
 import {
   StudentProfilePrintSheet,
@@ -66,6 +70,7 @@ function PayloadCompare({
 }
 
 export function StudentAffairsPage() {
+  const showToast = useStaffToast()
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [inboxMode, setInboxMode] = useState<InboxMode>('submissions')
@@ -96,6 +101,12 @@ export function StudentAffairsPage() {
   const [error, setError] = useState<string | null>(null)
   const [copyHint, setCopyHint] = useState<string | null>(null)
   const [printOnlyId, setPrintOnlyId] = useState<number | null>(null)
+  const [phoneSyncOpen, setPhoneSyncOpen] = useState(false)
+  const [phoneSyncLoading, setPhoneSyncLoading] = useState(false)
+  const [phoneSyncApplying, setPhoneSyncApplying] = useState(false)
+  const [phoneSyncDiffs, setPhoneSyncDiffs] = useState<ParentPhoneSyncDiff[]>([])
+  const [phoneSyncSelected, setPhoneSyncSelected] = useState<Record<string, boolean>>({})
+  const [phoneSyncError, setPhoneSyncError] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -258,6 +269,60 @@ export function StudentAffairsPage() {
     window.setTimeout(() => window.print(), 150)
   }
 
+  async function openPhoneSync() {
+    setPhoneSyncOpen(true)
+    setPhoneSyncLoading(true)
+    setPhoneSyncError(null)
+    setPhoneSyncDiffs([])
+    setPhoneSyncSelected({})
+    try {
+      const data = await previewParentPhoneSync()
+      setPhoneSyncDiffs(data.diffs)
+      const next: Record<string, boolean> = {}
+      for (const d of data.diffs) next[d.studentId] = false
+      setPhoneSyncSelected(next)
+    } catch (err) {
+      setPhoneSyncError(err instanceof ApiError ? err.message : 'تعذّر مقارنة الجوالات')
+    } finally {
+      setPhoneSyncLoading(false)
+    }
+  }
+
+  const phoneSyncSelectedIds = useMemo(
+    () => phoneSyncDiffs.filter((d) => phoneSyncSelected[d.studentId]).map((d) => d.studentId),
+    [phoneSyncDiffs, phoneSyncSelected]
+  )
+
+  async function applySelectedPhoneSync() {
+    if (phoneSyncSelectedIds.length === 0) return
+    setPhoneSyncApplying(true)
+    setPhoneSyncError(null)
+    try {
+      const result = await applyParentPhoneSync(phoneSyncSelectedIds)
+      const failCount = result.failed.length
+      if (failCount === 0) {
+        showToast(`تم تحديث ${result.updated} جوال`)
+      } else {
+        showToast(
+          `تم تحديث ${result.updated} · تخطي ${result.skipped} · فشل ${failCount}`,
+          failCount && result.updated === 0 ? 'error' : 'ok'
+        )
+        if (result.failed[0]) {
+          setPhoneSyncError(`${result.failed[0].studentId}: ${result.failed[0].error}`)
+        }
+      }
+      const data = await previewParentPhoneSync()
+      setPhoneSyncDiffs(data.diffs)
+      const next: Record<string, boolean> = {}
+      for (const d of data.diffs) next[d.studentId] = false
+      setPhoneSyncSelected(next)
+    } catch (err) {
+      setPhoneSyncError(err instanceof ApiError ? err.message : 'فشل تطبيق التحديث')
+    } finally {
+      setPhoneSyncApplying(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -310,6 +375,14 @@ export function StudentAffairsPage() {
                 onClick={() => void copyLink()}
               >
                 نسخ الرابط
+              </button>
+              <button
+                type="button"
+                disabled={busy || phoneSyncLoading}
+                className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                onClick={() => void openPhoneSync()}
+              >
+                مزامنة جوال البطاقات
               </button>
               <button
                 type="button"
@@ -722,6 +795,134 @@ export function StudentAffairsPage() {
               >
                 إغلاق
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phoneSyncOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-3 print:hidden sm:items-center">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+            <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+              <h2 className="text-lg font-bold">مزامنة جوال البطاقات</h2>
+              <p className="mt-1 text-xs text-slate-500">
+                مقارنة جوال البطاقة المرتبطة مع جوال الطالب في السجل — اختر من تريد تحديثه ثم طبّق.
+              </p>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {phoneSyncLoading ? (
+                <div className="flex justify-center py-10">
+                  <span className={SPINNER_CLASS} />
+                </div>
+              ) : phoneSyncDiffs.length === 0 ? (
+                <p className="py-8 text-center text-sm text-slate-500">
+                  لا توجد اختلافات — جميع الجوالات متطابقة أو لا توجد بطاقات مرتبطة نشطة.
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {phoneSyncDiffs.map((d) => (
+                    <li
+                      key={d.studentId}
+                      className="rounded-xl border border-slate-200 p-3 dark:border-slate-700"
+                    >
+                      <label className="flex cursor-pointer items-start gap-3">
+                        <input
+                          type="checkbox"
+                          className="mt-1 size-4"
+                          checked={Boolean(phoneSyncSelected[d.studentId])}
+                          onChange={(e) =>
+                            setPhoneSyncSelected((prev) => ({
+                              ...prev,
+                              [d.studentId]: e.target.checked,
+                            }))
+                          }
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block font-semibold text-slate-900 dark:text-slate-50">
+                            {d.nameAr}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-slate-500" dir="ltr">
+                            {d.studentId}
+                          </span>
+                          <span className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
+                            <span>
+                              الحالي:{' '}
+                              <span dir="ltr" className="font-medium text-slate-700 dark:text-slate-200">
+                                {d.currentPhone}
+                              </span>
+                            </span>
+                            <span>
+                              البطاقة:{' '}
+                              <span dir="ltr" className="font-medium text-blue-700 dark:text-blue-300">
+                                {d.cardPhone}
+                              </span>
+                            </span>
+                          </span>
+                          {d.warning && (
+                            <span className="mt-2 block rounded-lg bg-amber-50 px-2 py-1 text-xs text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                              {d.warning}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {phoneSyncError && (
+                <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  {phoneSyncError}
+                </p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 dark:border-slate-800">
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={phoneSyncLoading || phoneSyncDiffs.length === 0}
+                  className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                  onClick={() => {
+                    const next: Record<string, boolean> = {}
+                    for (const d of phoneSyncDiffs) next[d.studentId] = true
+                    setPhoneSyncSelected(next)
+                  }}
+                >
+                  تحديد الكل
+                </button>
+                <button
+                  type="button"
+                  disabled={phoneSyncLoading || phoneSyncDiffs.length === 0}
+                  className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                  onClick={() => {
+                    const next: Record<string, boolean> = {}
+                    for (const d of phoneSyncDiffs) next[d.studentId] = false
+                    setPhoneSyncSelected(next)
+                  }}
+                >
+                  إلغاء التحديد
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className={buttonVariants({ variant: 'secondary', size: 'sm' })}
+                  onClick={() => setPhoneSyncOpen(false)}
+                >
+                  إغلاق
+                </button>
+                <button
+                  type="button"
+                  disabled={phoneSyncApplying || phoneSyncSelectedIds.length === 0}
+                  className={buttonVariants({ variant: 'primary', size: 'sm' })}
+                  onClick={() => void applySelectedPhoneSync()}
+                >
+                  {phoneSyncApplying
+                    ? 'جارٍ التطبيق…'
+                    : `تطبيق المحدد (${phoneSyncSelectedIds.length})`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
