@@ -102,8 +102,34 @@ function StudentRowActions({
   /** Open above the button — needed for last table rows clipped by overflow. */
   dropUp?: boolean
 }) {
+  function setHostElevated(details: HTMLDetailsElement, open: boolean) {
+    const host = details.closest('tr, [data-actions-host]') as HTMLElement | null
+    if (!host) return
+    if (open) {
+      host.dataset.actionsOpen = 'true'
+      host.style.position = 'relative'
+      host.style.zIndex = '50'
+    } else {
+      delete host.dataset.actionsOpen
+      host.style.position = ''
+      host.style.zIndex = ''
+    }
+  }
+
+  function runAndClose(details: HTMLDetailsElement, action: () => void) {
+    action()
+    details.open = false
+    setHostElevated(details, false)
+  }
+
   return (
-    <details className="relative z-10 text-start open:z-40">
+    <details
+      className="relative z-10 text-start"
+      onToggle={(e) => {
+        const details = e.currentTarget
+        setHostElevated(details, details.open)
+      }}
+    >
       <summary
         className={cn(
           'inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-medium text-slate-700',
@@ -116,21 +142,21 @@ function StudentRowActions({
       </summary>
       <div
         className={cn(
-          'absolute end-0 z-40 min-w-[10rem] rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800',
+          'absolute end-0 z-50 min-w-[10rem] rounded-md border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-600 dark:bg-slate-800',
           dropUp ? 'bottom-full mb-1' : 'top-full mt-1'
         )}
       >
         <button
           type="button"
           className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
-          onClick={onEdit}
+          onClick={(e) => runAndClose(e.currentTarget.closest('details')!, onEdit)}
         >
           تعديل
         </button>
         <button
           type="button"
           className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
-          onClick={onPromote}
+          onClick={(e) => runAndClose(e.currentTarget.closest('details')!, onPromote)}
         >
           نقل
         </button>
@@ -138,7 +164,7 @@ function StudentRowActions({
           <button
             type="button"
             className="block w-full px-3 py-1.5 text-start text-xs text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700"
-            onClick={onUnassign}
+            onClick={(e) => runAndClose(e.currentTarget.closest('details')!, onUnassign)}
           >
             إزالة من الفصل
           </button>
@@ -147,7 +173,7 @@ function StudentRowActions({
           <button
             type="button"
             className="block w-full px-3 py-1.5 text-start text-xs text-emerald-700 hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40"
-            onClick={onRestore}
+            onClick={(e) => runAndClose(e.currentTarget.closest('details')!, onRestore)}
           >
             استعادة للطالب
           </button>
@@ -156,7 +182,7 @@ function StudentRowActions({
           <button
             type="button"
             className="block w-full px-3 py-1.5 text-start text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40"
-            onClick={onRemove}
+            onClick={(e) => runAndClose(e.currentTarget.closest('details')!, onRemove)}
           >
             استبعاد
           </button>
@@ -1100,7 +1126,7 @@ export function AdminDashboard({
                             {s.isActive ? 'نشط' : 'غير نشط'}
                           </span>
                         </td>
-                        <td className="relative z-0 px-3 py-2 text-end">
+                        <td className="relative px-3 py-2 text-end">
                           <StudentRowActions
                             dropUp={index >= pagedStudents.length - 3}
                             onEdit={() => openEditStudent(s)}
@@ -1152,7 +1178,10 @@ export function AdminDashboard({
                         {s.className ?? <span className="text-slate-400">بدون فصل</span>}
                       </div>
                     </button>
-                    <div className="relative z-0 mt-3 flex justify-end border-t border-slate-100 pt-3 dark:border-slate-800">
+                    <div
+                      data-actions-host
+                      className="relative mt-3 flex justify-end border-t border-slate-100 pt-3 dark:border-slate-800"
+                    >
                       <StudentRowActions
                         dropUp={index >= pagedStudents.length - 2}
                         onEdit={() => openEditStudent(s)}
