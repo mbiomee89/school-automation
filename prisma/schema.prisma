@@ -60,6 +60,7 @@ model User {
   lateReports    LateReport[]          @relation("LateReportRecordedBy")
   weeklyPlans    WeeklyPlan[]          @relation("WeeklyPlanCreatedBy")
   importBatches  StudentImportBatch[]  @relation("ImportedBy")
+  noorPhoneDecisions NoorParentPhoneDecision[] @relation("NoorPhoneDecidedBy")
   classChanges   ClassEnrollment[]     @relation("ClassEnrollmentChangedBy")
   reasonsReviewed Attendance[]         @relation("AbsenceReasonReviewedBy")
   earlyLeaveReviews EarlyLeaveRequest[] @relation("EarlyLeaveReviewedBy")
@@ -115,8 +116,13 @@ model StudentImportBatch {
   fileName   String?
   rowCount   Int      @default(0)
   importedAt DateTime @default(now())
+  /// Academic year this upload applied to — confirm-deactivation is bound to this, not the client.
+  academicYear String?
+  /// JSON string array of student IDs present in the file (including rows that failed to apply).
+  importedIdsJson String?
 
   students Student[]
+  phoneDecisions NoorParentPhoneDecision[]
 }
 
 model Student {
@@ -161,10 +167,39 @@ model Student {
   profileSubmissions StudentProfileSubmission[]
   gradePeriodScores GradePeriodScore[]
   gradeTermFinals   GradeTermFinal[]
+  noorPhoneDecisions NoorParentPhoneDecision[]
 
   @@index([classId])
   @@index([isActive])
   @@index([parentPhone]) // parent OTP login + "students for this phone" lookups
+}
+
+enum NoorParentPhoneDecisionStatus {
+  PENDING
+  ACCEPTED
+  KEPT
+}
+
+/// Active student in a Noor re-import whose parent phone differs from the file.
+/// Staff (ADMIN / STUDENT_AFFAIRS) accept the Noor number or keep the current one.
+model NoorParentPhoneDecision {
+  id            Int                           @id @default(autoincrement())
+  studentId     String
+  student       Student                       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  batchId       Int
+  batch         StudentImportBatch            @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  currentPhone  String
+  proposedPhone String
+  status        NoorParentPhoneDecisionStatus @default(PENDING)
+  decidedBy     Int?
+  decider       User?                         @relation("NoorPhoneDecidedBy", fields: [decidedBy], references: [id], onDelete: SetNull)
+  decidedAt     DateTime?
+  createdAt     DateTime                      @default(now())
+  updatedAt     DateTime                      @updatedAt
+
+  @@index([status])
+  @@index([studentId, status])
+  @@index([batchId])
 }
 
 // Tracks every class a student has ever been assigned to, with start/end dates.

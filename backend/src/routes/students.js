@@ -6,6 +6,7 @@ import {
   validateBody,
   validateParams,
   validateQuery,
+  idParam,
   studentIdParam,
 } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
@@ -16,6 +17,15 @@ import { staffResetParentPasswordForStudent } from '../services/auth.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
 import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.js';
 import { closeOpenEnrollments, openEnrollment } from '../services/enrollment.js';
+import {
+  applyNoorStudentRow,
+  confirmNoorDeactivations,
+  listPendingPhoneDecisions,
+  listYearScopedMissingStudents,
+  mapDeactivationCandidate,
+  resolveNoorPhoneDecision,
+  serializeImportedIds,
+} from '../services/noorReimport.js';
 
 const router = Router();
 
@@ -170,6 +180,52 @@ router.get(
       orderBy: { nameAr: 'asc' },
     });
     res.json({ students });
+  })
+);
+
+router.get(
+  '/noor-phone-decisions',
+  requireRole('ADMIN', 'STUDENT_AFFAIRS'),
+  asyncHandler(async (_req, res) => {
+    const decisions = await listPendingPhoneDecisions(prisma);
+    res.json({ decisions });
+  })
+);
+
+const resolvePhoneDecisionSchema = z.object({
+  action: z.enum(['accept', 'keep']),
+});
+
+router.post(
+  '/noor-phone-decisions/:id/resolve',
+  requireRole('ADMIN', 'STUDENT_AFFAIRS'),
+  validateParams(idParam),
+  validateBody(resolvePhoneDecisionSchema),
+  asyncHandler(async (req, res) => {
+    const decision = await resolveNoorPhoneDecision(prisma, {
+      id: req.params.id,
+      action: req.body.action,
+      decidedBy: req.user.id,
+    });
+    res.json({ decision });
+  })
+);
+
+const confirmDeactivationsSchema = z.object({
+  batchId: z.number().int().positive(),
+  studentIds: z.array(z.string().min(1)).min(1),
+});
+
+router.post(
+  '/import-noor/confirm-deactivations',
+  requireRole('ADMIN'),
+  validateBody(confirmDeactivationsSchema),
+  asyncHandler(async (req, res) => {
+    const result = await confirmNoorDeactivations(prisma, {
+      batchId: req.body.batchId,
+      studentIds: req.body.studentIds,
+    });
+    res.json(result);
   })
 );
 
@@ -603,7 +659,10 @@ router.post(
     const classKey = (grade, section) => `${grade}||${section}`;
     let created = 0;
     let updated = 0;
+    let unchanged = 0;
     let reactivated = 0;
+    const phoneConflicts = [];
+    const fileIds = [...new Set(parsed.rows.map((row) => row.id).filter(Boolean))];
     const BATCH = 40;
     let importFailed = null;
 
@@ -614,7 +673,9 @@ router.post(
           async (tx) => {
             let c = 0;
             let u = 0;
+            let n = 0;
             let r = 0;
+            const conflicts = [];
 
             for (const row of slice) {
               const cls = classByKey.get(classKey(row.gradeLevel, row.section));
@@ -623,77 +684,55 @@ router.post(
                 continue;
               }
 
-              const existing = await tx.student.findUnique({ where: { id: row.id } });
-
-              if (!existing) {
-                await tx.student.create({
-                  data: {
-                    id: row.id,
-                    nameAr: row.nameAr,
-                    nameEn: row.nameEn,
-                    classId: cls.id,
-                    parentPhone: row.parentPhone,
-                    importBatchId: batch.id,
-                  },
-                });
-                await openEnrollment(tx, {
-                  studentId: row.id,
-                  classId: cls.id,
-                  academicYear: cls.academicYear,
-                  changedBy: req.user.id,
-                });
-                c += 1;
-                continue;
-              }
-
-              // Re-import: do NOT overwrite name/phone on active students (preserves
-              // manual corrections). Only reactivate + refresh identity fields when inactive.
-              const data = { importBatchId: batch.id };
-
-              if (!existing.isActive) {
-                data.nameAr = row.nameAr;
-                data.nameEn = row.nameEn;
-                data.parentPhone = row.parentPhone;
-                data.isActive = true;
-                data.deletedAt = null;
-                r += 1;
-              } else {
-                u += 1;
-              }
-
-              if (existing.classId !== cls.id) {
-                await closeOpenEnrollments(tx, row.id);
-                await openEnrollment(tx, {
-                  studentId: row.id,
-                  classId: cls.id,
-                  academicYear: cls.academicYear,
-                  changedBy: req.user.id,
-                });
-                data.classId = cls.id;
-              }
-
-              await tx.student.update({ where: { id: row.id }, data });
+              const result = await applyNoorStudentRow(tx, {
+                row,
+                cls,
+                batchId: batch.id,
+                changedBy: req.user.id,
+              });
+              if (result.kind === 'created') c += 1;
+              else if (result.kind === 'updated') u += 1;
+              else if (result.kind === 'unchanged') n += 1;
+              else if (result.kind === 'reactivated') r += 1;
+              if (result.phoneConflict) conflicts.push(result.phoneConflict);
             }
 
-            return { c, u, r };
+            return { c, u, n, r, conflicts };
           },
           { timeout: 60_000 }
         );
 
         created += counts.c;
         updated += counts.u;
+        unchanged += counts.n;
         reactivated += counts.r;
+        phoneConflicts.push(...counts.conflicts);
       }
     } catch (err) {
       importFailed = err;
     }
 
-    const landed = created + updated + reactivated;
+    const landed = created + updated + unchanged + reactivated;
     await prisma.studentImportBatch.update({
       where: { id: batch.id },
-      data: { rowCount: landed },
+      data: {
+        rowCount: landed,
+        academicYear,
+        importedIdsJson: serializeImportedIds(fileIds),
+      },
     });
     batch.rowCount = landed;
+    batch.academicYear = academicYear;
+    batch.importedIdsJson = serializeImportedIds(fileIds);
+
+    const missing =
+      fileIds.length === 0
+        ? []
+        : await listYearScopedMissingStudents(prisma, {
+            academicYear,
+            importedIds: fileIds,
+          });
+    const pendingDeactivations = missing.map(mapDeactivationCandidate);
 
     if (importFailed) {
       return res.status(500).json({
@@ -702,12 +741,16 @@ router.post(
         academicYear,
         created,
         updated,
+        unchanged,
         reactivated,
         skipped: errors.length,
         classesCreated,
         classesReused,
         errors,
         batch,
+        batchId: batch.id,
+        phoneConflicts,
+        pendingDeactivations,
         partial: true,
       });
     }
@@ -717,12 +760,16 @@ router.post(
       academicYear,
       created,
       updated,
+      unchanged,
       reactivated,
       skipped: errors.length,
       classesCreated,
       classesReused,
       errors,
       batch,
+      batchId: batch.id,
+      phoneConflicts,
+      pendingDeactivations,
     });
   })
 );
@@ -760,83 +807,58 @@ router.post(
       }
     }
 
+    const fileIds = prepared.map((row) => row.id);
     const result = await prisma.$transaction(async (tx) => {
       const batch = await tx.studentImportBatch.create({
         data: {
           importedBy: req.user.id,
           fileName: fileName ?? null,
           rowCount: prepared.length,
+          academicYear: cls.academicYear,
+          importedIdsJson: serializeImportedIds(fileIds),
         },
       });
 
       let created = 0;
       let updated = 0;
+      let unchanged = 0;
       let reactivated = 0;
+      const phoneConflicts = [];
 
       for (const row of prepared) {
-        const existing = await tx.student.findUnique({ where: { id: row.id } });
-
-        if (!existing) {
-          await tx.student.create({
-            data: {
-              id: row.id,
-              nameAr: row.nameAr,
-              nameEn: row.nameEn,
-              classId,
-              parentPhone: row.parentPhone,
-              parentEmail: row.parentEmail,
-              importBatchId: batch.id,
-            },
-          });
-          await openEnrollment(tx, {
-            studentId: row.id,
-            classId,
-            academicYear: cls.academicYear,
-            changedBy: req.user.id,
-          });
-          created += 1;
-          continue;
-        }
-
-        // Preserve manually corrected name/phone on active students.
-        const data = { importBatchId: batch.id };
-        if (row.parentEmail !== undefined) data.parentEmail = row.parentEmail;
-
-        if (!existing.isActive) {
-          data.nameAr = row.nameAr;
-          data.nameEn = row.nameEn;
-          data.parentPhone = row.parentPhone;
-          data.isActive = true;
-          data.deletedAt = null;
-          reactivated += 1;
-        } else {
-          updated += 1;
-        }
-
-        if (existing.classId !== classId) {
-          await closeOpenEnrollments(tx, row.id);
-          await openEnrollment(tx, {
-            studentId: row.id,
-            classId,
-            academicYear: cls.academicYear,
-            changedBy: req.user.id,
-          });
-          data.classId = classId;
-        }
-
-        await tx.student.update({ where: { id: row.id }, data });
+        const resultRow = await applyNoorStudentRow(tx, {
+          row,
+          cls,
+          batchId: batch.id,
+          changedBy: req.user.id,
+        });
+        if (resultRow.kind === 'created') created += 1;
+        else if (resultRow.kind === 'updated') updated += 1;
+        else if (resultRow.kind === 'unchanged') unchanged += 1;
+        else if (resultRow.kind === 'reactivated') reactivated += 1;
+        if (resultRow.phoneConflict) phoneConflicts.push(resultRow.phoneConflict);
       }
 
-      return { batch, created, updated, reactivated };
+      return { batch, created, updated, unchanged, reactivated, phoneConflicts };
+    });
+
+    const missing = await listYearScopedMissingStudents(prisma, {
+      academicYear: cls.academicYear,
+      importedIds: fileIds,
     });
 
     res.status(201).json({
       batch: result.batch,
+      batchId: result.batch.id,
+      academicYear: cls.academicYear,
       created: result.created,
       updated: result.updated,
+      unchanged: result.unchanged,
       reactivated: result.reactivated,
       skipped: errors.length,
       errors,
+      phoneConflicts: result.phoneConflicts,
+      pendingDeactivations: missing.map(mapDeactivationCandidate),
     });
   })
 );

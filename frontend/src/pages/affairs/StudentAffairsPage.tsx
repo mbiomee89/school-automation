@@ -15,7 +15,15 @@ import {
   type StudentProfilePayload,
   type StudentProfileSubmission,
 } from '../../api/studentProfile'
-import { getSchoolSettings, listClasses, listStudents, resetParentPasswordForStudent } from '../../api/admin'
+import {
+  getSchoolSettings,
+  listClasses,
+  listNoorPhoneDecisions,
+  listStudents,
+  resetParentPasswordForStudent,
+  resolveNoorPhoneDecision,
+} from '../../api/admin'
+import type { NoorPhoneConflict } from '../../sections/school-administration/types'
 import { ApiError } from '../../api/client'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic } from '../../shared/fonts'
@@ -26,7 +34,7 @@ import {
   type SchoolPrintHeader,
 } from './StudentProfilePrintSheet'
 
-type InboxMode = 'submissions' | 'changes'
+type InboxMode = 'submissions' | 'changes' | 'noor-phones'
 
 function whatsappOf(payload: StudentProfilePayload) {
   if (payload.guardianWhatsapp?.trim()) return payload.guardianWhatsapp.trim()
@@ -84,6 +92,8 @@ export function StudentAffairsPage() {
   } | null>(null)
   const [submissions, setSubmissions] = useState<StudentProfileSubmission[]>([])
   const [changeRequests, setChangeRequests] = useState<StudentProfileChangeRequest[]>([])
+  const [noorPhones, setNoorPhones] = useState<NoorPhoneConflict[]>([])
+  const [noorBusyId, setNoorBusyId] = useState<number | null>(null)
   const [classes, setClasses] = useState<Array<{ id: number; name: string }>>([])
   const [schoolHeader, setSchoolHeader] = useState<SchoolPrintHeader>({
     schoolName: 'المدرسة',
@@ -119,11 +129,13 @@ export function StudentAffairsPage() {
 
   const reload = useCallback(async () => {
     setError(null)
-    const [camp, cls, settings] = await Promise.all([
+    const [camp, cls, settings, phones] = await Promise.all([
       getStaffProfileCampaign(),
       listClasses(),
       getSchoolSettings(),
+      listNoorPhoneDecisions(),
     ])
+    setNoorPhones(phones)
     setCampaign(camp.campaign)
     setClasses(cls.map((c) => ({ id: c.id, name: c.name })))
     setSchoolHeader({
@@ -141,7 +153,7 @@ export function StudentAffairsPage() {
         medicalOnly,
       })
       setSubmissions(subs)
-    } else {
+    } else if (inboxMode === 'changes') {
       const reqs = await listProfileChangeRequests('PENDING')
       setChangeRequests(reqs)
     }
@@ -189,6 +201,7 @@ export function StudentAffairsPage() {
   }, [submissions, printOnlyId])
 
   const pendingBadge = campaign?.pendingChangeCount ?? changeRequests.length
+  const noorPhoneBadge = noorPhones.length
 
   async function copyLink() {
     if (!publicUrl) return
@@ -436,7 +449,7 @@ export function StudentAffairsPage() {
         </p>
       )}
 
-      <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 print:hidden dark:bg-slate-800">
+      <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-100 p-1 print:hidden dark:bg-slate-800">
         <button
           type="button"
           onClick={() => setInboxMode('submissions')}
@@ -463,6 +476,23 @@ export function StudentAffairsPage() {
           {pendingBadge > 0 && (
             <span className="ms-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
               {pendingBadge}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={() => setInboxMode('noor-phones')}
+          className={cn(
+            'rounded-lg py-2 text-sm font-semibold transition-colors',
+            inboxMode === 'noor-phones'
+              ? 'bg-white text-blue-700 shadow-sm dark:bg-slate-700 dark:text-blue-300'
+              : 'text-slate-600 dark:text-slate-400'
+          )}
+        >
+          جوال نور
+          {noorPhoneBadge > 0 && (
+            <span className="ms-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-900">
+              {noorPhoneBadge}
             </span>
           )}
         </button>
@@ -661,6 +691,98 @@ export function StudentAffairsPage() {
                       >
                         مراجعة
                       </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {inboxMode === 'noor-phones' && (
+        <div
+          className={cn(
+            'overflow-hidden rounded-xl border border-slate-200 bg-white print:hidden dark:border-slate-700 dark:bg-slate-900',
+            refreshing && 'opacity-70'
+          )}
+        >
+          <div className="border-b border-slate-100 px-3 py-2 text-xs text-slate-500 dark:border-slate-800">
+            اختلاف جوال ولي الأمر بعد إعادة استيراد نور — اعتمدوا رقم الملف أو أبقوا الرقم الحالي في
+            النظام.
+          </div>
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+              <tr>
+                <th className="px-3 py-2 text-start">الطالب</th>
+                <th className="px-3 py-2 text-start">الحالي</th>
+                <th className="px-3 py-2 text-start">نور</th>
+                <th className="px-3 py-2 text-end">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {noorPhones.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="px-3 py-8 text-center text-slate-500">
+                    لا توجد قرارات جوال معلّقة
+                  </td>
+                </tr>
+              ) : (
+                noorPhones.map((row) => (
+                  <tr key={row.id} className="border-t border-slate-100 dark:border-slate-800">
+                    <td className="px-3 py-2">
+                      <div className="font-semibold">{row.studentNameAr}</div>
+                      <div className="text-xs text-slate-500">
+                        {row.className || 'بدون فصل'} · <span dir="ltr">{row.studentId}</span>
+                      </div>
+                    </td>
+                    <td className="px-3 py-2" dir="ltr">
+                      {row.currentPhone}
+                    </td>
+                    <td className="px-3 py-2" dir="ltr">
+                      {row.proposedPhone}
+                    </td>
+                    <td className="px-3 py-2 text-end">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          disabled={noorBusyId === row.id}
+                          className="text-xs font-semibold text-blue-700 underline disabled:opacity-50"
+                          onClick={async () => {
+                            setNoorBusyId(row.id)
+                            try {
+                              await resolveNoorPhoneDecision(row.id, 'accept')
+                              setNoorPhones((prev) => prev.filter((p) => p.id !== row.id))
+                              showToast('تم اعتماد رقم نور')
+                            } catch (err) {
+                              window.alert(err instanceof ApiError ? err.message : 'فشل حفظ القرار')
+                            } finally {
+                              setNoorBusyId(null)
+                            }
+                          }}
+                        >
+                          اعتماد نور
+                        </button>
+                        <button
+                          type="button"
+                          disabled={noorBusyId === row.id}
+                          className="text-xs font-semibold text-slate-700 underline disabled:opacity-50"
+                          onClick={async () => {
+                            setNoorBusyId(row.id)
+                            try {
+                              await resolveNoorPhoneDecision(row.id, 'keep')
+                              setNoorPhones((prev) => prev.filter((p) => p.id !== row.id))
+                              showToast('تم إبقاء الرقم الحالي')
+                            } catch (err) {
+                              window.alert(err instanceof ApiError ? err.message : 'فشل حفظ القرار')
+                            } finally {
+                              setNoorBusyId(null)
+                            }
+                          }}
+                        >
+                          إبقاء الحالي
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))

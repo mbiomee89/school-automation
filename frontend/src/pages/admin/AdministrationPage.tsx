@@ -15,6 +15,9 @@ import {
   getSchoolSettings,
   getStudentStats,
   importNoorFile,
+  confirmNoorDeactivations,
+  listNoorPhoneDecisions,
+  resolveNoorPhoneDecision,
   importNoorTeachersFile,
   importTimetableFile,
   confirmTimetableImport,
@@ -69,6 +72,11 @@ import { useStaffToast } from '../../shared/StaffToast'
 function alertError(err: unknown, fallback: string) {
   const message = err instanceof ApiError ? err.message : fallback
   window.alert(message)
+}
+
+function phoneConflictsForBatch(decisions: { batchId?: number }[], batchId?: number) {
+  if (!batchId) return decisions
+  return decisions.filter((row) => row.batchId == null || row.batchId === batchId)
 }
 
 export function AdministrationPage() {
@@ -467,8 +475,71 @@ export function AdministrationPage() {
             loadImportBatches(),
             refreshStudentStats(),
           ])
+          try {
+            const decisions = await listNoorPhoneDecisions()
+            setImportResult({
+              ...result,
+              phoneConflicts: phoneConflictsForBatch(decisions, result.batchId),
+            })
+          } catch {
+            /* Import already succeeded — keep conflicts from the import response. */
+          }
         } catch (err) {
           alertError(err, 'فشل استيراد الطلاب')
+        }
+      }}
+      onResolveNoorPhoneDecision={async (decisionId, action) => {
+        try {
+          await resolveNoorPhoneDecision(decisionId, action)
+          showToast(action === 'accept' ? 'تم اعتماد رقم نور' : 'تم إبقاء رقم الجوال الحالي')
+          setStudentsLoaded(false)
+          await loadStudents()
+          try {
+            const decisions = await listNoorPhoneDecisions()
+            setImportResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    phoneConflicts: phoneConflictsForBatch(decisions, prev.batchId),
+                  }
+                : prev
+            )
+          } catch {
+            setImportResult((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    phoneConflicts: (prev.phoneConflicts ?? []).filter((row) => row.id !== decisionId),
+                  }
+                : prev
+            )
+          }
+        } catch (err) {
+          alertError(err, 'فشل حفظ قرار الجوال')
+        }
+      }}
+      onConfirmNoorDeactivations={async (studentIds) => {
+        const batchId = importResult?.batchId
+        if (!batchId) {
+          window.alert('لا توجد دفعة استيراد لتأكيد الاستبعاد')
+          return
+        }
+        try {
+          const result = await confirmNoorDeactivations({ batchId, studentIds })
+          setImportResult((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  pendingDeactivations: result.pendingDeactivations,
+                  deactivated: (prev.deactivated ?? 0) + result.deactivated,
+                }
+              : prev
+          )
+          setStudentsLoaded(false)
+          await Promise.all([loadStudents(), refreshStudentStats()])
+          showToast(`تم استبعاد ${result.deactivated} طالب/طالبة`)
+        } catch (err) {
+          alertError(err, 'فشل استبعاد الطلاب')
         }
       }}
       onImportTeachers={async (file) => {

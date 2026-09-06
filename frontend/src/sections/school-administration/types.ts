@@ -120,10 +120,27 @@ export interface ImportError {
   error: string
 }
 
+export interface NoorPhoneConflict {
+  id: number
+  studentId: string
+  studentNameAr: string
+  className: string | null
+  currentPhone: string
+  proposedPhone: string
+  batchId?: number
+}
+
+export interface NoorDeactivationCandidate {
+  id: string
+  nameAr: string
+  className: string | null
+}
+
 export interface ImportResult {
   fileName: string
   created: number
   updated: number
+  unchanged?: number
   reactivated: number
   skipped: number
   errors: ImportError[]
@@ -132,6 +149,10 @@ export interface ImportResult {
   /** Existing classes reused during Noor import. */
   classesReused?: number
   academicYear?: string
+  batchId?: number
+  phoneConflicts?: NoorPhoneConflict[]
+  pendingDeactivations?: NoorDeactivationCandidate[]
+  deactivated?: number
   /** Shared initial password for newly created teacher accounts (Noor teacher import). */
   temporaryPasswordIssued?: boolean
 }
@@ -314,6 +335,10 @@ export interface SchoolAdministrationProps {
   onRemoveAssignment?: (assignmentId: number) => void
   /** Upload Noor StudentGuidance spreadsheet — classes are created automatically from the file */
   onImportStudents?: (file: File) => void | Promise<void>
+  /** Accept Noor parent phone or keep the current number */
+  onResolveNoorPhoneDecision?: (decisionId: number, action: 'accept' | 'keep') => void | Promise<void>
+  /** Soft-exclude students missing from the latest Noor file (year-scoped) */
+  onConfirmNoorDeactivations?: (studentIds: string[]) => void | Promise<void>
   /** Upload Noor GetSchoolTeachersDataReport — creates/updates TEACHER staff accounts */
   onImportTeachers?: (file: File) => void | Promise<void>
   /** Last teachers-import result (separate from student importResult) */

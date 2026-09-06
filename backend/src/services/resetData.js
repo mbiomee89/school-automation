@@ -87,6 +87,7 @@ export async function createDataBackup(prisma) {
     studentProfileCampaigns,
     studentProfileSubmissions,
     studentProfileChangeRequests,
+    noorParentPhoneDecisions,
   ] = await Promise.all([
     prisma.schoolSettings.findMany(),
     prisma.user.findMany({
@@ -124,6 +125,7 @@ export async function createDataBackup(prisma) {
     prisma.studentProfileCampaign.findMany(),
     prisma.studentProfileSubmission.findMany(),
     prisma.studentProfileChangeRequest.findMany(),
+    prisma.noorParentPhoneDecision.findMany(),
   ]);
 
   const attendanceSafe = attendance.map(stripAttendanceForBackup);
@@ -150,6 +152,7 @@ export async function createDataBackup(prisma) {
     studentProfileCampaigns,
     studentProfileSubmissions,
     studentProfileChangeRequests,
+    noorParentPhoneDecisions,
     reports: {
       dailyAbsence: attendanceSafe.filter((r) => r.status === 'ABSENT' || r.status === 'EXCUSED'),
       attendance: attendanceSafe,
@@ -316,6 +319,10 @@ export async function resetDataKeepAdmin(db) {
     'teacherAssignments',
     async () => (await db.teacherAssignment.deleteMany()).count
   );
+  await wipe(
+    'noorParentPhoneDecisions',
+    async () => (await db.noorParentPhoneDecision.deleteMany()).count
+  );
   await wipe('students', async () => (await db.student.deleteMany()).count);
   await wipe(
     'importBatches',
@@ -432,6 +439,7 @@ export async function restoreFromBackup(prisma, backup) {
           studentProfileCampaigns: 0,
           studentProfileSubmissions: 0,
           studentProfileChangeRequests: 0,
+          noorParentPhoneDecisions: 0,
           skipped: [],
         };
 
@@ -594,6 +602,8 @@ export async function restoreFromBackup(prisma, backup) {
               fileName: b.fileName ?? null,
               rowCount: b.rowCount ?? 0,
               importedAt: asDate(b.importedAt) ?? new Date(),
+              academicYear: b.academicYear ?? null,
+              importedIdsJson: b.importedIdsJson ?? null,
             },
           });
           batchIdMap.set(b.id, created.id);
@@ -624,6 +634,35 @@ export async function restoreFromBackup(prisma, backup) {
             counts.students += 1;
           } catch (err) {
             counts.skipped.push(`student:${s.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const d of backup.noorParentPhoneDecisions || []) {
+          const batchId = d.batchId == null ? null : batchIdMap.get(d.batchId);
+          if (batchId == null) {
+            counts.skipped.push(`noorPhone:${d.id}:unmapped-batch`);
+            continue;
+          }
+          if (!restoredStudentIds.has(d.studentId)) {
+            counts.skipped.push(`noorPhone:${d.id}:missing-student`);
+            continue;
+          }
+          try {
+            await tx.noorParentPhoneDecision.create({
+              data: {
+                studentId: d.studentId,
+                batchId,
+                currentPhone: d.currentPhone,
+                proposedPhone: d.proposedPhone,
+                status: d.status === 'ACCEPTED' || d.status === 'KEPT' ? d.status : 'PENDING',
+                decidedBy: mapUser(d.decidedBy),
+                decidedAt: asDate(d.decidedAt),
+                createdAt: asDate(d.createdAt) ?? undefined,
+              },
+            });
+            counts.noorParentPhoneDecisions += 1;
+          } catch (err) {
+            counts.skipped.push(`noorPhone:${d.id}:${err?.code || err?.message || 'error'}`);
           }
         }
 

@@ -255,6 +255,8 @@ export function AdminDashboard({
   onSyncAssignments,
   onRemoveAssignment,
   onImportStudents,
+  onResolveNoorPhoneDecision,
+  onConfirmNoorDeactivations,
   onImportTeachers,
   onImportTimetable,
   onConfirmTimetableImport,
@@ -316,6 +318,9 @@ export function AdminDashboard({
 
   const [yearFilter, setYearFilter] = useState(academicYearFilter ?? overviewStats.academicYear)
   const [importBusy, setImportBusy] = useState(false)
+  const [phoneDecisionBusyId, setPhoneDecisionBusyId] = useState<number | null>(null)
+  const [deactivateBusy, setDeactivateBusy] = useState(false)
+  const [deactivateSelected, setDeactivateSelected] = useState<Record<string, boolean>>({})
   const [teacherImportBusy, setTeacherImportBusy] = useState(false)
   const [timetableBusy, setTimetableBusy] = useState(false)
   const [timetableConfirmBusy, setTimetableConfirmBusy] = useState(false)
@@ -324,6 +329,14 @@ export function AdminDashboard({
   )
   const [classMapDraft, setClassMapDraft] = useState<Record<string, number | ''>>({})
   const [subjectMapDraft, setSubjectMapDraft] = useState<Record<string, number | ''>>({})
+
+  useEffect(() => {
+    const next: Record<string, boolean> = {}
+    for (const row of importResult?.pendingDeactivations ?? []) {
+      next[row.id] = false
+    }
+    setDeactivateSelected(next)
+  }, [importResult?.batchId, importResult?.pendingDeactivations])
 
   useEffect(() => {
     if (!timetableImportResult?.dryRun) return
@@ -1828,6 +1841,10 @@ export function AdminDashboard({
                 الأعمدة: رقم الطالب · اسم الطالب · الجوال · رقم الصف · الفصل · العام:{' '}
                 {overviewStats.academicYear}
               </p>
+              <p className="mx-auto mt-2 max-w-lg text-xs text-slate-400 dark:text-slate-500">
+                إعادة الاستيراد: يُحدَّث الاسم والفصل تلقائياً. اختلاف جوال ولي الأمر يُترك لقرار الإدارة
+                أو شؤون الطلاب. الطلاب الغائبون عن الملف لا يُستبعدون إلا بعد التأكيد.
+              </p>
 
               <label
                 className={cn(
@@ -1864,10 +1881,11 @@ export function AdminDashboard({
                     العام الدراسي: {importResult.academicYear}
                   </p>
                 )}
-                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
                   {[
                     ['أُضيف طلاب', importResult.created],
                     ['حُدّث', importResult.updated],
+                    ['بدون تغيير', importResult.unchanged ?? 0],
                     ['أُعيد تفعيله', importResult.reactivated],
                     ['تم تجاوزه', importResult.skipped],
                     ['فصول جديدة', importResult.classesCreated ?? 0],
@@ -1881,6 +1899,162 @@ export function AdminDashboard({
                     </div>
                   ))}
                 </div>
+                {(importResult.phoneConflicts?.length ?? 0) > 0 && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                    <h4 className="text-sm font-bold text-amber-950 dark:text-amber-100">
+                      جوال ولي الأمر مختلف — يحتاج قراراً
+                    </h4>
+                    <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                      الاسم والفصل حُدّثا من نور. رقم الجوال الحالي بقي كما هو حتى تعتمدوا رقم نور أو
+                      تُبقوا الحالي.
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                      {importResult.phoneConflicts!.map((row) => (
+                        <li
+                          key={row.id}
+                          className="flex flex-col gap-2 rounded-md border border-amber-200 bg-white px-3 py-2 text-sm dark:border-amber-900 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div>
+                            <div className="font-semibold">{row.studentNameAr}</div>
+                            <div className="text-xs text-slate-500">
+                              {row.className || 'بدون فصل'} ·{' '}
+                              <span dir="ltr">{row.studentId}</span>
+                            </div>
+                            <div className="mt-1 text-xs" dir="ltr">
+                              الحالي: {row.currentPhone} → نور: {row.proposedPhone}
+                            </div>
+                          </div>
+                          <div className="flex shrink-0 gap-2">
+                            <button
+                              type="button"
+                              disabled={phoneDecisionBusyId === row.id || !onResolveNoorPhoneDecision}
+                              className="rounded-md bg-blue-600 px-2 py-1 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                              onClick={async () => {
+                                if (!onResolveNoorPhoneDecision) return
+                                setPhoneDecisionBusyId(row.id)
+                                try {
+                                  await onResolveNoorPhoneDecision(row.id, 'accept')
+                                } finally {
+                                  setPhoneDecisionBusyId(null)
+                                }
+                              }}
+                            >
+                              اعتماد نور
+                            </button>
+                            <button
+                              type="button"
+                              disabled={phoneDecisionBusyId === row.id || !onResolveNoorPhoneDecision}
+                              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:hover:bg-slate-800"
+                              onClick={async () => {
+                                if (!onResolveNoorPhoneDecision) return
+                                setPhoneDecisionBusyId(row.id)
+                                try {
+                                  await onResolveNoorPhoneDecision(row.id, 'keep')
+                                } finally {
+                                  setPhoneDecisionBusyId(null)
+                                }
+                              }}
+                            >
+                              إبقاء الحالي
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(importResult.pendingDeactivations?.length ?? 0) > 0 && (
+                  <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 p-3 dark:border-rose-900 dark:bg-rose-950/30">
+                    <h4 className="text-sm font-bold text-rose-950 dark:text-rose-100">
+                      طلاب نشطون غير موجودين في ملف نور ({importResult.pendingDeactivations!.length})
+                    </h4>
+                    <p className="mt-1 text-xs text-rose-900/80 dark:text-rose-200/80">
+                      لن يُستبعدوا تلقائياً. حدّدوا من تريدون استبعاده للعام{' '}
+                      {importResult.academicYear || 'الحالي'} ثم اكتبوا «استبعاد» للتأكيد.
+                    </p>
+                    <div className="mt-2 flex gap-2 text-xs">
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() =>
+                          setDeactivateSelected(
+                            Object.fromEntries(
+                              (importResult.pendingDeactivations ?? []).map((row) => [row.id, true])
+                            )
+                          )
+                        }
+                      >
+                        تحديد الكل
+                      </button>
+                      <button
+                        type="button"
+                        className="underline"
+                        onClick={() =>
+                          setDeactivateSelected(
+                            Object.fromEntries(
+                              (importResult.pendingDeactivations ?? []).map((row) => [row.id, false])
+                            )
+                          )
+                        }
+                      >
+                        إلغاء التحديد
+                      </button>
+                    </div>
+                    <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto">
+                      {importResult.pendingDeactivations!.map((row) => (
+                        <li key={row.id} className="flex items-center gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={!!deactivateSelected[row.id]}
+                            onChange={(e) =>
+                              setDeactivateSelected((prev) => ({
+                                ...prev,
+                                [row.id]: e.target.checked,
+                              }))
+                            }
+                          />
+                          <span className="font-medium">{row.nameAr}</span>
+                          <span className="text-xs text-slate-500">
+                            {row.className || 'بدون فصل'} · <span dir="ltr">{row.id}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    <button
+                      type="button"
+                      disabled={
+                        deactivateBusy ||
+                        !onConfirmNoorDeactivations ||
+                        !Object.values(deactivateSelected).some(Boolean)
+                      }
+                      className="mt-3 rounded-md bg-rose-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-800 disabled:opacity-50"
+                      onClick={async () => {
+                        if (!onConfirmNoorDeactivations) return
+                        const ids = Object.entries(deactivateSelected)
+                          .filter(([, on]) => on)
+                          .map(([id]) => id)
+                        if (ids.length === 0) return
+                        const typed = window.prompt(
+                          `سيتم استبعاد ${ids.length} طالب/طالبة من السجل النشط.\nاكتب استبعاد للتأكيد`
+                        )
+                        if (typed?.trim() !== 'استبعاد') return
+                        setDeactivateBusy(true)
+                        try {
+                          await onConfirmNoorDeactivations(ids)
+                        } finally {
+                          setDeactivateBusy(false)
+                        }
+                      }}
+                    >
+                      {deactivateBusy ? 'جارٍ الاستبعاد…' : 'تأكيد استبعاد المحددين'}
+                    </button>
+                  </div>
+                )}
+                {typeof importResult.deactivated === 'number' && importResult.deactivated > 0 && (
+                  <p className="mt-3 text-sm text-rose-800 dark:text-rose-200">
+                    تم استبعاد {importResult.deactivated} طالب/طالبة غير موجودين في الملف.
+                  </p>
+                )}
                 {importResult.errors.length > 0 && (
                   <ul className="mt-4 max-h-64 space-y-2 overflow-y-auto">
                     {importResult.errors.map((err) => (

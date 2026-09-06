@@ -6,6 +6,8 @@ import type {
   ClassItem,
   ImportBatch,
   ImportResult,
+  NoorDeactivationCandidate,
+  NoorPhoneConflict,
   SchoolSettings,
   Staff,
   StaffInput,
@@ -464,11 +466,15 @@ export async function importNoorFile(file: File): Promise<ImportResult> {
     fileName: string
     created: number
     updated: number
+    unchanged?: number
     reactivated: number
     skipped: number
     classesCreated?: number
     classesReused?: number
     academicYear?: string
+    batchId?: number
+    phoneConflicts?: NoorPhoneConflict[]
+    pendingDeactivations?: NoorDeactivationCandidate[]
     errors: ImportResult['errors']
   }>('/students/import-noor', {
     method: 'POST',
@@ -478,13 +484,44 @@ export async function importNoorFile(file: File): Promise<ImportResult> {
     fileName: data.fileName || file.name,
     created: data.created,
     updated: data.updated,
+    unchanged: data.unchanged ?? 0,
     reactivated: data.reactivated,
     skipped: data.skipped,
     classesCreated: data.classesCreated ?? 0,
     classesReused: data.classesReused ?? 0,
     academicYear: data.academicYear,
+    batchId: data.batchId,
+    phoneConflicts: data.phoneConflicts ?? [],
+    pendingDeactivations: data.pendingDeactivations ?? [],
     errors: data.errors ?? [],
   }
+}
+
+export async function listNoorPhoneDecisions() {
+  const data = await apiRequest<{ decisions: NoorPhoneConflict[] }>('/students/noor-phone-decisions')
+  return data.decisions
+}
+
+export async function resolveNoorPhoneDecision(decisionId: number, action: 'accept' | 'keep') {
+  const data = await apiRequest<{ decision: NoorPhoneConflict }>(
+    `/students/noor-phone-decisions/${decisionId}/resolve`,
+    { method: 'POST', body: { action } }
+  )
+  return data.decision
+}
+
+export async function confirmNoorDeactivations(input: {
+  batchId: number
+  studentIds: string[]
+}) {
+  return apiRequest<{
+    deactivated: number
+    skipped: number
+    pendingDeactivations: NoorDeactivationCandidate[]
+  }>('/students/import-noor/confirm-deactivations', {
+    method: 'POST',
+    body: input,
+  })
 }
 
 export async function importNoorTeachersFile(file: File): Promise<ImportResult> {
