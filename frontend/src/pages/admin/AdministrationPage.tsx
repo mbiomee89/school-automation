@@ -54,6 +54,7 @@ import type {
   ClassItem,
   ImportBatch,
   ImportResult,
+  NoorPhoneConflict,
   OverviewStats,
   SchoolSettings,
   TimetableImportResult,
@@ -74,7 +75,7 @@ function alertError(err: unknown, fallback: string) {
   window.alert(message)
 }
 
-function phoneConflictsForBatch(decisions: { batchId?: number }[], batchId?: number) {
+function phoneConflictsForBatch(decisions: NoorPhoneConflict[], batchId?: number): NoorPhoneConflict[] {
   if (!batchId) return decisions
   return decisions.filter((row) => row.batchId == null || row.batchId === batchId)
 }
