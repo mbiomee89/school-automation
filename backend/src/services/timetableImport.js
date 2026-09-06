@@ -226,6 +226,14 @@ function matchTeacher(name, index, teachers) {
 }
 
 function matchClass(label, classes) {
+  return matchClassStrict(label, classes);
+}
+
+/**
+ * Strict class match for the upload gate: parseClassLabel + grade/section,
+ * then exact class name. No substring / includes fallback.
+ */
+export function matchClassStrict(label, classes) {
   const parsed = parseClassLabel(label);
   if (parsed) {
     const hit = classes.find(
@@ -234,7 +242,6 @@ function matchClass(label, classes) {
         normalizeArKey(c.section || '') === normalizeArKey(parsed.section)
     );
     if (hit) return hit;
-    // grade stored as "أول متوسط" etc — starts with grade
     const soft = classes.find(
       (c) =>
         normalizeArKey(c.gradeLevel).startsWith(normalizeArKey(parsed.gradeLevel)) &&
@@ -244,11 +251,202 @@ function matchClass(label, classes) {
   }
 
   const key = normalizeArKey(label);
-  return (
-    classes.find((c) => normalizeArKey(c.name) === key) ||
-    classes.find((c) => normalizeArKey(c.name).includes(key) || key.includes(normalizeArKey(c.name))) ||
-    null
+  return classes.find((c) => normalizeArKey(c.name) === key) || null;
+}
+
+/**
+ * Compare this year's school classes to unique labels in the weekly file.
+ * classMap (label → id) wins when the id is in this year's school set;
+ * otherwise matchClassStrict. Save still requires every school class used.
+ */
+export function diffClassSets(schoolClasses, fileLabels, classMap = {}) {
+  const school = schoolClasses || [];
+  const labels = [...new Set((fileLabels || []).map((l) => collapseSpaces(l)).filter(Boolean))];
+  const byId = new Map(school.map((c) => [c.id, c]));
+
+  const inFileNotInSchool = [];
+  const resolvedIds = new Set();
+  const resolvedByLabel = {};
+
+  for (const label of labels) {
+    const mappedId = classMap[label];
+    let cls = null;
+    if (mappedId != null) cls = byId.get(Number(mappedId)) || null;
+    if (!cls) cls = matchClassStrict(label, school);
+    if (!cls) inFileNotInSchool.push(label);
+    else {
+      resolvedIds.add(cls.id);
+      resolvedByLabel[label] = cls.id;
+    }
+  }
+
+  const inSchoolNotInFile = school
+    .filter((c) => !resolvedIds.has(c.id))
+    .map((c) => ({ id: c.id, name: c.name }));
+
+  return {
+    ok: school.length > 0 && inFileNotInSchool.length === 0 && inSchoolNotInFile.length === 0,
+    inFileNotInSchool,
+    inSchoolNotInFile,
+    resolvedIds: [...resolvedIds],
+    resolvedByLabel,
+  };
+}
+
+function classGateError(diff, extraMessage) {
+  const extra = diff.inFileNotInSchool.length
+    ? `في الملف وليست في المدرسة: ${diff.inFileNotInSchool.join('، ')}`
+    : '';
+  const missing = diff.inSchoolNotInFile.length
+    ? `في المدرسة وليست في الملف: ${diff.inSchoolNotInFile.map((c) => c.name).join('، ')}`
+    : '';
+  return badRequest(
+    [
+      extraMessage || 'فصول المدرسة لا تطابق فصول الجدول — يُرفض الملف بالكامل.',
+      extra,
+      missing,
+      missing
+        ? 'إن كان الفصل فائضاً من توزيع سابق فأكمل استيراد الطلاب واستبعاد الغائبين أولاً.'
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    {
+      inFileNotInSchool: diff.inFileNotInSchool,
+      inSchoolNotInFile: diff.inSchoolNotInFile,
+    }
   );
+}
+
+/** Import/confirm always use school settings — request academicYear is ignored. */
+export function pickImportAcademicYear(settings, _ignoredRequestYear) {
+  void _ignoredRequestYear;
+  return settings?.academicYear || null;
+}
+
+export async function resolveImportAcademicYear(_ignoredRequestYear) {
+  void _ignoredRequestYear;
+  const settings = await prisma.schoolSettings.findFirst();
+  const year = pickImportAcademicYear(settings);
+  if (!year) throw badRequest('لا توجد سنة دراسية في إعدادات المدرسة');
+  return year;
+}
+
+export async function assertClassSetsMatch(rawSlots, { academicYear, classMap = {} } = {}) {
+  void academicYear;
+  const year = await resolveImportAcademicYear();
+
+  const classes = await prisma.class.findMany({
+    where: { academicYear: year, retiredAt: null },
+    select: { id: true, name: true, gradeLevel: true, section: true },
+    orderBy: { name: 'asc' },
+  });
+
+  const labels = (rawSlots || []).map((s) => s.classLabel);
+  if (classes.length === 0) {
+    throw badRequest('أضف الفصول أولاً ثم ارفع الجدول.', {
+      inFileNotInSchool: [...new Set(labels.map((l) => collapseSpaces(l)).filter(Boolean))],
+      inSchoolNotInFile: [],
+    });
+  }
+
+  const diff = diffClassSets(classes, labels, classMap);
+  if (!diff.ok) throw classGateError(diff);
+  return { year, diff, classes };
+}
+
+/** School classes that would have zero lessons after a slot replace. */
+export function schoolClassesWithoutMatchedSlots(schoolClasses, matchedSlots) {
+  const covered = new Set((matchedSlots || []).map((s) => s.classId).filter(Boolean));
+  return (schoolClasses || []).filter((c) => !covered.has(c.id));
+}
+
+/**
+ * Confirm/apply only: do not wipe slots unless every parsed lesson matched
+ * and every school class has at least one matched slot.
+ */
+export function assertImportReadyToSave(preview, schoolClasses) {
+  if ((preview?.unresolved ?? 0) > 0) {
+    const names = [
+      ...(preview.unmatchedTeachers || []).map((r) => r.name),
+      ...(preview.unmatchedClasses || []).map((r) => r.name),
+      ...(preview.unmatchedSubjects || []).map((r) => r.name),
+    ].filter(Boolean);
+    const extra = names.length ? ` (${[...new Set(names)].join('، ')})` : '';
+    throw badRequest(
+      `لا يمكن حفظ الجدول — ${preview.unresolved} درس بدون مطابقة كاملة. أكمل المعلمين والمواد.${extra}`,
+      {
+        unresolved: preview.unresolved,
+        unmatchedTeachers: preview.unmatchedTeachers,
+        unmatchedClasses: preview.unmatchedClasses,
+        unmatchedSubjects: preview.unmatchedSubjects,
+      }
+    );
+  }
+
+  const empty = schoolClassesWithoutMatchedSlots(schoolClasses, preview?.matchedSlots);
+  if (empty.length) {
+    throw badRequest(
+      `لا يمكن حفظ الجدول — فصول بلا حصص مطابقة: ${empty.map((c) => c.name).join('، ')}`,
+      { classesWithoutMatchedSlots: empty.map((c) => ({ id: c.id, name: c.name })) }
+    );
+  }
+}
+
+export async function summarizeTimetableImportImpact(academicYear, matchedSlots) {
+  const weekStart = weekStartSunday(schoolDateOnlyStr());
+  const weekEnd = addUtcDays(weekStart, 4);
+  const from = new Date(`${weekStart}T00:00:00.000Z`);
+  const to = new Date(`${weekEnd}T00:00:00.000Z`);
+  const classIds = [...new Set((matchedSlots || []).map((s) => s.classId).filter(Boolean))];
+  const pairKeys = new Set(
+    (matchedSlots || [])
+      .filter((s) => s.classId && s.subjectId)
+      .map((s) => `${s.classId}:${s.subjectId}`)
+  );
+  const yearWhere = { class: { academicYear } };
+
+  const [homeworkThisWeek, weeklyPlanThisWeek, homeworkThisYear, weeklyPlanThisYear, leftoverRows] =
+    await Promise.all([
+      prisma.homework.count({ where: { ...yearWhere, date: { gte: from, lte: to } } }),
+      prisma.weeklyPlan.count({
+        where: { ...yearWhere, date: { gte: from, lte: to } },
+      }),
+      prisma.homework.count({ where: yearWhere }),
+      prisma.weeklyPlan.count({ where: yearWhere }),
+      classIds.length === 0
+        ? Promise.resolve([])
+        : prisma.teacherAssignment.findMany({
+            where: { classId: { in: classIds }, class: { academicYear } },
+            include: {
+              teacher: { select: { id: true, name: true } },
+              class: { select: { id: true, name: true } },
+              subject: { select: { id: true, nameAr: true } },
+            },
+          }),
+    ]);
+
+  const leftoverSubjects = leftoverRows
+    .filter((a) => !pairKeys.has(`${a.classId}:${a.subjectId}`))
+    .map((a) => ({
+      id: a.id,
+      teacherId: a.teacherId,
+      teacherName: a.teacher.name,
+      classId: a.classId,
+      className: a.class.name,
+      subjectId: a.subjectId,
+      subjectNameAr: a.subject.nameAr,
+    }));
+
+  return {
+    weekStart,
+    weekEnd,
+    homeworkThisWeek,
+    weeklyPlanThisWeek,
+    homeworkThisYear,
+    weeklyPlanThisYear,
+    leftoverSubjects,
+  };
 }
 
 function matchSubject(name, subjects) {
@@ -295,9 +493,8 @@ export async function resolveTimetableSlots(
     subjectMap = {},
   } = {}
 ) {
-  const settings = await prisma.schoolSettings.findFirst();
-  const year = academicYear || settings?.academicYear;
-  if (!year) throw badRequest('لا توجد سنة دراسية في إعدادات المدرسة');
+  void academicYear;
+  const year = await resolveImportAcademicYear();
 
   const [teachers, classes, subjects] = await Promise.all([
     prisma.user.findMany({
@@ -306,7 +503,7 @@ export async function resolveTimetableSlots(
       orderBy: { name: 'asc' },
     }),
     prisma.class.findMany({
-      where: { academicYear: year },
+      where: { academicYear: year, retiredAt: null },
       select: { id: true, name: true, gradeLevel: true, section: true },
       orderBy: { name: 'asc' },
     }),
@@ -340,7 +537,7 @@ export async function resolveTimetableSlots(
   function resolveClass(tableName) {
     const mappedId = classMap[tableName];
     if (mappedId != null) return classById.get(Number(mappedId)) || null;
-    return matchClass(tableName, classes);
+    return matchClassStrict(tableName, classes);
   }
 
   function resolveSubject(tableName) {
@@ -446,6 +643,9 @@ export async function resolveTimetableSlots(
     unmatchedSubjects: [...unmatchedSubjects.entries()].map(([name, count]) => ({ name, count })),
     sample: matched.slice(0, 8),
     matchedSlots: matched,
+    resolvedPairs: resolved
+      .filter((r) => r.classId && r.subjectId)
+      .map((r) => ({ classId: r.classId, subjectId: r.subjectId })),
     teacherMappings,
     classMappings,
     subjectMappings,
@@ -500,6 +700,13 @@ export async function ensureTeachersFromTableNames(tableNames) {
   return { teacherMap, created, temporaryPasswordIssued: created > 0 };
 }
 
+/** Table names still unmatched after admin mapping + auto-match — create these only. */
+export function leftoverUnmatchedTeacherNames(unmatchedTeachers) {
+  return [
+    ...new Set((unmatchedTeachers || []).map((r) => collapseSpaces(r.name)).filter(Boolean)),
+  ];
+}
+
 /**
  * Replace timetable for academic year + upsert TeacherAssignment from distinct pairs.
  */
@@ -511,8 +718,12 @@ export async function applyTimetableImport(
     classMap = {},
     subjectMap = {},
     createTeachers = [],
+    removeAssignmentsNotInFile = false,
   } = {}
 ) {
+  void academicYear;
+  const gate = await assertClassSetsMatch(rawSlots, { classMap });
+
   const mergedTeacherMap = { ...teacherMap };
   let teachersCreated = 0;
   let temporaryPasswordIssued = false;
@@ -524,19 +735,34 @@ export async function applyTimetableImport(
     temporaryPasswordIssued = !!ensured.temporaryPasswordIssued;
   }
 
-  const preview = await resolveTimetableSlots(rawSlots, {
-    academicYear,
+  let preview = await resolveTimetableSlots(rawSlots, {
     createMissingSubjects: true,
     teacherMap: mergedTeacherMap,
     classMap,
     subjectMap,
   });
 
+  const leftoverTeacherNames = leftoverUnmatchedTeacherNames(preview.unmatchedTeachers);
+  if (leftoverTeacherNames.length) {
+    const ensured = await ensureTeachersFromTableNames(leftoverTeacherNames);
+    Object.assign(mergedTeacherMap, ensured.teacherMap);
+    teachersCreated += ensured.created;
+    if (ensured.temporaryPasswordIssued) temporaryPasswordIssued = true;
+    preview = await resolveTimetableSlots(rawSlots, {
+      createMissingSubjects: true,
+      teacherMap: mergedTeacherMap,
+      classMap,
+      subjectMap,
+    });
+  }
+
   if (preview.matched === 0) {
     throw badRequest(
       'لم يُطابق أي درس. أكمل مطابقة أسماء المعلمين والفصول في الشبكة، أو أنشئ المعلمين من الجدول.'
     );
   }
+
+  assertImportReadyToSave(preview, gate.classes);
 
   const year = preview.academicYear;
   const slots = preview.matchedSlots;
@@ -599,6 +825,18 @@ export async function applyTimetableImport(
     }
   }
 
+  let assignmentsRemoved = 0;
+  if (removeAssignmentsNotInFile) {
+    const impact = await summarizeTimetableImportImpact(year, finalSlots);
+    const leftoverIds = impact.leftoverSubjects.map((row) => row.id);
+    if (leftoverIds.length) {
+      const deleted = await prisma.teacherAssignment.deleteMany({
+        where: { id: { in: leftoverIds } },
+      });
+      assignmentsRemoved = deleted.count;
+    }
+  }
+
   return {
     academicYear: year,
     parsed: preview.total,
@@ -612,6 +850,7 @@ export async function applyTimetableImport(
     slotsCreated,
     assignmentsCreated,
     assignmentsReassigned,
+    assignmentsRemoved,
   };
 }
 

@@ -6,6 +6,7 @@ import type {
   ClassItem,
   ImportBatch,
   ImportResult,
+  NoorClassChoice,
   NoorDeactivationCandidate,
   NoorPhoneConflict,
   SchoolSettings,
@@ -463,6 +464,7 @@ export async function importNoorFile(file: File): Promise<ImportResult> {
   const form = new FormData()
   form.append('file', file)
   const data = await apiRequest<{
+    dryRun?: boolean
     fileName: string
     created: number
     updated: number
@@ -475,12 +477,17 @@ export async function importNoorFile(file: File): Promise<ImportResult> {
     batchId?: number
     phoneConflicts?: NoorPhoneConflict[]
     pendingDeactivations?: NoorDeactivationCandidate[]
+    classMappings?: ImportResult['classMappings']
+    classOptions?: ImportResult['classOptions']
+    missingPhoneCount?: number
+    phoneReview?: ImportResult['phoneReview']
     errors: ImportResult['errors']
   }>('/students/import-noor', {
     method: 'POST',
     body: form,
   })
   return {
+    dryRun: data.dryRun ?? true,
     fileName: data.fileName || file.name,
     created: data.created,
     updated: data.updated,
@@ -493,6 +500,57 @@ export async function importNoorFile(file: File): Promise<ImportResult> {
     batchId: data.batchId,
     phoneConflicts: data.phoneConflicts ?? [],
     pendingDeactivations: data.pendingDeactivations ?? [],
+    classMappings: data.classMappings ?? [],
+    classOptions: data.classOptions ?? [],
+    missingPhoneCount: data.missingPhoneCount ?? 0,
+    phoneReview: data.phoneReview ?? [],
+    errors: data.errors ?? [],
+  }
+}
+
+export async function confirmNoorClassImport(input: {
+  batchId: number
+  classMap: Record<string, NoorClassChoice>
+}): Promise<ImportResult> {
+  const data = await apiRequest<{
+    dryRun?: boolean
+    fileName: string
+    created: number
+    updated: number
+    unchanged?: number
+    reactivated: number
+    skipped: number
+    classesCreated?: number
+    classesReused?: number
+    academicYear?: string
+    batchId?: number
+    phoneConflicts?: NoorPhoneConflict[]
+    pendingDeactivations?: NoorDeactivationCandidate[]
+    retiredClasses?: ImportResult['retiredClasses']
+    missingPhoneCount?: number
+    phoneReview?: ImportResult['phoneReview']
+    errors: ImportResult['errors']
+  }>('/students/import-noor/confirm', {
+    method: 'POST',
+    body: input,
+  })
+  return {
+    dryRun: false,
+    fileName: data.fileName,
+    created: data.created,
+    updated: data.updated,
+    unchanged: data.unchanged ?? 0,
+    reactivated: data.reactivated,
+    skipped: data.skipped,
+    classesCreated: data.classesCreated ?? 0,
+    classesReused: data.classesReused ?? 0,
+    academicYear: data.academicYear,
+    batchId: data.batchId,
+    phoneConflicts: data.phoneConflicts ?? [],
+    pendingDeactivations: data.pendingDeactivations ?? [],
+    retiredClasses: data.retiredClasses ?? [],
+    missingPhoneCount: data.missingPhoneCount ?? 0,
+    phoneReview: data.phoneReview ?? [],
     errors: data.errors ?? [],
   }
 }
@@ -518,6 +576,7 @@ export async function confirmNoorDeactivations(input: {
     deactivated: number
     skipped: number
     pendingDeactivations: NoorDeactivationCandidate[]
+    retiredClasses?: ImportResult['retiredClasses']
   }>('/students/import-noor/confirm-deactivations', {
     method: 'POST',
     body: input,
@@ -593,6 +652,21 @@ export type TimetableImportResult = {
   teacherOptions?: Array<{ id: number; name: string }>
   classOptions?: Array<{ id: number; name: string }>
   subjectOptions?: Array<{ id: number; nameAr: string }>
+  homeworkThisWeek?: number
+  weeklyPlanThisWeek?: number
+  homeworkThisYear?: number
+  weeklyPlanThisYear?: number
+  leftoverSubjects?: Array<{
+    id: number
+    teacherName: string
+    className: string
+    subjectNameAr: string
+  }>
+  assignmentsRemoved?: number
+  inFileNotInSchool?: string[]
+  inSchoolNotInFile?: Array<{ id: number; name: string }>
+  classSetOk?: boolean
+  error?: string
 }
 
 /** Upload aSc PDF/Excel → preview + mapping suggestions (always dry-run). */
@@ -618,7 +692,7 @@ export async function confirmTimetableImport(payload: {
   subjectMap: Record<string, number>
   fileName?: string
   view?: string
-  academicYear?: string
+  removeAssignmentsNotInFile?: boolean
 }): Promise<TimetableImportResult> {
   const data = await apiRequest<TimetableImportResult>(
     '/teacher-assignments/import-timetable/confirm',

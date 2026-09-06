@@ -95,7 +95,7 @@ export function parseNoorSpreadsheet(buffer) {
     section: pickColumn(headers, COL.section),
   };
 
-  if (!map.id || !map.nameAr || !map.phone || !map.grade || !map.section) {
+  if (!map.id || !map.nameAr || !map.grade || !map.section) {
     return {
       rows: [],
       errors: [
@@ -103,7 +103,7 @@ export function parseNoorSpreadsheet(buffer) {
           index: 0,
           id: '',
           error:
-            'تعذّر التعرف على أعمدة نور. المطلوب: رقم الطالب، اسم الطالب، الجوال، رقم الصف، الفصل',
+            'تعذّر التعرف على أعمدة نور. المطلوب: رقم الطالب، اسم الطالب، رقم الصف، الفصل',
         },
       ],
       columnMap: map,
@@ -118,8 +118,12 @@ export function parseNoorSpreadsheet(buffer) {
     const id = normalizeStudentId(cellStr(raw, map.id));
     const nameAr = cellStr(raw, map.nameAr);
     const nameEn = cellStr(raw, map.nameEn) || nameAr;
-    const gradeLevel = cellStr(raw, map.grade);
-    const section = cellStr(raw, map.section);
+    const rawGrade = cellStr(raw, map.grade);
+    const rawSection = cellStr(raw, map.section);
+    const rawClass = rawNoorClass(rawGrade, rawSection);
+    const suggested = normalizeNoorClass(rawGrade, rawSection);
+    const gradeLevel = rawClass.gradeLevel;
+    const section = rawClass.section;
     const phoneRaw = cellStr(raw, map.phone);
 
     if (!id && !nameAr && !phoneRaw) continue; // blank line
@@ -133,31 +137,114 @@ export function parseNoorSpreadsheet(buffer) {
       continue;
     }
 
+    const base = {
+      index: i,
+      id,
+      nameAr,
+      nameEn,
+      gradeLevel,
+      section,
+      suggestedGradeLevel: suggested.gradeLevel,
+      suggestedSection: suggested.section,
+    };
+
     if (!phoneRaw) {
-      errors.push({ index: i, id, error: 'رقم الجوال فارغ' });
+      rows.push({
+        ...base,
+        parentPhone: '',
+        phoneReviewReason: 'missing',
+      });
       continue;
     }
 
     try {
-      const parentPhone = normalizePhone(phoneRaw);
       rows.push({
-        index: i,
-        id,
-        nameAr,
-        nameEn,
-        parentPhone,
-        gradeLevel,
-        section,
+        ...base,
+        parentPhone: normalizePhone(phoneRaw),
       });
-    } catch (e) {
-      errors.push({ index: i, id, error: e.message || 'رقم جوال غير صالح' });
+    } catch {
+      rows.push({
+        ...base,
+        parentPhone: '',
+        phoneReviewReason: 'invalid',
+        rawPhone: phoneRaw,
+      });
     }
   }
 
   return { rows, errors, columnMap: map };
 }
 
-/** Display name for an auto-created class, e.g. "أول - 1". */
+const SECTION_FROM_DIGIT = {
+  1: 'أ',
+  2: 'ب',
+  3: 'ج',
+  4: 'د',
+  5: 'ه',
+  6: 'و',
+  7: 'ز',
+  8: 'ح',
+};
+
+const SECTION_FROM_LATIN = { a: 'أ', b: 'ب', c: 'ج', d: 'د' };
+
+const DIGIT_FROM_SECTION = {
+  أ: '1',
+  ب: '2',
+  ج: '3',
+  د: '4',
+  ه: '5',
+  و: '6',
+  ز: '7',
+  ح: '8',
+};
+
+function foldArabicDigits(s) {
+  return String(s ?? '').replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+}
+
+/** File identity: keep Noor digits. Only fold Arabic-Indic numerals. */
+export function rawNoorClass(gradeLevel, section) {
+  const grade = String(gradeLevel ?? '').trim();
+  const sec = foldArabicDigits(String(section ?? '').trim());
+  return { gradeLevel: grade, section: sec };
+}
+
+export function fileClassKey(grade, section) {
+  return `${String(grade ?? '').trim()}||${String(section ?? '').trim()}`;
+}
+
+export function fileClassLabel(grade, section) {
+  const g = String(grade ?? '').trim();
+  const s = String(section ?? '').trim();
+  if (!s) return g;
+  if (/^[1-8]$/.test(s)) return `${g} - ${s}`;
+  return `${g} ${s}`.trim();
+}
+
+/**
+ * Noor stores شعبة as 1/2; the weekly table uses أ/ب (أول-2 → أول ب).
+ * Suggestion only — do not write this without admin choice.
+ */
+export function normalizeNoorClass(gradeLevel, section) {
+  let grade = String(gradeLevel ?? '').trim();
+  if (grade === 'اول') grade = 'أول';
+  if (grade === 'ثاني') grade = 'ثان';
+
+  let sec = foldArabicDigits(String(section ?? '').trim());
+  if (/^[1-8]$/.test(sec)) sec = SECTION_FROM_DIGIT[Number(sec)];
+  else if (SECTION_FROM_LATIN[sec.toLowerCase()]) sec = SECTION_FROM_LATIN[sec.toLowerCase()];
+
+  return { gradeLevel: grade, section: sec };
+}
+
+/** Letter section → the digit Noor previously stored (ب → "2"). */
+export function legacyDigitSection(section) {
+  return DIGIT_FROM_SECTION[String(section ?? '').trim()] || null;
+}
+
+/** Display name, e.g. "أول ب". */
 export function classDisplayName(gradeLevel, section) {
-  return `${gradeLevel} - ${section}`;
+  const n = normalizeNoorClass(gradeLevel, section);
+  return `${n.gradeLevel} ${n.section}`.trim();
 }

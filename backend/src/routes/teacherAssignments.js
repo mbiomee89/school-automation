@@ -10,9 +10,12 @@ import { parseTimetableUpload } from '../services/timetablePdfParse.js';
 import { schoolDateOnlyStr } from '../utils/dates.js';
 import {
   applyTimetableImport,
+  assertClassSetsMatch,
   getTeacherDaySchedule,
   getTeacherWeekSchedule,
+  resolveImportAcademicYear,
   resolveTimetableSlots,
+  summarizeTimetableImportImpact,
   weekStartSunday,
 } from '../services/timetableImport.js';
 
@@ -140,7 +143,16 @@ router.post(
     }
 
     if (dryRun) {
+      const year = await resolveImportAcademicYear();
+      const classCount = await prisma.class.count({ where: { academicYear: year } });
+      if (classCount === 0) {
+        throw badRequest('أضف الفصول أولاً ثم ارفع الجدول.', {
+          inFileNotInSchool: [...new Set(parsed.slots.map((s) => s.classLabel).filter(Boolean))],
+          inSchoolNotInFile: [],
+        });
+      }
       const preview = await resolveTimetableSlots(parsed.slots, { createMissingSubjects: false });
+      const impact = await summarizeTimetableImportImpact(preview.academicYear, preview.resolvedPairs);
       return res.json({
         dryRun: true,
         view: parsed.view,
@@ -161,6 +173,7 @@ router.post(
         classOptions: preview.classOptions,
         subjectOptions: preview.subjectOptions,
         slots: preview.slots,
+        ...impact,
       });
     }
 
@@ -195,6 +208,7 @@ const confirmSchema = z.object({
   fileName: z.string().optional(),
   view: z.string().optional(),
   academicYear: z.string().optional(),
+  removeAssignmentsNotInFile: z.boolean().optional().default(false),
 });
 
 /**
@@ -214,14 +228,14 @@ router.post(
       subjectMap,
       fileName,
       view,
-      academicYear,
+      removeAssignmentsNotInFile,
     } = req.body;
     const result = await applyTimetableImport(slots, {
-      academicYear,
       teacherMap,
       createTeachers,
       classMap,
       subjectMap,
+      removeAssignmentsNotInFile,
     });
     res.json({
       dryRun: false,
@@ -249,7 +263,7 @@ router.get(
     }
 
     const assignments = await prisma.teacherAssignment.findMany({
-      where,
+      where: { ...where, class: { retiredAt: null } },
       include: assignmentInclude,
       orderBy: { id: 'asc' },
     });
@@ -317,7 +331,10 @@ router.post(
     }
 
     const [classes, subjects] = await Promise.all([
-      prisma.class.findMany({ where: { id: { in: classIds } }, select: { id: true } }),
+      prisma.class.findMany({
+        where: { id: { in: classIds }, retiredAt: null },
+        select: { id: true },
+      }),
       items.length
         ? prisma.subject.findMany({
             where: { id: { in: [...new Set(items.map((i) => i.subjectId))] } },
@@ -383,7 +400,7 @@ router.post(
     });
 
     const assignments = await prisma.teacherAssignment.findMany({
-      where: { teacherId },
+      where: { teacherId, class: { retiredAt: null } },
       include: assignmentInclude,
       orderBy: { id: 'asc' },
     });

@@ -76,6 +76,8 @@ model Class {
   section      String?
   academicYear String   // e.g. "2026-2027" — prevents next year's "Grade 5-B" from
                          // being the same row (and mixing history) with this year's
+  /// Hidden from الفصول / weekly gate / teacher pickers. History rows stay.
+  retiredAt    DateTime?
 
   students    Student[]
   assignments TeacherAssignment[]
@@ -120,6 +122,10 @@ model StudentImportBatch {
   academicYear String?
   /// JSON string array of student IDs present in the file (including rows that failed to apply).
   importedIdsJson String?
+  /// Dry-run payload (parsed rows) held until admin confirms class matching.
+  previewJson String?
+  /// Class ids this year that were not mapping targets — leftover retire after استبعاد.
+  leftoverClassIdsJson String?
 
   students Student[]
   phoneDecisions NoorParentPhoneDecision[]

@@ -129,7 +129,7 @@ router.get(
         ? {}
         : { teacherId: req.user.id };
     const rows = await prisma.teacherAssignment.findMany({
-      where,
+      where: { ...where, class: { retiredAt: null } },
       include: {
         class: true,
         subject: true,
@@ -514,6 +514,7 @@ router.get(
   requireRole('ADMIN'),
   asyncHandler(async (_req, res) => {
     const classes = await prisma.class.findMany({
+      where: { retiredAt: null },
       orderBy: [{ academicYear: 'desc' }, { gradeLevel: 'asc' }, { name: 'asc' }],
       select: {
         id: true,

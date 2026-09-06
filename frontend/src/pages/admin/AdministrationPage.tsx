@@ -15,6 +15,7 @@ import {
   getSchoolSettings,
   getStudentStats,
   importNoorFile,
+  confirmNoorClassImport,
   confirmNoorDeactivations,
   listNoorPhoneDecisions,
   resolveNoorPhoneDecision,
@@ -469,6 +470,14 @@ export function AdministrationPage() {
         try {
           const result = await importNoorFile(file)
           setImportResult(result)
+        } catch (err) {
+          alertError(err, 'فشل قراءة ملف الطلاب')
+        }
+      }}
+      onConfirmNoorClassImport={async (batchId, classMap) => {
+        try {
+          const result = await confirmNoorClassImport({ batchId, classMap })
+          setImportResult(result)
           setStudentsLoaded(false)
           await Promise.all([
             loadStudents(),
@@ -485,8 +494,12 @@ export function AdministrationPage() {
           } catch {
             /* Import already succeeded — keep conflicts from the import response. */
           }
+          const retired = result.retiredClasses?.length
+            ? ` · أُزيل ${result.retiredClasses.length} فصلاً فارغاً من القائمة`
+            : ''
+          showToast(`تم استيراد الطلاب${retired}`)
         } catch (err) {
-          alertError(err, 'فشل استيراد الطلاب')
+          alertError(err, 'فشل تأكيد استيراد الطلاب')
         }
       }}
       onResolveNoorPhoneDecision={async (decisionId, action) => {
@@ -533,12 +546,16 @@ export function AdministrationPage() {
                   ...prev,
                   pendingDeactivations: result.pendingDeactivations,
                   deactivated: (prev.deactivated ?? 0) + result.deactivated,
+                  retiredClasses: result.retiredClasses ?? prev.retiredClasses,
                 }
               : prev
           )
           setStudentsLoaded(false)
-          await Promise.all([loadStudents(), refreshStudentStats()])
-          showToast(`تم استبعاد ${result.deactivated} طالب/طالبة`)
+          await Promise.all([loadStudents(), listClasses().then(setClasses), refreshStudentStats()])
+          const retired = result.retiredClasses?.length
+            ? ` · أُزيل ${result.retiredClasses.length} فصلاً فارغاً من القائمة`
+            : ''
+          showToast(`تم استبعاد ${result.deactivated} طالب/طالبة${retired}`)
         } catch (err) {
           alertError(err, 'فشل استبعاد الطلاب')
         }
@@ -557,6 +574,25 @@ export function AdministrationPage() {
           const result = await importTimetableFile(file)
           setTimetableImportResult(result)
         } catch (err) {
+          const details =
+            err instanceof ApiError
+              ? (err.details as {
+                  inFileNotInSchool?: string[]
+                  inSchoolNotInFile?: Array<{ id: number; name: string }>
+                } | undefined)
+              : undefined
+          if (details?.inFileNotInSchool || details?.inSchoolNotInFile) {
+            setTimetableImportResult({
+              dryRun: false,
+              fileName: file.name,
+              classSetOk: false,
+              error: err instanceof ApiError ? err.message : 'فصول المدرسة لا تطابق فصول الجدول',
+              inFileNotInSchool: details.inFileNotInSchool ?? [],
+              inSchoolNotInFile: details.inSchoolNotInFile ?? [],
+            })
+            return
+          }
+          setTimetableImportResult(null)
           alertError(err, 'فشل تحليل الجدول الدراسي')
         }
       }}
@@ -574,12 +610,30 @@ export function AdministrationPage() {
             subjectMap: maps.subjectMap,
             fileName: timetableImportResult.fileName,
             view: timetableImportResult.view,
-            academicYear: timetableImportResult.academicYear,
+            removeAssignmentsNotInFile: maps.removeAssignmentsNotInFile,
           })
           setTimetableImportResult(result)
           setAssignmentsLoaded(false)
           await Promise.all([loadAssignments(), listUsers().then(setStaff), listSubjects().then(setSubjects)])
         } catch (err) {
+          const details =
+            err instanceof ApiError
+              ? (err.details as {
+                  inFileNotInSchool?: string[]
+                  inSchoolNotInFile?: Array<{ id: number; name: string }>
+                } | undefined)
+              : undefined
+          if (details?.inFileNotInSchool || details?.inSchoolNotInFile) {
+            setTimetableImportResult({
+              dryRun: false,
+              fileName: timetableImportResult.fileName,
+              classSetOk: false,
+              error: err instanceof ApiError ? err.message : 'فصول المدرسة لا تطابق فصول الجدول',
+              inFileNotInSchool: details.inFileNotInSchool ?? [],
+              inSchoolNotInFile: details.inSchoolNotInFile ?? [],
+            })
+            return
+          }
           alertError(err, 'فشل حفظ الجدول بعد المطابقة')
         }
       }}

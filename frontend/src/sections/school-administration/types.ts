@@ -130,6 +130,14 @@ export interface NoorPhoneConflict {
   batchId?: number
 }
 
+export interface NoorPhoneReviewItem {
+  studentId: string
+  nameAr: string
+  className: string | null
+  reason: 'missing' | 'invalid'
+  rawPhone: string | null
+}
+
 export interface NoorDeactivationCandidate {
   id: string
   nameAr: string
@@ -153,8 +161,43 @@ export interface ImportResult {
   phoneConflicts?: NoorPhoneConflict[]
   pendingDeactivations?: NoorDeactivationCandidate[]
   deactivated?: number
+  dryRun?: boolean
+  classMappings?: NoorClassMapping[]
+  classOptions?: NoorClassOption[]
+  retiredClasses?: Array<{ id: number; name: string }>
+  missingPhoneCount?: number
+  phoneReview?: NoorPhoneReviewItem[]
   /** Shared initial password for newly created teacher accounts (Noor teacher import). */
   temporaryPasswordIssued?: boolean
+}
+
+export interface NoorClassOption {
+  id: number
+  name: string
+  gradeLevel: string
+  section: string | null
+  studentCount: number
+}
+
+export interface NoorClassMapping {
+  key: string
+  fileGrade: string
+  fileSection: string
+  fileLabel: string
+  studentCount: number
+  suggestedAction: 'use' | 'createLetter' | 'createNoor' | 'rename'
+  suggestedClassId: number | null
+  recommendedLabel: string
+  warning: string | null
+  canRename: boolean
+  renameClassId: number | null
+  letterLabel: string
+  noorLabel: string
+}
+
+export type NoorClassChoice = {
+  action: 'use' | 'createLetter' | 'createNoor' | 'rename'
+  classId?: number | null
 }
 
 export interface TimetableNameMapping {
@@ -201,6 +244,21 @@ export interface TimetableImportResult {
   teacherOptions?: Array<{ id: number; name: string }>
   classOptions?: Array<{ id: number; name: string }>
   subjectOptions?: Array<{ id: number; nameAr: string }>
+  homeworkThisWeek?: number
+  weeklyPlanThisWeek?: number
+  homeworkThisYear?: number
+  weeklyPlanThisYear?: number
+  leftoverSubjects?: Array<{
+    id: number
+    teacherName: string
+    className: string
+    subjectNameAr: string
+  }>
+  assignmentsRemoved?: number
+  inFileNotInSchool?: string[]
+  inSchoolNotInFile?: Array<{ id: number; name: string }>
+  classSetOk?: boolean
+  error?: string
 }
 
 export interface NotificationLogItem {
@@ -333,8 +391,13 @@ export interface SchoolAdministrationProps {
   onSyncAssignments?: (input: AssignmentSyncInput) => void | Promise<void>
   /** Remove a teacher assignment */
   onRemoveAssignment?: (assignmentId: number) => void
-  /** Upload Noor StudentGuidance spreadsheet — classes are created automatically from the file */
+  /** Upload Noor StudentGuidance spreadsheet — dry-run class matching */
   onImportStudents?: (file: File) => void | Promise<void>
+  /** Confirm Noor class map and write students */
+  onConfirmNoorClassImport?: (
+    batchId: number,
+    classMap: Record<string, NoorClassChoice>
+  ) => void | Promise<void>
   /** Accept Noor parent phone or keep the current number */
   onResolveNoorPhoneDecision?: (decisionId: number, action: 'accept' | 'keep') => void | Promise<void>
   /** Soft-exclude students missing from the latest Noor file (year-scoped) */
@@ -353,6 +416,7 @@ export interface SchoolAdministrationProps {
     createTeachers: string[]
     classMap: Record<string, number>
     subjectMap: Record<string, number>
+    removeAssignmentsNotInFile?: boolean
   }) => void | Promise<void>
   /** Filter notification log */
   onFilterNotifications?: (filters: {

@@ -15,10 +15,11 @@ import { normalizePhone } from '../utils/phone.js';
 import { migrateParentPhoneOnStudentChange } from '../services/parentPhoneSync.js';
 import { staffResetParentPasswordForStudent } from '../services/auth.js';
 import { uploadNoorSpreadsheet } from '../middleware/upload.js';
-import { classDisplayName, parseNoorSpreadsheet } from '../services/noorImport.js';
+import { fileClassKey, fileClassLabel, parseNoorSpreadsheet } from '../services/noorImport.js';
 import { closeOpenEnrollments, openEnrollment } from '../services/enrollment.js';
 import {
   applyNoorStudentRow,
+  buildPhoneReview,
   confirmNoorDeactivations,
   listPendingPhoneDecisions,
   listYearScopedMissingStudents,
@@ -26,6 +27,15 @@ import {
   resolveNoorPhoneDecision,
   serializeImportedIds,
 } from '../services/noorReimport.js';
+import {
+  buildNoorClassPreview,
+  leftoverClassIdsFromSchool,
+  loadTimetableClassLabels,
+  parsePreviewJson,
+  resolveNoorClassChoice,
+  retireLeftoverEmptyClasses,
+  serializeLeftoverClassIds,
+} from '../services/noorClassMatch.js';
 
 const router = Router();
 
@@ -33,7 +43,7 @@ router.use(requireStaff);
 
 async function teacherAssignedClassIds(teacherId) {
   const rows = await prisma.teacherAssignment.findMany({
-    where: { teacherId },
+    where: { teacherId, class: { retiredAt: null } },
     select: { classId: true },
   });
   return [...new Set(rows.map((r) => r.classId))];
@@ -560,12 +570,35 @@ router.post(
   })
 );
 
+const noorChoiceSchema = z.object({
+  action: z.enum(['use', 'createLetter', 'createNoor', 'rename']),
+  classId: z.number().int().positive().optional().nullable(),
+});
+
+const confirmNoorClassSchema = z.object({
+  batchId: z.number().int().positive(),
+  classMap: z.record(z.string(), noorChoiceSchema),
+});
+
+async function schoolYearOrThrow() {
+  const settings = await prisma.schoolSettings.findUnique({ where: { id: 1 } });
+  const academicYear = settings?.academicYear?.trim();
+  if (!academicYear) throw badRequest('لا توجد سنة دراسية في إعدادات المدرسة');
+  return academicYear;
+}
+
+async function loadSchoolClassesForMatch(academicYear) {
+  return prisma.class.findMany({
+    where: { academicYear },
+    orderBy: [{ gradeLevel: 'asc' }, { section: 'asc' }],
+    include: { _count: { select: { students: true } } },
+  });
+}
+
 /**
  * POST /students/import-noor
- * Upload a Noor StudentGuidance .xlsx — auto-creates classes from
- * (رقم الصف + الفصل) and upserts students into those classes.
- * Multipart field: file
- * Optional body field: academicYear (defaults to SchoolSettings.academicYear)
+ * Dry-run only. Parse the spreadsheet and return class-matching recommendations.
+ * Confirm writes via POST /students/import-noor/confirm.
  */
 router.post(
   '/import-noor',
@@ -574,12 +607,7 @@ router.post(
   asyncHandler(async (req, res) => {
     if (!req.file?.buffer) throw badRequest('No spreadsheet file was uploaded');
 
-    const settings = await prisma.schoolSettings.findUnique({ where: { id: 1 } });
-    const academicYear =
-      (typeof req.body?.academicYear === 'string' && req.body.academicYear.trim()) ||
-      settings?.academicYear ||
-      '2026-2027';
-
+    const academicYear = await schoolYearOrThrow();
     const parsed = parseNoorSpreadsheet(req.file.buffer);
     if (parsed.rows.length === 0 && parsed.errors.length > 0) {
       return res.status(400).json({
@@ -588,87 +616,120 @@ router.post(
       });
     }
 
-    const errors = [...parsed.errors];
     const fileName = req.file.originalname || 'noor-import.xlsx';
+    const [schoolClasses, timetableLabels] = await Promise.all([
+      loadSchoolClassesForMatch(academicYear),
+      loadTimetableClassLabels(prisma, academicYear),
+    ]);
+    const preview = buildNoorClassPreview(parsed.rows, schoolClasses, { timetableLabels });
 
-    // Create import batch + ensure classes (short transaction)
-    const { batch, classByKey, classesCreated, classesReused } = await prisma.$transaction(
+    const batch = await prisma.studentImportBatch.create({
+      data: {
+        importedBy: req.user.id,
+        fileName,
+        rowCount: parsed.rows.length,
+        academicYear,
+        previewJson: JSON.stringify({ rows: parsed.rows, errors: parsed.errors }),
+      },
+    });
+
+    res.status(200).json({
+      dryRun: true,
+      fileName,
+      academicYear,
+      batchId: batch.id,
+      total: parsed.rows.length,
+      skipped: parsed.errors.length,
+      errors: parsed.errors,
+      classMappings: preview.mappings,
+      classOptions: preview.classOptions,
+      created: 0,
+      updated: 0,
+      unchanged: 0,
+      reactivated: 0,
+      classesCreated: 0,
+      classesReused: 0,
+      phoneReview: buildPhoneReview(parsed.rows, {
+        classNameForRow: (row) => fileClassLabel(row.gradeLevel, row.section),
+      }),
+      missingPhoneCount: parsed.rows.filter((row) => row.phoneReviewReason).length,
+    });
+  })
+);
+
+/**
+ * POST /students/import-noor/confirm
+ * Apply admin class map, then upsert students. Does not silent-rename digits.
+ */
+router.post(
+  '/import-noor/confirm',
+  requireRole('ADMIN'),
+  validateBody(confirmNoorClassSchema),
+  asyncHandler(async (req, res) => {
+    const academicYear = await schoolYearOrThrow();
+    const batch = await prisma.studentImportBatch.findUnique({ where: { id: req.body.batchId } });
+    if (!batch) throw notFound('دفعة الاستيراد غير موجودة');
+    if (batch.academicYear && batch.academicYear !== academicYear) {
+      throw badRequest('دفعة الاستيراد ليست لعام المدرسة الحالي');
+    }
+    if (batch.importedIdsJson) {
+      throw badRequest('تم تأكيد هذه الدفعة مسبقاً');
+    }
+
+    const preview = parsePreviewJson(batch.previewJson);
+    if (preview.rows.length === 0) {
+      throw badRequest('لا توجد صفوف محفوظة لهذه الدفعة — أعد رفع الملف');
+    }
+
+    const fileKeys = new Set(preview.rows.map((row) => fileClassKey(row.gradeLevel, row.section)));
+    const classMap = req.body.classMap || {};
+    for (const key of fileKeys) {
+      if (!classMap[key]?.action) {
+        throw badRequest('أكد مطابقة كل فصول الملف قبل الحفظ');
+      }
+    }
+
+    const schoolBefore = await loadSchoolClassesForMatch(academicYear);
+    const classByKey = new Map();
+    let classesCreated = 0;
+    let classesReused = 0;
+
+    await prisma.$transaction(
       async (tx) => {
-        const batchRow = await tx.studentImportBatch.create({
-          data: {
-            importedBy: req.user.id,
-            fileName,
-            rowCount: parsed.rows.length,
-          },
-        });
-
-        const classKey = (grade, section) => `${grade}||${section}`;
-        const uniqueClasses = new Map();
-        for (const row of parsed.rows) {
-          uniqueClasses.set(classKey(row.gradeLevel, row.section), {
-            gradeLevel: row.gradeLevel,
-            section: row.section,
+        for (const key of fileKeys) {
+          const sample = preview.rows.find((row) => fileClassKey(row.gradeLevel, row.section) === key);
+          const beforeIds = new Set((await tx.class.findMany({ select: { id: true } })).map((c) => c.id));
+          const cls = await resolveNoorClassChoice(tx, {
+            choice: classMap[key],
+            fileGrade: sample.gradeLevel,
+            fileSection: sample.section,
+            academicYear,
           });
+          classByKey.set(key, cls);
+          if (beforeIds.has(cls.id)) classesReused += 1;
+          else classesCreated += 1;
         }
-
-        const byKey = new Map();
-        let createdCount = 0;
-        let reusedCount = 0;
-
-        for (const { gradeLevel, section } of uniqueClasses.values()) {
-          const existing = await tx.class.findUnique({
-            where: {
-              gradeLevel_section_academicYear: {
-                gradeLevel,
-                section,
-                academicYear,
-              },
-            },
-          });
-
-          if (existing) {
-            byKey.set(classKey(gradeLevel, section), existing);
-            reusedCount += 1;
-            continue;
-          }
-
-          const createdClass = await tx.class.create({
-            data: {
-              name: classDisplayName(gradeLevel, section),
-              gradeLevel,
-              section,
-              academicYear,
-            },
-          });
-          byKey.set(classKey(gradeLevel, section), createdClass);
-          createdCount += 1;
-        }
-
-        return {
-          batch: batchRow,
-          classByKey: byKey,
-          classesCreated: createdCount,
-          classesReused: reusedCount,
-        };
       },
       { timeout: 60_000 }
     );
 
-    // Upsert students in small batches — one giant interactive transaction
-    // often times out / drops on free Render Postgres with 300+ rows.
-    const classKey = (grade, section) => `${grade}||${section}`;
+    const usedIds = [...classByKey.values()].map((c) => c.id);
+    const leftoverClassIds = leftoverClassIdsFromSchool(schoolBefore, usedIds);
+
+    const errors = [...preview.errors];
     let created = 0;
     let updated = 0;
     let unchanged = 0;
     let reactivated = 0;
     const phoneConflicts = [];
-    const fileIds = [...new Set(parsed.rows.map((row) => row.id).filter(Boolean))];
+    const landedIds = [];
+    const fileIds = [...new Set(preview.rows.map((row) => row.id).filter(Boolean))];
     const BATCH = 40;
     let importFailed = null;
 
     try {
-      for (let offset = 0; offset < parsed.rows.length; offset += BATCH) {
-        const slice = parsed.rows.slice(offset, offset + BATCH);
+      for (let offset = 0; offset < preview.rows.length; offset += BATCH) {
+        const slice = preview.rows.slice(offset, offset + BATCH);
         const counts = await prisma.$transaction(
           async (tx) => {
             let c = 0;
@@ -676,9 +737,10 @@ router.post(
             let n = 0;
             let r = 0;
             const conflicts = [];
+            const landed = [];
 
             for (const row of slice) {
-              const cls = classByKey.get(classKey(row.gradeLevel, row.section));
+              const cls = classByKey.get(fileClassKey(row.gradeLevel, row.section));
               if (!cls) {
                 errors.push({ index: row.index, id: row.id, error: 'Class resolution failed' });
                 continue;
@@ -695,9 +757,10 @@ router.post(
               else if (result.kind === 'unchanged') n += 1;
               else if (result.kind === 'reactivated') r += 1;
               if (result.phoneConflict) conflicts.push(result.phoneConflict);
+              landed.push(row.id);
             }
 
-            return { c, u, n, r, conflicts };
+            return { c, u, n, r, conflicts, landed };
           },
           { timeout: 60_000 }
         );
@@ -707,6 +770,7 @@ router.post(
         unchanged += counts.n;
         reactivated += counts.r;
         phoneConflicts.push(...counts.conflicts);
+        landedIds.push(...counts.landed);
       }
     } catch (err) {
       importFailed = err;
@@ -719,11 +783,9 @@ router.post(
         rowCount: landed,
         academicYear,
         importedIdsJson: serializeImportedIds(fileIds),
+        leftoverClassIdsJson: serializeLeftoverClassIds(leftoverClassIds),
       },
     });
-    batch.rowCount = landed;
-    batch.academicYear = academicYear;
-    batch.importedIdsJson = serializeImportedIds(fileIds);
 
     const missing =
       fileIds.length === 0
@@ -733,30 +795,32 @@ router.post(
             importedIds: fileIds,
           });
     const pendingDeactivations = missing.map(mapDeactivationCandidate);
+    const retiredClasses = await retireLeftoverEmptyClasses(prisma, {
+      leftoverClassIds,
+      protectedClassIds: usedIds,
+    });
 
-    if (importFailed) {
-      return res.status(500).json({
-        error: importFailed.message || 'فشل الاستيراد جزئياً',
-        fileName,
-        academicYear,
-        created,
-        updated,
-        unchanged,
-        reactivated,
-        skipped: errors.length,
-        classesCreated,
-        classesReused,
-        errors,
-        batch,
-        batchId: batch.id,
-        phoneConflicts,
-        pendingDeactivations,
-        partial: true,
+    const uniqueLanded = [...new Set(landedIds)];
+    const storedPhoneById = new Map();
+    if (uniqueLanded.length) {
+      const stored = await prisma.student.findMany({
+        where: { id: { in: uniqueLanded } },
+        select: { id: true, parentPhone: true },
       });
+      for (const s of stored) storedPhoneById.set(s.id, s.parentPhone);
     }
+    const phoneReview = buildPhoneReview(preview.rows, {
+      classNameForRow: (row) => {
+        const cls = classByKey.get(fileClassKey(row.gradeLevel, row.section));
+        return cls?.name || fileClassLabel(row.gradeLevel, row.section);
+      },
+      landedIds: uniqueLanded,
+      storedPhoneById,
+    });
 
-    res.status(201).json({
-      fileName,
+    const payload = {
+      dryRun: false,
+      fileName: batch.fileName,
       academicYear,
       created,
       updated,
@@ -766,11 +830,23 @@ router.post(
       classesCreated,
       classesReused,
       errors,
-      batch,
       batchId: batch.id,
       phoneConflicts,
       pendingDeactivations,
-    });
+      retiredClasses,
+      phoneReview,
+      missingPhoneCount: phoneReview.length,
+    };
+
+    if (importFailed) {
+      return res.status(500).json({
+        error: importFailed.message || 'فشل الاستيراد جزئياً',
+        ...payload,
+        partial: true,
+      });
+    }
+
+    res.status(201).json(payload);
   })
 );
 

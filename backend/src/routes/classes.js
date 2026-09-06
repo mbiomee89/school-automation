@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, idParam } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
 import { conflict, notFound } from '../utils/errors.js';
+import { ACTIVE_CLASS } from '../services/activeClass.js';
 
 const router = Router();
 
@@ -25,7 +26,7 @@ router.get(
   '/',
   validateQuery(listQuery),
   asyncHandler(async (req, res) => {
-    const where = {};
+    const where = { ...ACTIVE_CLASS };
     if (req.query.academicYear) where.academicYear = req.query.academicYear;
 
     const classes = await prisma.class.findMany({
@@ -80,13 +81,23 @@ router.post(
   requireRole('ADMIN'),
   validateBody(classSchema),
   asyncHandler(async (req, res) => {
+    const name = req.body.name.trim();
+    const gradeLevel = req.body.gradeLevel.trim();
+    const section = req.body.section?.trim() || null;
+    const academicYear = req.body.academicYear.trim();
+    const existing = await prisma.class.findUnique({
+      where: { gradeLevel_section_academicYear: { gradeLevel, section, academicYear } },
+    });
+    if (existing?.retiredAt) {
+      const cls = await prisma.class.update({
+        where: { id: existing.id },
+        data: { retiredAt: null, name },
+      });
+      return res.status(201).json({ class: cls, restored: true });
+    }
+
     const cls = await prisma.class.create({
-      data: {
-        name: req.body.name.trim(),
-        gradeLevel: req.body.gradeLevel.trim(),
-        section: req.body.section?.trim() || null,
-        academicYear: req.body.academicYear.trim(),
-      },
+      data: { name, gradeLevel, section, academicYear },
     });
     res.status(201).json({ class: cls });
   })

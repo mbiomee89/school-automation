@@ -520,6 +520,7 @@ publicRouter.get(
     });
     if (!campaign || !campaign.isActive) throw notFound('الاستمارة غير متاحة');
     const classes = await prisma.class.findMany({
+      where: { retiredAt: null },
       orderBy: [{ gradeLevel: 'asc' }, { name: 'asc' }],
       select: { id: true, name: true, gradeLevel: true, section: true },
     });

@@ -6,12 +6,28 @@ import dotenv from 'dotenv';
 import { PrismaClient } from '@prisma/client';
 import {
   applyNoorStudentRow,
+  buildPhoneReview,
+  fileHasPhone,
   confirmNoorDeactivations,
   listYearScopedMissingStudents,
   phonesEqual,
   resolveNoorPhoneDecision,
   serializeImportedIds,
 } from '../backend/src/services/noorReimport.js';
+import {
+  classDisplayName,
+  fileClassKey,
+  legacyDigitSection,
+  normalizeNoorClass,
+  parseNoorSpreadsheet,
+  rawNoorClass,
+} from '../backend/src/services/noorImport.js';
+import XLSX from 'xlsx';
+import {
+  buildNoorClassPreview,
+  leftoverClassIdsFromSchool,
+  retireLeftoverEmptyClasses,
+} from '../backend/src/services/noorClassMatch.js';
 
 dotenv.config({ path: '.env' });
 const prisma = new PrismaClient();
@@ -26,8 +42,141 @@ const YEAR = '2098-2099';
 const stamp = Date.now();
 
 async function main() {
+  ok('Noor section 2 becomes ب', normalizeNoorClass('أول', '2').section === 'ب');
+  ok('Noor أول-2 display is أول ب', classDisplayName('أول', '2') === 'أول ب');
+  ok('Arabic-Indic ٢ becomes ب', normalizeNoorClass('أول', '٢').section === 'ب');
+  ok('ثاني grade folds to ثان', normalizeNoorClass('ثاني', '1').gradeLevel === 'ثان');
+  ok('legacy letter ب is digit 2', legacyDigitSection('ب') === '2');
+
   ok('05 and +966 phones equal', phonesEqual('0512345678', '+966512345678'));
   ok('different mobiles not equal', !phonesEqual('0512345678', '+966598765432'));
+
+  ok('raw Noor class keeps digit 2', rawNoorClass('أول', '2').section === '2');
+  ok('file class key is grade||section', fileClassKey('أول', '2') === 'أول||2');
+
+  const previewLetter = buildNoorClassPreview(
+    [{ gradeLevel: 'أول', section: '2' }, { gradeLevel: 'أول', section: '2' }],
+    [{ id: 11, name: 'أول ب', gradeLevel: 'أول', section: 'ب', retiredAt: null, _count: { students: 4 } }]
+  );
+  ok(
+    'letter equivalent is recommended',
+    previewLetter.mappings[0]?.suggestedAction === 'use' &&
+      previewLetter.mappings[0]?.suggestedClassId === 11
+  );
+
+  const previewDigit = buildNoorClassPreview(
+    [{ gradeLevel: 'أول', section: '2' }],
+    [{ id: 12, name: 'أول - 2', gradeLevel: 'أول', section: '2', retiredAt: null, _count: { students: 3 } }]
+  );
+  ok(
+    'digit-only class stays and offers rename',
+    previewDigit.mappings[0]?.suggestedAction === 'use' &&
+      previewDigit.mappings[0]?.canRename === true &&
+      previewDigit.mappings[0]?.renameClassId === 12
+  );
+
+  const previewBoth = buildNoorClassPreview(
+    [{ gradeLevel: 'أول', section: '2' }],
+    [
+      { id: 12, name: 'أول - 2', gradeLevel: 'أول', section: '2', retiredAt: null, _count: { students: 0 } },
+      { id: 11, name: 'أول ب', gradeLevel: 'أول', section: 'ب', retiredAt: null, _count: { students: 5 } },
+    ]
+  );
+  ok(
+    'both digit and letter: recommend the one with students, no merge',
+    previewBoth.mappings[0]?.suggestedClassId === 11 &&
+      String(previewBoth.mappings[0]?.warning || '').includes('لن يُدمجا')
+  );
+
+  const previewCreate = buildNoorClassPreview([{ gradeLevel: 'أول', section: '2' }], []);
+  ok('no school class recommends create letter', previewCreate.mappings[0]?.suggestedAction === 'createLetter');
+
+  ok('empty file phone is missing', !fileHasPhone({ parentPhone: '' }));
+  ok('present file phone is set', fileHasPhone({ parentPhone: '+966512345678' }));
+
+  const review = buildPhoneReview(
+    [
+      { id: '1', nameAr: 'أ', phoneReviewReason: 'missing', gradeLevel: 'أول', section: '2' },
+      { id: '2', nameAr: 'ب', phoneReviewReason: 'invalid', rawPhone: '123', gradeLevel: 'أول', section: '2' },
+      { id: '3', nameAr: 'ج', parentPhone: '+966512345678' },
+    ],
+    () => 'أول ب'
+  );
+  ok(
+    'phone review lists missing and invalid only',
+    review.length === 2 &&
+      review[0].reason === 'missing' &&
+      review[1].reason === 'invalid' &&
+      review[1].rawPhone === '123'
+  );
+  ok(
+    'phone review drops rows that did not land',
+    buildPhoneReview(
+      [{ id: '1', nameAr: 'أ', phoneReviewReason: 'missing' }],
+      { landedIds: [] }
+    ).length === 0
+  );
+  ok(
+    'phone review drops student who kept a valid phone',
+    buildPhoneReview(
+      [{ id: '1', nameAr: 'أ', phoneReviewReason: 'missing' }],
+      { landedIds: ['1'], storedPhoneById: new Map([['1', '+966512345678']]) }
+    ).length === 0
+  );
+  ok(
+    'phone review dedupes student id and prefers invalid',
+    buildPhoneReview(
+      [
+        { id: '1', nameAr: 'أ', phoneReviewReason: 'missing' },
+        { id: '1', nameAr: 'أ', phoneReviewReason: 'invalid', rawPhone: '00' },
+      ],
+      { landedIds: ['1'], storedPhoneById: new Map([['1', '']]) }
+    ).length === 1 &&
+      buildPhoneReview(
+        [
+          { id: '1', nameAr: 'أ', phoneReviewReason: 'missing' },
+          { id: '1', nameAr: 'أ', phoneReviewReason: 'invalid', rawPhone: '00' },
+        ],
+        { landedIds: ['1'], storedPhoneById: new Map([['1', '']]) }
+      )[0].reason === 'invalid'
+  );
+
+  const wb = XLSX.utils.book_new();
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ['رقم الطالب', 'اسم الطالب', 'الجوال', 'رقم الصف', 'الفصل'],
+    [`P${stamp}1`, 'بلا جوال', '', 'أول', '2'],
+    [`P${stamp}2`, 'جوال خطأ', '12345', 'أول', '2'],
+    [`P${stamp}3`, 'جوال صحيح', '0512345678', 'أول', '2'],
+  ]);
+  XLSX.utils.book_append_sheet(wb, sheet, 'Sheet1');
+  const parsed = parseNoorSpreadsheet(Buffer.from(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })));
+  const missingRow = parsed.rows.find((r) => r.id === `P${stamp}1`);
+  const invalidRow = parsed.rows.find((r) => r.id === `P${stamp}2`);
+  const validRow = parsed.rows.find((r) => r.id === `P${stamp}3`);
+  ok(
+    'parse empty phone is missing review',
+    missingRow?.phoneReviewReason === 'missing' && missingRow.parentPhone === ''
+  );
+  ok(
+    'parse invalid phone is imported not skipped',
+    invalidRow?.phoneReviewReason === 'invalid' &&
+      invalidRow.parentPhone === '' &&
+      invalidRow.rawPhone === '12345' &&
+      parsed.errors.length === 0
+  );
+  ok('parse valid phone is not a review row', !validRow?.phoneReviewReason && !!validRow?.parentPhone);
+
+  ok(
+    'leftover ids skip mapping targets',
+    leftoverClassIdsFromSchool(
+      [
+        { id: 1, retiredAt: null },
+        { id: 2, retiredAt: null },
+        { id: 3, retiredAt: new Date() },
+      ],
+      [1]
+    ).join() === '2'
+  );
 
   const admin = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
   if (!admin) throw new Error('Need an ADMIN user');
@@ -164,6 +313,88 @@ async function main() {
     ok('create new student', created.kind === 'created');
     const createdRow = await prisma.student.findUnique({ where: { id: idNew } });
     ok('created has class + phone', createdRow?.classId === clsA.id && createdRow.parentPhone === '+966566666666');
+
+    const idNoPhone = `N${stamp}9`;
+    const createdEmpty = await prisma.$transaction((tx) =>
+      applyNoorStudentRow(tx, {
+        row: { id: idNoPhone, nameAr: 'بلا جوال', nameEn: 'NoPhone', parentPhone: '' },
+        cls: clsA,
+        batchId: batch.id,
+        changedBy: admin.id,
+      })
+    );
+    const emptyRow = await prisma.student.findUnique({ where: { id: idNoPhone } });
+    ok(
+      'empty-phone row is created in class',
+      createdEmpty.kind === 'created' && emptyRow?.classId === clsA.id && emptyRow.parentPhone === ''
+    );
+
+    const keepPhone = await prisma.$transaction((tx) =>
+      applyNoorStudentRow(tx, {
+        row: {
+          id: idActive,
+          nameAr: 'طالب قديم',
+          nameEn: 'Old',
+          parentPhone: '',
+        },
+        cls: clsA,
+        batchId: batch.id,
+        changedBy: admin.id,
+      })
+    );
+    const kept = await prisma.student.findUnique({ where: { id: idActive } });
+    ok(
+      'blank file phone does not wipe existing',
+      !keepPhone.phoneConflict && kept?.parentPhone === '+966512345678'
+    );
+
+    const invalidWipe = await prisma.$transaction((tx) =>
+      applyNoorStudentRow(tx, {
+        row: {
+          id: idActive,
+          nameAr: 'طالب قديم',
+          nameEn: 'Old',
+          parentPhone: '',
+          phoneReviewReason: 'invalid',
+          rawPhone: '12345',
+        },
+        cls: clsA,
+        batchId: batch.id,
+        changedBy: admin.id,
+      })
+    );
+    const afterInvalid = await prisma.student.findUnique({ where: { id: idActive } });
+    ok(
+      'invalid file phone does not wipe existing',
+      !invalidWipe.phoneConflict && afterInvalid?.parentPhone === '+966512345678'
+    );
+    ok(
+      'kept phone is omitted from confirm review',
+      buildPhoneReview(
+        [
+          {
+            id: idActive,
+            nameAr: 'طالب قديم',
+            phoneReviewReason: 'invalid',
+            rawPhone: '12345',
+          },
+        ],
+        {
+          landedIds: [idActive],
+          storedPhoneById: new Map([[idActive, afterInvalid.parentPhone]]),
+        }
+      ).length === 0
+    );
+    ok(
+      'empty stored phone stays on confirm review',
+      buildPhoneReview(
+        [{ id: idNoPhone, nameAr: 'بلا جوال', phoneReviewReason: 'missing' }],
+        {
+          landedIds: [idNoPhone],
+          storedPhoneById: new Map([[idNoPhone, emptyRow.parentPhone]]),
+        }
+      ).some((r) => r.studentId === idNoPhone && r.reason === 'missing')
+    );
 
     const updated = await prisma.$transaction((tx) =>
       applyNoorStudentRow(tx, {
@@ -342,8 +573,42 @@ async function main() {
     ok('confirm deactivates only allowed ids', confirmed?.deactivated === 1 && missingAfter?.isActive === false);
     ok('in-file id cannot be deactivated', inFileAfter?.isActive === true);
     ok('skipped uses unique requested', confirmed?.skipped === 1);
+
+    const leftoverEmpty = await prisma.class.create({
+      data: {
+        name: `reimp-empty-${stamp}`,
+        gradeLevel: '5',
+        section: `E${String(stamp).slice(-4)}`,
+        academicYear: YEAR,
+      },
+    });
+    const leftoverBusy = await prisma.class.create({
+      data: {
+        name: `reimp-busy-${stamp}`,
+        gradeLevel: '5',
+        section: `F${String(stamp).slice(-4)}`,
+        academicYear: YEAR,
+      },
+    });
+    const idBusy = `N${stamp}8`;
+    await prisma.student.create({
+      data: { id: idBusy, nameAr: 'مشغول', nameEn: 'Busy', parentPhone: '+966500000008', classId: leftoverBusy.id },
+    });
+    const retired = await retireLeftoverEmptyClasses(prisma, {
+      leftoverClassIds: [leftoverEmpty.id, leftoverBusy.id],
+      protectedClassIds: [clsB.id],
+    });
+    const emptyAfter = await prisma.class.findUnique({ where: { id: leftoverEmpty.id } });
+    const busyAfter = await prisma.class.findUnique({ where: { id: leftoverBusy.id } });
+    ok(
+      'retire leftover empty class only',
+      retired.some((r) => r.id === leftoverEmpty.id) && !!emptyAfter?.retiredAt
+    );
+    ok('class with students is not retired', !busyAfter?.retiredAt);
+    await prisma.student.delete({ where: { id: idBusy } });
+    await prisma.class.deleteMany({ where: { id: { in: [leftoverEmpty.id, leftoverBusy.id] } } });
   } finally {
-    const ids = [idNew, idActive, idPhone, idInactive, idMissing, idUnassignedOther, idInFileFail];
+    const ids = [idNew, idActive, idPhone, idInactive, idMissing, idUnassignedOther, idInFileFail, `N${stamp}9`];
     await prisma.noorParentPhoneDecision.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.parentAccount.deleteMany({
       where: { phone: { in: ['+966511111111', '+966599999999'] } },

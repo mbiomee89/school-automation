@@ -2,6 +2,46 @@ import { closeOpenEnrollments, openEnrollment } from './enrollment.js';
 import { migrateParentPhoneOnStudentChange } from './parentPhoneSync.js';
 import { tryNormalizePhone } from '../utils/phone.js';
 import { badRequest, notFound } from '../utils/errors.js';
+import { parseLeftoverClassIds, retireLeftoverEmptyClasses } from './noorClassMatch.js';
+
+export function fileHasPhone(row) {
+  return Boolean(String(row?.parentPhone || '').trim());
+}
+
+/**
+ * File rows that still need a phone after apply.
+ * Confirm: pass landedIds + storedPhoneById so kept numbers and failed rows are omitted.
+ * Dedupes by studentId (invalid wins over missing).
+ */
+export function buildPhoneReview(rows, classNameForRowOrOpts) {
+  const opts =
+    typeof classNameForRowOrOpts === 'function' || classNameForRowOrOpts == null
+      ? { classNameForRow: classNameForRowOrOpts }
+      : classNameForRowOrOpts;
+  const { classNameForRow, landedIds = null, storedPhoneById = null } = opts;
+  const landed = landedIds ? new Set(landedIds) : null;
+
+  const byId = new Map();
+  for (const row of rows || []) {
+    if (row.phoneReviewReason !== 'missing' && row.phoneReviewReason !== 'invalid') continue;
+    if (!row.id) continue;
+    if (landed && !landed.has(row.id)) continue;
+    if (storedPhoneById) {
+      const stored = storedPhoneById.get(row.id) ?? storedPhoneById.get(String(row.id));
+      if (String(stored || '').trim()) continue;
+    }
+    const prev = byId.get(row.id);
+    if (prev && prev.reason === 'invalid') continue;
+    byId.set(row.id, {
+      studentId: row.id,
+      nameAr: row.nameAr,
+      className: typeof classNameForRow === 'function' ? classNameForRow(row) : null,
+      reason: row.phoneReviewReason,
+      rawPhone: row.phoneReviewReason === 'invalid' ? String(row.rawPhone || '') : null,
+    });
+  }
+  return [...byId.values()];
+}
 
 export function phonesEqual(a, b) {
   const left = tryNormalizePhone(String(a || '')) || String(a || '').trim();
@@ -78,6 +118,7 @@ async function ensureEnrollment(tx, { studentId, cls, changedBy }) {
  */
 export async function applyNoorStudentRow(tx, { row, cls, batchId, changedBy }) {
   const existing = await tx.student.findUnique({ where: { id: row.id } });
+  const incomingPhone = fileHasPhone(row);
 
   if (!existing) {
     await tx.student.create({
@@ -86,7 +127,7 @@ export async function applyNoorStudentRow(tx, { row, cls, batchId, changedBy }) 
         nameAr: row.nameAr,
         nameEn: row.nameEn,
         classId: cls.id,
-        parentPhone: row.parentPhone,
+        parentPhone: incomingPhone ? row.parentPhone : '',
         importBatchId: batchId,
         ...(row.parentEmail !== undefined ? { parentEmail: row.parentEmail } : {}),
       },
@@ -105,14 +146,14 @@ export async function applyNoorStudentRow(tx, { row, cls, batchId, changedBy }) 
       importBatchId: batchId,
       nameAr: row.nameAr,
       nameEn: row.nameEn,
-      parentPhone: row.parentPhone,
       isActive: true,
       deletedAt: null,
       classId: cls.id,
       ...(row.parentEmail !== undefined ? { parentEmail: row.parentEmail } : {}),
     };
+    if (incomingPhone) data.parentPhone = row.parentPhone;
     await ensureEnrollment(tx, { studentId: row.id, cls, changedBy });
-    if (!phonesEqual(existing.parentPhone, row.parentPhone)) {
+    if (incomingPhone && !phonesEqual(existing.parentPhone, row.parentPhone)) {
       await migrateParentPhoneOnStudentChange(tx, {
         oldPhone: existing.parentPhone,
         newPhone: row.parentPhone,
@@ -123,7 +164,7 @@ export async function applyNoorStudentRow(tx, { row, cls, batchId, changedBy }) 
     return { kind: 'reactivated' };
   }
 
-  const phoneChanged = !phonesEqual(existing.parentPhone, row.parentPhone);
+  const phoneChanged = incomingPhone && !phonesEqual(existing.parentPhone, row.parentPhone);
   const nameChanged = !namesEqual(existing, row);
   const classChanged = existing.classId !== cls.id;
   const data = { importBatchId: batchId };
@@ -236,10 +277,16 @@ export async function confirmNoorDeactivations(prisma, { batchId, studentIds }) 
   }
 
   const remaining = await listYearScopedMissingStudents(prisma, { academicYear, importedIds });
+  const leftoverClassIds = parseLeftoverClassIds(batch.leftoverClassIdsJson);
+  const retiredClasses =
+    leftoverClassIds.length === 0
+      ? []
+      : await retireLeftoverEmptyClasses(prisma, { leftoverClassIds });
   return {
     deactivated,
     skipped: uniqueRequested.length - deactivated,
     pendingDeactivations: remaining.map(mapDeactivationCandidate),
+    retiredClasses,
   };
 }
 

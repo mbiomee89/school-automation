@@ -26,6 +26,8 @@ import type {
   AssignmentSyncInput,
   ClassInput,
   ClassItem,
+  NoorClassChoice,
+  NoorClassMapping,
   SchoolAdministrationProps,
   StaffInput,
   Student,
@@ -218,6 +220,28 @@ function roleBadge(role: string) {
   return styles[role] ?? 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-200'
 }
 
+function defaultNoorClassValue(row: NoorClassMapping): string {
+  if (row.suggestedAction === 'createLetter') return 'createLetter'
+  if (row.suggestedAction === 'createNoor') return 'createNoor'
+  if (row.suggestedAction === 'rename' && row.renameClassId) return `rename:${row.renameClassId}`
+  if (row.suggestedAction === 'use' && row.suggestedClassId) return `use:${row.suggestedClassId}`
+  return ''
+}
+
+function parseNoorClassValue(value: string): NoorClassChoice | null {
+  if (value === 'createLetter') return { action: 'createLetter' }
+  if (value === 'createNoor') return { action: 'createNoor' }
+  if (value.startsWith('rename:')) {
+    const classId = Number(value.slice(7))
+    return Number.isInteger(classId) && classId > 0 ? { action: 'rename', classId } : null
+  }
+  if (value.startsWith('use:')) {
+    const classId = Number(value.slice(4))
+    return Number.isInteger(classId) && classId > 0 ? { action: 'use', classId } : null
+  }
+  return null
+}
+
 export function AdminDashboard({
   overviewStats,
   schoolSettings,
@@ -255,6 +279,7 @@ export function AdminDashboard({
   onSyncAssignments,
   onRemoveAssignment,
   onImportStudents,
+  onConfirmNoorClassImport,
   onResolveNoorPhoneDecision,
   onConfirmNoorDeactivations,
   onImportTeachers,
@@ -318,6 +343,8 @@ export function AdminDashboard({
 
   const [yearFilter, setYearFilter] = useState(academicYearFilter ?? overviewStats.academicYear)
   const [importBusy, setImportBusy] = useState(false)
+  const [noorConfirmBusy, setNoorConfirmBusy] = useState(false)
+  const [noorClassDraft, setNoorClassDraft] = useState<Record<string, string>>({})
   const [phoneDecisionBusyId, setPhoneDecisionBusyId] = useState<number | null>(null)
   const [deactivateBusy, setDeactivateBusy] = useState(false)
   const [deactivateSelected, setDeactivateSelected] = useState<Record<string, boolean>>({})
@@ -329,6 +356,7 @@ export function AdminDashboard({
   )
   const [classMapDraft, setClassMapDraft] = useState<Record<string, number | ''>>({})
   const [subjectMapDraft, setSubjectMapDraft] = useState<Record<string, number | ''>>({})
+  const [removeLeftoverAssignments, setRemoveLeftoverAssignments] = useState(false)
 
   useEffect(() => {
     const next: Record<string, boolean> = {}
@@ -337,6 +365,15 @@ export function AdminDashboard({
     }
     setDeactivateSelected(next)
   }, [importResult?.batchId, importResult?.pendingDeactivations])
+
+  useEffect(() => {
+    if (!importResult?.dryRun) return
+    const next: Record<string, string> = {}
+    for (const row of importResult.classMappings ?? []) {
+      next[row.key] = defaultNoorClassValue(row)
+    }
+    setNoorClassDraft(next)
+  }, [importResult?.dryRun, importResult?.batchId, importResult?.classMappings])
 
   useEffect(() => {
     if (!timetableImportResult?.dryRun) return
@@ -356,6 +393,7 @@ export function AdminDashboard({
     setTeacherMapDraft(t)
     setClassMapDraft(c)
     setSubjectMapDraft(s)
+    setRemoveLeftoverAssignments(false)
   }, [timetableImportResult])
 
 
@@ -464,6 +502,49 @@ export function AdminDashboard({
   const filteredClasses = classes.filter((c) => c.academicYear === yearFilter)
   const currentYearClasses = classes.filter((c) => c.academicYear === overviewStats.academicYear)
   const academicYears = [...new Set(classes.map((c) => c.academicYear))]
+  const leftoverSubjectsLive = useMemo(() => {
+    const slots = timetableImportResult?.slots ?? []
+    if (!timetableImportResult?.dryRun || slots.length === 0) return []
+
+    const classByLabel = new Map<string, number | null>()
+    for (const row of timetableImportResult.classMappings ?? []) {
+      const draft = classMapDraft[row.tableName]
+      classByLabel.set(row.tableName, typeof draft === 'number' ? draft : row.suggestedId)
+    }
+    const subjectByLabel = new Map<string, number | null>()
+    for (const row of timetableImportResult.subjectMappings ?? []) {
+      const draft = subjectMapDraft[row.tableName]
+      subjectByLabel.set(row.tableName, typeof draft === 'number' ? draft : row.suggestedId)
+    }
+
+    const pairs = new Set<string>()
+    const fileClassIds = new Set<number>()
+    for (const slot of slots) {
+      const classId = classByLabel.get(slot.classLabel)
+      const subjectId = subjectByLabel.get(slot.subjectName)
+      if (typeof classId === 'number') fileClassIds.add(classId)
+      if (typeof classId === 'number' && typeof subjectId === 'number') {
+        pairs.add(`${classId}:${subjectId}`)
+      }
+    }
+
+    const year = timetableImportResult.academicYear ?? overviewStats.academicYear
+    const yearClassIds = new Set(classes.filter((c) => c.academicYear === year).map((c) => c.id))
+
+    return assignments.filter(
+      (a) =>
+        yearClassIds.has(a.classId) &&
+        fileClassIds.has(a.classId) &&
+        !pairs.has(`${a.classId}:${a.subjectId}`)
+    )
+  }, [
+    assignments,
+    classMapDraft,
+    classes,
+    overviewStats.academicYear,
+    subjectMapDraft,
+    timetableImportResult,
+  ])
   const activeTeachers = staff.filter((u) => u.role === 'TEACHER' && u.isActive)
 
   function openAddStudent() {
@@ -1125,7 +1206,11 @@ export function AdminDashboard({
                           {s.className ?? <span className="text-slate-400">بدون فصل</span>}
                         </td>
                         <td className="px-3 py-2">
-                          <PhoneText value={s.parentPhone} />
+                          {s.parentPhone ? (
+                            <PhoneText value={s.parentPhone} />
+                          ) : (
+                            <span className="text-slate-400">بدون جوال</span>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           <span
@@ -1185,7 +1270,11 @@ export function AdminDashboard({
                           {s.id}
                         </span>
                         {' · '}
-                        <PhoneText value={s.parentPhone} />
+                        {s.parentPhone ? (
+                          <PhoneText value={s.parentPhone} />
+                        ) : (
+                          <span className="text-slate-400">بدون جوال</span>
+                        )}
                       </div>
                       <div className="mt-1 text-sm">
                         {s.className ?? <span className="text-slate-400">بدون فصل</span>}
@@ -1465,8 +1554,12 @@ export function AdminDashboard({
               <h3 className="font-bold text-slate-900 dark:text-slate-50">استيراد الجدول الدراسي (aSc)</h3>
               <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">
                 ارفع <span className="font-semibold">teachers table.pdf</span> مباشرة (المفضّل). يُقبل أيضاً
-                Excel/CSV. رموز الفصول مثل أول-1 تُطابق أول أ، وأول-2 تُطابق أول ب. ثم طابق أسماء الجدول
-                مع المعلمين والفصول والمواد قبل الحفظ.
+                Excel/CSV. رموز الفصول مثل أول-1 تُطابق أول أ، وأول-2 تُطابق أول ب. ثم طابق أسماء المعلمين
+                والمواد قبل الحفظ.
+              </p>
+              <p className="mt-2 text-sm font-medium text-slate-700 dark:text-slate-200">
+                طابق كل اسم فصل في الجدول مع فصل في المدرسة. الحفظ يُرفض إن بقي فصل دراسي بلا مطابقة أو
+                إن لم يُستخدم أحد فصول هذا العام.
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <label
@@ -1497,6 +1590,27 @@ export function AdminDashboard({
                 </label>
               </div>
 
+              {timetableImportResult?.classSetOk === false && (
+                <div className="mt-3 space-y-2 rounded-md border border-red-200 bg-red-50/90 p-3 text-sm text-red-900 dark:border-red-800 dark:bg-red-950/40 dark:text-red-100">
+                  <div className="font-semibold">
+                    {timetableImportResult.error ||
+                      'فصول المدرسة لا تطابق فصول الجدول — يُرفض الملف بالكامل.'}
+                  </div>
+                  {(timetableImportResult.inFileNotInSchool?.length ?? 0) > 0 && (
+                    <div>
+                      في الملف وليست في المدرسة:{' '}
+                      {timetableImportResult.inFileNotInSchool!.join('، ')}
+                    </div>
+                  )}
+                  {(timetableImportResult.inSchoolNotInFile?.length ?? 0) > 0 && (
+                    <div>
+                      في المدرسة وليست في الملف:{' '}
+                      {timetableImportResult.inSchoolNotInFile!.map((c) => c.name).join('، ')}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {timetableImportResult?.dryRun && (
                 <div className="mt-4 space-y-4 rounded-md border border-slate-200 bg-white p-3 text-sm dark:border-slate-700 dark:bg-slate-900">
                   <div className="font-semibold text-slate-900 dark:text-slate-50">
@@ -1512,8 +1626,8 @@ export function AdminDashboard({
                     <div className="overflow-x-auto">
                       <h4 className="mb-2 font-bold">المعلمون (اسم الجدول → الاسم الكامل)</h4>
                       <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
-                        إن لم يوجد المعلم في نور: اختر «إنشاء من اسم الجدول» ثم عدّل الاسم الكامل لاحقاً من
-                        تبويب الموظفين.
+                        طابقوا أسماء الجدول مع المعلمين الموجودين أولاً. الأسماء المتبقية بعد المطابقة
+                        تُنشأ عند الحفظ، ثم تُكمل بياناتهم من تبويب الموظفين.
                       </p>
                       <table className="min-w-full border-collapse text-sm">
                         <thead>
@@ -1573,6 +1687,9 @@ export function AdminDashboard({
                   {(timetableImportResult.classMappings?.length ?? 0) > 0 && (
                     <div className="overflow-x-auto">
                       <h4 className="mb-2 font-bold">الفصول</h4>
+                      <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                        راجع الاقتراح أو اختر الفصل. يجب استخدام كل فصول هذا العام مرة واحدة على الأقل.
+                      </p>
                       <table className="min-w-full border-collapse text-sm">
                         <thead>
                           <tr className="border-b border-slate-200 text-start dark:border-slate-700">
@@ -1668,6 +1785,55 @@ export function AdminDashboard({
                     </div>
                   )}
 
+                  {((timetableImportResult.homeworkThisWeek ?? 0) > 0 ||
+                    (timetableImportResult.weeklyPlanThisWeek ?? 0) > 0 ||
+                    (timetableImportResult.homeworkThisYear ?? 0) > 0 ||
+                    (timetableImportResult.weeklyPlanThisYear ?? 0) > 0) && (
+                    <div className="rounded-md border border-amber-200 bg-amber-50/90 p-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                      الجدول الجديد يستبدل الحصص فقط. الواجبات والخطط لن تُحذف. النص يبقى على الخلية إذا
+                      بقيت نفس المادة والحصة، وإلا يبقى في قائمة ولي الأمر.
+                      <div className="mt-1 text-xs">
+                        هذا الأسبوع: {timetableImportResult.homeworkThisWeek ?? 0} واجب ·{' '}
+                        {timetableImportResult.weeklyPlanThisWeek ?? 0} خطة · هذا العام:{' '}
+                        {timetableImportResult.homeworkThisYear ?? 0} واجب ·{' '}
+                        {timetableImportResult.weeklyPlanThisYear ?? 0} خطة
+                      </div>
+                    </div>
+                  )}
+
+                  {leftoverSubjectsLive.length > 0 && (
+                    <div className="space-y-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-950/50">
+                      <div className="font-semibold text-slate-800 dark:text-slate-100">
+                        توزيع مواد غير محفوظة من هذا الملف (
+                        {leftoverSubjectsLive.length})
+                      </div>
+                      <ul className="list-disc space-y-0.5 ps-5 text-slate-700 dark:text-slate-300">
+                        {leftoverSubjectsLive.slice(0, 12).map((row) => (
+                          <li key={row.id}>
+                            {row.className} · {row.subjectNameAr} · {row.teacherName}
+                          </li>
+                        ))}
+                      </ul>
+                      {leftoverSubjectsLive.length > 12 && (
+                        <div className="text-xs text-slate-500">
+                          و {leftoverSubjectsLive.length - 12} أخرى
+                        </div>
+                      )}
+                      <label className="flex items-start gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={removeLeftoverAssignments}
+                          onChange={(e) => setRemoveLeftoverAssignments(e.target.checked)}
+                          className="mt-1"
+                        />
+                        <span>
+                          حذف توزيع المواد غير المحفوظة للفصول الموجودة في هذا الملف. المعلم يفقد صلاحية
+                          الحصة/الواجب/الغياب لتلك الصف+المادة.
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap gap-2 pt-1">
                     <button
                       type="button"
@@ -1680,25 +1846,51 @@ export function AdminDashboard({
                           else if (typeof v === 'number') teacherMap[k] = v
                         }
                         const classMap: Record<string, number> = {}
-                        for (const [k, v] of Object.entries(classMapDraft)) {
-                          if (typeof v === 'number') classMap[k] = v
+                        for (const row of timetableImportResult.classMappings ?? []) {
+                          const draft = classMapDraft[row.tableName]
+                          if (typeof draft === 'number') classMap[row.tableName] = draft
+                          else if (row.suggestedId != null) classMap[row.tableName] = row.suggestedId
                         }
                         const subjectMap: Record<string, number> = {}
                         for (const [k, v] of Object.entries(subjectMapDraft)) {
                           if (typeof v === 'number') subjectMap[k] = v
                         }
-                        const missingTeachers = (timetableImportResult.teacherMappings ?? []).filter(
-                          (r) =>
-                            teacherMap[r.tableName] == null && !createTeachers.includes(r.tableName)
-                        )
+                        for (const row of timetableImportResult.teacherMappings ?? []) {
+                          if (
+                            teacherMap[row.tableName] == null &&
+                            !createTeachers.includes(row.tableName)
+                          ) {
+                            createTeachers.push(row.tableName)
+                          }
+                        }
                         const missingClasses = (timetableImportResult.classMappings ?? []).filter(
                           (r) => classMap[r.tableName] == null
                         )
-                        if (missingTeachers.length || missingClasses.length) {
+                        if (missingClasses.length) {
                           window.alert(
-                            `أكمل المطابقة أولاً: ${missingTeachers.length} معلم، ${missingClasses.length} فصل بدون اختيار.`
+                            `أكمل مطابقة الفصول أولاً: ${missingClasses.length} فصل بدون اختيار.`
                           )
                           return
+                        }
+                        const usedClassIds = new Set(Object.values(classMap))
+                        const unusedSchool = (timetableImportResult.classOptions ?? []).filter(
+                          (c) => !usedClassIds.has(c.id)
+                        )
+                        if (unusedSchool.length) {
+                          window.alert(
+                            `فصول هذا العام بلا مطابقة: ${unusedSchool.map((c) => c.name).join('، ')}`
+                          )
+                          return
+                        }
+                        if (removeLeftoverAssignments) {
+                          const n = leftoverSubjectsLive.length
+                          if (
+                            !window.confirm(
+                              `سيتم حذف ${n} توزيع مادة غير موجود في الملف الجديد. المتابعة؟`
+                            )
+                          ) {
+                            return
+                          }
                         }
                         setTimetableConfirmBusy(true)
                         try {
@@ -1707,6 +1899,7 @@ export function AdminDashboard({
                             createTeachers,
                             classMap,
                             subjectMap,
+                            removeAssignmentsNotInFile: removeLeftoverAssignments,
                           })
                         } finally {
                           setTimetableConfirmBusy(false)
@@ -1727,8 +1920,11 @@ export function AdminDashboard({
                   </div>
                   <div className="text-emerald-800 dark:text-emerald-200">
                     حصص محفوظة: {timetableImportResult.slotsCreated ?? 0} · توزيع جديد:{' '}
-                    {timetableImportResult.assignmentsCreated ?? 0} · أُعيد تعيين:{' '}
+                    {timetableImportResult.assignmentsCreated ?? 0} ·                     أُعيد تعيين:{' '}
                     {timetableImportResult.assignmentsReassigned ?? 0}
+                    {(timetableImportResult.assignmentsRemoved ?? 0) > 0
+                      ? ` · حُذف توزيع: ${timetableImportResult.assignmentsRemoved}`
+                      : ''}
                     {(timetableImportResult.teachersCreated ?? 0) > 0
                       ? ` · معلمون أُنشئوا: ${timetableImportResult.teachersCreated}`
                       : ''}
@@ -1834,16 +2030,17 @@ export function AdminDashboard({
               <Upload className="mx-auto size-8 text-blue-600" strokeWidth={1.5} />
               <p className="mt-3 font-semibold">استيراد الطلاب من نور</p>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                ملف StudentGuidance / إرشاد الطلاب (.xlsx) — يُنشئ الفصول تلقائيًا من عمودي
-                «رقم الصف» و«الفصل» ويعين الطلاب عليها
+                ملف StudentGuidance / إرشاد الطلاب (.xlsx) — رفع الملف يعرض مطابقة الفصول أولاً.
+                لا يُحفظ الطلاب حتى تؤكدوا الاختيار.
               </p>
               <p className="mx-auto mt-2 max-w-md text-xs text-slate-400 dark:text-slate-500">
                 الأعمدة: رقم الطالب · اسم الطالب · الجوال · رقم الصف · الفصل · العام:{' '}
                 {overviewStats.academicYear}
               </p>
               <p className="mx-auto mt-2 max-w-lg text-xs text-slate-400 dark:text-slate-500">
-                إعادة الاستيراد: يُحدَّث الاسم والفصل تلقائياً. اختلاف جوال ولي الأمر يُترك لقرار الإدارة
-                أو شؤون الطلاب. الطلاب الغائبون عن الملف لا يُستبعدون إلا بعد التأكيد.
+                نور يستخدم أرقاماً للشعب والجدول يستخدم حروفاً. راجعوا التوصية أو اختاروا فصلاً.
+                الطلاب بلا جوال يُحفظون في فصولهم لإكمال الرقم لاحقاً. الطلاب الغائبون عن الملف لا
+                يُستبعدون إلا بعد التأكيد. الفصول الفارغة الفائضة تُزال من القائمة وتبقى سجلاتها.
               </p>
 
               <label
@@ -1852,7 +2049,7 @@ export function AdminDashboard({
                   importBusy && 'cursor-not-allowed opacity-50'
                 )}
               >
-                {importBusy ? 'جارٍ الاستيراد…' : 'اختيار ملف الطلاب'}
+                {importBusy ? 'جارٍ قراءة الملف…' : 'اختيار ملف الطلاب'}
                 <input
                   type="file"
                   accept=".xlsx,.xls,.csv"
@@ -1875,12 +2072,116 @@ export function AdminDashboard({
 
             {importResult && (
               <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-800 dark:text-slate-100">
-                <h3 className="font-bold">آخر استيراد طلاب: {importResult.fileName}</h3>
+                <h3 className="font-bold">
+                  {importResult.dryRun ? 'مراجعة مطابقة الفصول: ' : 'آخر استيراد طلاب: '}
+                  {importResult.fileName}
+                </h3>
                 {importResult.academicYear && (
                   <p className="mt-1 text-xs text-slate-500">
                     العام الدراسي: {importResult.academicYear}
                   </p>
                 )}
+                {importResult.dryRun && (importResult.classMappings?.length ?? 0) > 0 && (
+                  <div className="mt-4 overflow-x-auto">
+                    <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">
+                      أكّدوا مطابقة كل فصل في الملف. التوصية من تحويل نور (2 → ب) وليست حفظاً تلقائياً.
+                    </p>
+                    <table className="min-w-full border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-start dark:border-slate-700">
+                          <th className="px-2 py-2 font-semibold">في ملف نور</th>
+                          <th className="px-2 py-2 font-semibold">طلاب</th>
+                          <th className="px-2 py-2 font-semibold">التوصية</th>
+                          <th className="px-2 py-2 font-semibold">اختيار الإدارة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importResult.classMappings!.map((row) => (
+                          <tr
+                            key={row.key}
+                            className="border-b border-slate-100 dark:border-slate-800"
+                          >
+                            <td className="px-2 py-2 font-medium">{row.fileLabel}</td>
+                            <td className="px-2 py-2 tabular-nums text-slate-500">
+                              {row.studentCount}
+                            </td>
+                            <td className="px-2 py-2 text-xs text-slate-600 dark:text-slate-300">
+                              {row.recommendedLabel}
+                              {row.warning ? (
+                                <div className="mt-1 text-amber-700 dark:text-amber-300">
+                                  {row.warning}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="px-2 py-2">
+                              <select
+                                value={noorClassDraft[row.key] ?? ''}
+                                onChange={(e) =>
+                                  setNoorClassDraft((prev) => ({
+                                    ...prev,
+                                    [row.key]: e.target.value,
+                                  }))
+                                }
+                                className={`min-h-10 w-full min-w-[14rem] rounded-md border px-2 py-1.5 dark:bg-slate-950 ${
+                                  noorClassDraft[row.key]
+                                    ? 'border-emerald-400 dark:border-emerald-600'
+                                    : 'border-amber-400 dark:border-amber-600'
+                                }`}
+                              >
+                                <option value="">— اختر الفصل —</option>
+                                {(importResult.classOptions ?? []).map((opt) => (
+                                  <option key={opt.id} value={`use:${opt.id}`}>
+                                    استخدم {opt.name}
+                                    {opt.studentCount ? ` (${opt.studentCount})` : ''}
+                                  </option>
+                                ))}
+                                <option value="createLetter">إنشاء {row.letterLabel}</option>
+                                {row.noorLabel !== row.letterLabel && (
+                                  <option value="createNoor">إنشاء {row.noorLabel}</option>
+                                )}
+                                {row.canRename && row.renameClassId && (
+                                  <option value={`rename:${row.renameClassId}`}>
+                                    إعادة تسمية إلى {row.letterLabel}
+                                  </option>
+                                )}
+                              </select>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button
+                      type="button"
+                      disabled={
+                        noorConfirmBusy ||
+                        !onConfirmNoorClassImport ||
+                        !importResult.batchId ||
+                        (importResult.classMappings ?? []).some(
+                          (row) => !parseNoorClassValue(noorClassDraft[row.key] || '')
+                        )
+                      }
+                      className="mt-3 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                      onClick={async () => {
+                        if (!onConfirmNoorClassImport || !importResult.batchId) return
+                        const classMap: Record<string, NoorClassChoice> = {}
+                        for (const row of importResult.classMappings ?? []) {
+                          const choice = parseNoorClassValue(noorClassDraft[row.key] || '')
+                          if (!choice) return
+                          classMap[row.key] = choice
+                        }
+                        setNoorConfirmBusy(true)
+                        try {
+                          await onConfirmNoorClassImport(importResult.batchId, classMap)
+                        } finally {
+                          setNoorConfirmBusy(false)
+                        }
+                      }}
+                    >
+                      {noorConfirmBusy ? 'جارٍ الحفظ…' : 'تأكيد المطابقة وحفظ الطلاب'}
+                    </button>
+                  </div>
+                )}
+                {!importResult.dryRun && (
                 <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-7">
                   {[
                     ['أُضيف طلاب', importResult.created],
@@ -1899,6 +2200,51 @@ export function AdminDashboard({
                     </div>
                   ))}
                 </div>
+                )}
+                {importResult.dryRun && (importResult.phoneReview?.length ?? 0) > 0 && (
+                  <p className="mt-3 text-xs text-amber-800 dark:text-amber-200">
+                    {importResult.phoneReview!.length} طالب/طالبة بلا جوال صالح — سيظهرون في تقرير
+                    المراجعة بعد الحفظ.
+                  </p>
+                )}
+                {!importResult.dryRun && (importResult.phoneReview?.length ?? 0) > 0 && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+                    <h4 className="text-sm font-bold text-amber-950 dark:text-amber-100">
+                      راجع بيانات الطلاب ({importResult.phoneReview!.length})
+                    </h4>
+                    <p className="mt-1 text-xs text-amber-900/80 dark:text-amber-200/80">
+                      هؤلاء أُضيفوا للفصول بلا جوال صالح. أكملوا الجوال من تبويب الطلاب قبل أن يتمكن ولي
+                      الأمر من الدخول.
+                    </p>
+                    <ul className="mt-3 max-h-56 space-y-1 overflow-y-auto text-sm">
+                      {importResult.phoneReview!.map((row) => (
+                        <li
+                          key={row.studentId}
+                          className="flex flex-col gap-0.5 rounded-md border border-amber-200 bg-white px-3 py-2 dark:border-amber-900 dark:bg-slate-900 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div>
+                            <div className="font-semibold">{row.nameAr}</div>
+                            <div className="text-xs text-slate-500">
+                              {row.className || 'بدون فصل'} ·{' '}
+                              <span dir="ltr">{row.studentId}</span>
+                            </div>
+                          </div>
+                          <div className="text-xs text-amber-900 dark:text-amber-200">
+                            {row.reason === 'invalid'
+                              ? `جوال غير صالح${row.rawPhone ? ` (${row.rawPhone})` : ''}`
+                              : 'بدون جوال'}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {(importResult.retiredClasses?.length ?? 0) > 0 && (
+                  <p className="mt-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                    أُزيل من قائمة الفصول — السجلات محفوظة:{' '}
+                    {importResult.retiredClasses!.map((c) => c.name).join('، ')}
+                  </p>
+                )}
                 {(importResult.phoneConflicts?.length ?? 0) > 0 && (
                   <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">
                     <h4 className="text-sm font-bold text-amber-950 dark:text-amber-100">
@@ -2393,7 +2739,12 @@ export function AdminDashboard({
               <div className="flex items-center justify-between">
                 <p className="text-sm text-slate-600 dark:text-slate-400">
                   {selectedStudent.classId == null ? 'بدون فصل' : selectedStudent.className} · ولي
-                  الأمر <PhoneText value={selectedStudent.parentPhone} />
+                  الأمر{' '}
+                  {selectedStudent.parentPhone ? (
+                    <PhoneText value={selectedStudent.parentPhone} />
+                  ) : (
+                    <span className="text-slate-400">بدون جوال</span>
+                  )}
                 </p>
                 <button
                   type="button"
