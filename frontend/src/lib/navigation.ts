@@ -6,6 +6,7 @@ export const STAFF_NAV_ITEMS: Omit<NavItem, 'isActive'>[] = [
   { label: 'الواجبات', href: '/teacher-daily?tab=homework' },
   { label: 'الخطة الأسبوعية', href: '/teacher-daily?tab=weekly-plan' },
   { label: 'سجل المتابعة', href: '/gradebook' },
+  { label: 'المتابعة الأسبوعية', href: '/weekly-follow-up' },
   { label: 'مستندات التوظيف', href: '/teacher-documents' },
   { label: 'الإدارة المدرسية', href: '/administration' },
   { label: 'ملفات المعلمين', href: '/teacher-files' },
@@ -20,6 +21,7 @@ export const STAFF_NAV_ITEMS: Omit<NavItem, 'isActive'>[] = [
 export const SECTION_BY_HREF: Record<string, string> = {
   '/teacher-daily': 'teacher-daily-workflow',
   '/gradebook': 'gradebook',
+  '/weekly-follow-up': 'weekly-follow-up',
   '/teacher-documents': 'teacher-documents',
   '/administration': 'school-administration',
   '/teacher-files': 'teacher-files',

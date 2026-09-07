@@ -9,6 +9,7 @@ export type ReportType =
   | 'EARLY_LEAVE'
   | 'HOMEWORK_LOG'
   | 'WEEKLY_PLAN'
+  | 'WEEKLY_FOLLOW_UP'
   | 'STUDENT_HISTORY'
   | 'ABSENCE_DAYS'
 
@@ -216,6 +217,39 @@ export interface AbsenceDaysReportDetail {
   count: number
 }
 
+export interface WeeklyFollowUpReportDetail extends ReportBrandFields {
+  classId: number
+  className: string
+  subjectId: number
+  subjectNameAr: string
+  weekStart: string
+  weekEnd: string
+  generatedAt?: string
+  rows: Array<{
+    studentId: string
+    studentNameAr: string
+    participation: number | null
+    homeworkScore: number | null
+    understanding: number | null
+    discipline: number | null
+    interaction: number | null
+    progress: number | null
+    notes: string | null
+    total: number | null
+  }>
+}
+
+export interface WeeklyFollowUpReportOptions {
+  classes: Array<{
+    id: number
+    name: string
+    academicYear: string
+    gradeLevel: string
+    subjects: Array<{ id: number; nameAr: string }>
+  }>
+  currentWeekStart: string
+}
+
 export interface ReportsProps {
   reports: ReportSummary[]
   dailyAbsenceDetail?: DailyAbsenceReportDetail | null
@@ -223,6 +257,8 @@ export interface ReportsProps {
   earlyLeaveDetail?: EarlyLeaveReportDetail | null
   homeworkLogDetail?: HomeworkLogReportDetail | null
   weeklyPlanDetail?: WeeklyPlanReportDetail | null
+  weeklyFollowUpDetail?: WeeklyFollowUpReportDetail | null
+  weeklyFollowUpOptions?: WeeklyFollowUpReportOptions | null
   studentHistoryDetail?: StudentHistoryReportDetail | null
   absenceDaysDetail?: AbsenceDaysReportDetail | null
   studentSearchResults?: StudentSearchOption[]
@@ -253,4 +289,5 @@ export interface ReportsProps {
   onSelectStudent?: (studentId: string, range?: { from?: string; to?: string }) => void
   /** Reload absence-days report with threshold / date range */
   onFilterAbsenceDays?: (opts: { from?: string; to?: string; minDays?: number }) => void
+  onFilterWeeklyFollowUp?: (opts: { classId: number; subjectId: number; weekStart: string }) => void
 }

@@ -23,6 +23,12 @@ import {
 import { normalizePhone } from '../utils/phone.js';
 import { schoolLogoUrl } from '../services/schoolLogo.js';
 import { getClassWeekSchedule } from '../services/timetableImport.js';
+import {
+  currentSchoolWeekSunday,
+  isPeSubject,
+  serializeFollowUpScores,
+  weekEndThursday,
+} from '../services/weeklyFollowUp.js';
 
 const router = Router();
 
@@ -157,7 +163,16 @@ async function assertOwnsStudent(parentPhone, studentId) {
   const student = await prisma.student.findFirst({
     where: { id: studentId, parentPhone, isActive: true },
     include: {
-      class: { select: { id: true, name: true, gradeLevel: true, section: true, academicYear: true } },
+      class: {
+        select: {
+          id: true,
+          name: true,
+          gradeLevel: true,
+          section: true,
+          academicYear: true,
+          retiredAt: true,
+        },
+      },
     },
   });
   if (!student) throw forbidden('Student not found for this parent session');
@@ -903,6 +918,64 @@ router.post(
     });
 
     res.json({ earlyLeaveRequest: serializeEarlyLeave(updated) });
+  })
+);
+
+/** GET /parent/students/:id/weekly-follow-up — current week only, this child. */
+router.get(
+  '/students/:id/weekly-follow-up',
+  validateParams(studentIdParam),
+  asyncHandler(async (req, res) => {
+    const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const sundayStr = currentSchoolWeekSunday();
+    const sundayDate = toUtcMidnight(sundayStr);
+    const header = await schoolHeader();
+
+    const cls = student.class;
+    if (!student.classId || !cls || cls.retiredAt) {
+      return res.json({
+        ...header,
+        studentId: student.id,
+        studentNameAr: student.nameAr,
+        className: cls?.name ?? 'بدون فصل',
+        weekStart: sundayStr,
+        weekEnd: weekEndThursday(sundayStr),
+        subjects: [],
+      });
+    }
+
+    const assignments = await prisma.teacherAssignment.findMany({
+      where: { classId: student.classId },
+      include: { subject: true },
+      orderBy: { subjectId: 'asc' },
+    });
+    const subjects = assignments
+      .filter((a) => !isPeSubject(a.subject.nameAr))
+      .map((a) => a.subject);
+
+    const saved = await prisma.weeklyFollowUp.findMany({
+      where: {
+        studentId: student.id,
+        academicYear: cls.academicYear,
+        weekStart: sundayDate,
+        subjectId: { in: subjects.map((s) => s.id) },
+      },
+    });
+    const bySubject = new Map(saved.map((s) => [s.subjectId, s]));
+
+    res.json({
+      ...header,
+      studentId: student.id,
+      studentNameAr: student.nameAr,
+      className: cls.name,
+      weekStart: sundayStr,
+      weekEnd: weekEndThursday(sundayStr),
+      subjects: subjects.map((sub) => ({
+        subjectId: sub.id,
+        subjectNameAr: sub.nameAr,
+        ...serializeFollowUpScores(bySubject.get(sub.id)),
+      })),
+    });
   })
 );
 

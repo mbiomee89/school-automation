@@ -67,6 +67,7 @@ model User {
   teacherDocuments TeacherDocument[]
   gradePeriodScores GradePeriodScore[] @relation("GradePeriodRecordedBy")
   gradeTermFinals   GradeTermFinal[]   @relation("GradeTermFinalRecordedBy")
+  weeklyFollowUps   WeeklyFollowUp[]   @relation("WeeklyFollowUpRecordedBy")
 }
 
 model Class {
@@ -91,6 +92,7 @@ model Class {
   profileSubmissions StudentProfileSubmission[]
   gradePeriodScores GradePeriodScore[]
   gradeTermFinals   GradeTermFinal[]
+  weeklyFollowUps   WeeklyFollowUp[]
 
   @@unique([gradeLevel, section, academicYear])
 }
@@ -106,6 +108,7 @@ model Subject {
   weeklyPlans WeeklyPlan[]
   gradePeriodScores GradePeriodScore[]
   gradeTermFinals   GradeTermFinal[]
+  weeklyFollowUps   WeeklyFollowUp[]
 }
 
 // A bulk upload of students from a Noor/Madrasati export (or any spreadsheet).
@@ -173,6 +176,7 @@ model Student {
   profileSubmissions StudentProfileSubmission[]
   gradePeriodScores GradePeriodScore[]
   gradeTermFinals   GradeTermFinal[]
+  weeklyFollowUps   WeeklyFollowUp[]
   noorPhoneDecisions NoorParentPhoneDecision[]
 
   @@index([classId])
@@ -702,4 +706,33 @@ model GradeTermFinal {
 
   @@unique([studentId, subjectId, academicYear, term])
   @@index([classId, subjectId, academicYear, term])
+}
+
+// ---------- Weekly follow-up (المتابعة الأسبوعية) — not the periodic gradebook ----------
+
+model WeeklyFollowUp {
+  id             Int      @id @default(autoincrement())
+  studentId      String
+  student        Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classId        Int
+  class          Class    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subjectId      Int
+  subject        Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  academicYear   String
+  weekStart      DateTime
+  participation  Int?
+  homeworkScore  Int?
+  understanding  Int?
+  discipline     Int?
+  interaction    Int?
+  progress       Int?
+  notes          String?
+  recordedById   Int?
+  recordedBy     User?    @relation("WeeklyFollowUpRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  updatedAt      DateTime @updatedAt
+  createdAt      DateTime @default(now())
+
+  @@unique([studentId, subjectId, academicYear, weekStart])
+  @@index([classId, subjectId, academicYear, weekStart])
+  @@index([subjectId])
 }

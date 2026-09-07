@@ -4,9 +4,17 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateQuery } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
-import { notFound } from '../utils/errors.js';
-import { toUtcMidnight, weekStartSaturdayUtc } from '../utils/dates.js';
+import { notFound, badRequest } from '../utils/errors.js';
+import { toUtcMidnight, weekStartSaturdayUtc, weekStartSundayStr } from '../utils/dates.js';
 import { schoolLogoUrl } from '../services/schoolLogo.js';
+import { ACTIVE_CLASS } from '../services/activeClass.js';
+import {
+  currentSchoolWeekSunday,
+  isPeSubject,
+  loadFollowUpClassSheet,
+  parseWeekStartParam,
+  weekEndThursday,
+} from '../services/weeklyFollowUp.js';
 
 const router = Router();
 
@@ -563,6 +571,87 @@ router.get(
   })
 );
 
+const followUpQuery = z.object({
+  classId: z.coerce.number().int().positive(),
+  subjectId: z.coerce.number().int().positive(),
+  weekStart: z.string().min(1),
+});
+
+/** GET /reports/weekly-follow-up/options */
+router.get(
+  '/weekly-follow-up/options',
+  asyncHandler(async (req, res) => {
+    const classes = await prisma.class.findMany({
+      where: ACTIVE_CLASS,
+      orderBy: [{ gradeLevel: 'asc' }, { name: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        academicYear: true,
+        gradeLevel: true,
+        assignments: {
+          include: { subject: { select: { id: true, nameAr: true } } },
+        },
+      },
+    });
+    res.json({
+      classes: classes.map((c) => {
+        const seen = new Set();
+        const subjects = [];
+        for (const a of c.assignments) {
+          if (isPeSubject(a.subject.nameAr) || seen.has(a.subject.id)) continue;
+          seen.add(a.subject.id);
+          subjects.push({ id: a.subject.id, nameAr: a.subject.nameAr });
+        }
+        subjects.sort((a, b) => a.nameAr.localeCompare(b.nameAr, 'ar'));
+        return {
+          id: c.id,
+          name: c.name,
+          academicYear: c.academicYear,
+          gradeLevel: c.gradeLevel,
+          subjects,
+        };
+      }),
+      currentWeekStart: currentSchoolWeekSunday(),
+    });
+  })
+);
+
+/** GET /reports/weekly-follow-up?classId=&subjectId=&weekStart= */
+router.get(
+  '/weekly-follow-up',
+  validateQuery(followUpQuery),
+  asyncHandler(async (req, res) => {
+    const cls = await prisma.class.findUnique({ where: { id: req.query.classId } });
+    const subject = await prisma.subject.findUnique({ where: { id: req.query.subjectId } });
+    if (!cls || !subject) throw notFound('الفصل أو المادة غير موجود');
+    if (cls.retiredAt) throw badRequest('هذا الفصل غير نشط');
+    if (isPeSubject(subject.nameAr)) {
+      throw badRequest('التربية البدنية ليست في المتابعة الأسبوعية');
+    }
+    const { sundayStr, sundayDate } = parseWeekStartParam(req.query.weekStart);
+    const header = await schoolHeader();
+    const rows = await loadFollowUpClassSheet({
+      classId: cls.id,
+      subjectId: subject.id,
+      academicYear: cls.academicYear,
+      sundayDate,
+    });
+    res.json({
+      ...header,
+      classId: cls.id,
+      className: cls.name,
+      subjectId: subject.id,
+      subjectNameAr: subject.nameAr,
+      academicYear: cls.academicYear,
+      weekStart: sundayStr,
+      weekEnd: weekEndThursday(sundayStr),
+      generatedAt: new Date().toISOString(),
+      rows,
+    });
+  })
+);
+
 /** GET /reports/summary?date= — hub card counts for today */
 router.get(
   '/summary',
@@ -571,8 +660,10 @@ router.get(
     const date = toUtcMidnight(req.query.date);
     const dateStr = date.toISOString().slice(0, 10);
     const weekStart = weekStartSaturdayUtc(date);
+    const followWeekStart = toUtcMidnight(weekStartSundayStr(dateStr));
 
-    const [absenceCount, lateCount, homeworkCount, weeklyPlans, earlyLeaveCount] = await Promise.all([
+    const [absenceCount, lateCount, homeworkCount, weeklyPlans, earlyLeaveCount, followUpCount] =
+      await Promise.all([
       prisma.attendance.count({
         where: { date, status: { in: ['ABSENT', 'EXCUSED'] } },
       }),
@@ -593,6 +684,7 @@ router.get(
         },
       }),
       prisma.earlyLeaveRequest.count({ where: { date } }),
+      prisma.weeklyFollowUp.count({ where: { weekStart: followWeekStart } }),
     ]);
 
     const weeklyLessonCount = weeklyPlans.flatMap((p) =>
@@ -659,6 +751,15 @@ router.get(
           iconHint: 'CALENDAR_RANGE',
           context: weekStart.toISOString().slice(0, 10),
           count: weeklyLessonCount,
+          lastGeneratedAt: new Date().toISOString(),
+        },
+        {
+          type: 'WEEKLY_FOLLOW_UP',
+          title: 'المتابعة الأسبوعية',
+          description: 'درجات المتابعة الأسبوعية حسب الفصل والمادة',
+          iconHint: 'CALENDAR_RANGE',
+          context: weekStartSundayStr(dateStr),
+          count: followUpCount,
           lastGeneratedAt: new Date().toISOString(),
         },
         {

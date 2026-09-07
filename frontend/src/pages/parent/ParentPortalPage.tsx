@@ -14,6 +14,7 @@ import {
   submitExcuse,
   type ParentChild,
 } from '../../api/parent'
+import { getParentWeeklyFollowUp, type ParentFollowUpSheet } from '../../api/weeklyFollowUp'
 import { ApiError } from '../../api/client'
 import { useParentAuth } from '../../lib/parentAuth'
 import { ParentPortal } from '../../sections/parent-portal/ParentPortal'
@@ -80,6 +81,9 @@ export function ParentPortalPage() {
   const [classTimetable, setClassTimetable] = useState<ClassTimetable | null>(null)
   const [classTimetableError, setClassTimetableError] = useState<string | null>(null)
   const [classTimetableLoading, setClassTimetableLoading] = useState(false)
+  const [weeklyFollowUp, setWeeklyFollowUp] = useState<ParentFollowUpSheet | null>(null)
+  const [weeklyFollowUpError, setWeeklyFollowUpError] = useState<string | null>(null)
+  const [weeklyFollowUpLoading, setWeeklyFollowUpLoading] = useState(false)
 
   useEffect(() => {
     if (students.length === 0) return
@@ -96,9 +100,11 @@ export function ParentPortalPage() {
     setError(null)
     setClassTimetableLoading(true)
     setClassTimetableError(null)
+    setWeeklyFollowUpLoading(true)
+    setWeeklyFollowUpError(null)
 
     try {
-      const [summary, attendance, homeworkRes, plansRes, excuses, earlyLeave, timetableResult] =
+      const [summary, attendance, homeworkRes, plansRes, excuses, earlyLeave, timetableResult, followUpResult] =
         await Promise.all([
           getParentSummary(studentId),
           getParentAttendance(studentId),
@@ -107,6 +113,10 @@ export function ParentPortalPage() {
           getParentExcuses(studentId),
           getParentEarlyLeave(studentId),
           getParentTimetable(studentId).then(
+            (data) => ({ ok: true as const, data }),
+            (err) => ({ ok: false as const, err })
+          ),
+          getParentWeeklyFollowUp(studentId).then(
             (data) => ({ ok: true as const, data }),
             (err) => ({ ok: false as const, err })
           ),
@@ -182,10 +192,25 @@ export function ParentPortalPage() {
         )
       }
 
+      if (followUpResult.ok) {
+        setWeeklyFollowUp(followUpResult.data)
+        setWeeklyFollowUpError(null)
+      } else {
+        setWeeklyFollowUp(null)
+        setWeeklyFollowUpError(
+          followUpResult.err instanceof ApiError
+            ? followUpResult.err.message
+            : 'تعذّر تحميل المتابعة الأسبوعية'
+        )
+      }
+
       setLoadedChildId(studentId)
       lastPlanAnchorLoaded.current = planAnchor
     } finally {
-      if (gen === loadGen.current) setClassTimetableLoading(false)
+      if (gen === loadGen.current) {
+        setClassTimetableLoading(false)
+        setWeeklyFollowUpLoading(false)
+      }
     }
   }, [])
 
@@ -381,6 +406,9 @@ export function ParentPortalPage() {
       onHomeworkBrowseDateChange={setHomeworkBrowseDate}
       weeklyPlanAnchorDate={weeklyPlanAnchorDate}
       onWeeklyPlanAnchorDateChange={setWeeklyPlanAnchorDate}
+      weeklyFollowUp={weeklyFollowUp}
+      weeklyFollowUpLoading={weeklyFollowUpLoading}
+      weeklyFollowUpError={weeklyFollowUpError}
       onSelectChild={selectChild}
       onSubmitExcuse={async (input) => {
         const day = attendanceHistory.find(

@@ -26,11 +26,12 @@ import { ParentClassTimetable } from './ParentClassTimetable'
 import { SegmentedTabs } from './SegmentedTabs'
 import { DayChipStrip } from './DayChipStrip'
 import { EarlyLeavePanel } from './EarlyLeavePanel'
+import { WeeklyFollowUpLegend, WeeklyFollowUpSubjectTable } from '../../shared/WeeklyFollowUpSheet'
 import { ATTENDANCE_STATUS_META, formatLongDate, formatShortDate } from './statusMeta'
 import { PARENT_PORTAL_THEME, addDaysIso, weekStartSundayIso } from './theme'
 
 type AttendanceView = 'history' | 'excuses'
-type HomeworkView = 'homework' | 'plans'
+type HomeworkView = 'homework' | 'plans' | 'follow-up'
 
 function groupAttendanceByWeek(days: AttendanceDay[]) {
   const map = new Map<string, AttendanceDay[]>()
@@ -77,6 +78,9 @@ export function ParentPortal({
   onHomeworkBrowseDateChange,
   weeklyPlanAnchorDate,
   onWeeklyPlanAnchorDateChange,
+  weeklyFollowUp = null,
+  weeklyFollowUpLoading = false,
+  weeklyFollowUpError = null,
 }: ParentPortalProps) {
   const [tab, setTab] = useState<ParentTab>(controlledTab ?? 'home')
   const [attendanceView, setAttendanceView] = useState<AttendanceView>('history')
@@ -263,16 +267,24 @@ export function ParentPortal({
           )}
 
           {safeTab === 'homework' && (
-            <div className="space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none print:hidden">
-              <SegmentedTabs
-                label="الواجبات والخطط"
-                value={homeworkView}
-                onChange={setHomeworkView}
-                options={[
-                  { id: 'homework', label: 'الواجبات' },
-                  { id: 'plans', label: 'الخطة الأسبوعية' },
-                ]}
-              />
+            <div
+              className={cn(
+                'space-y-4 animate-in fade-in-0 duration-300 motion-reduce:animate-none',
+                homeworkView !== 'follow-up' && 'print:hidden'
+              )}
+            >
+              <div className="print:hidden">
+                <SegmentedTabs
+                  label="الواجبات والخطط"
+                  value={homeworkView}
+                  onChange={setHomeworkView}
+                  options={[
+                    { id: 'homework', label: 'الواجبات' },
+                    { id: 'plans', label: 'الخطة الأسبوعية' },
+                    { id: 'follow-up', label: 'المتابعة' },
+                  ]}
+                />
+              </div>
               {homeworkView === 'homework' ? (
                 <div className="space-y-3">
                   {onHomeworkBrowseDateChange ? (
@@ -290,7 +302,7 @@ export function ParentPortal({
                     items={homeworkItems}
                   />
                 </div>
-              ) : (
+              ) : homeworkView === 'plans' ? (
                 <ParentWeeklyPlanSheet
                   brand={brand}
                   className={classLabel}
@@ -302,6 +314,26 @@ export function ParentPortal({
                   rows={weeklyPlanRows}
                   onWeekChange={(anchor) => onWeeklyPlanAnchorDateChange?.(anchor)}
                 />
+              ) : (
+                <section className="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-[color:var(--pp-ink)]/8">
+                  <h2 className="text-sm font-bold text-[color:var(--pp-ink)]">المتابعة الأسبوعية</h2>
+                  {weeklyFollowUpLoading ? (
+                    <p className="mt-3 text-sm text-slate-500">جارٍ التحميل…</p>
+                  ) : weeklyFollowUpError ? (
+                    <p className="mt-3 text-sm text-amber-800">{weeklyFollowUpError}</p>
+                  ) : weeklyFollowUp ? (
+                    <div className="mt-3 space-y-3">
+                      <p className="text-xs text-slate-500">
+                        {weeklyFollowUp.studentNameAr} — {weeklyFollowUp.className} — الأسبوع{' '}
+                        {weeklyFollowUp.weekStart} إلى {weeklyFollowUp.weekEnd}
+                      </p>
+                      <WeeklyFollowUpSubjectTable rows={weeklyFollowUp.subjects} />
+                      <WeeklyFollowUpLegend />
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm text-slate-500">لا توجد متابعة لهذا الأسبوع.</p>
+                  )}
+                </section>
               )}
             </div>
           )}

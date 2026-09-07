@@ -34,6 +34,14 @@ import {
   todayDateOnly,
 } from '../../shared/dates'
 import { ReportCalendarPicker } from './ReportCalendarPicker'
+import {
+  WeeklyFollowUpLegend,
+  WeeklyFollowUpPrintChrome,
+  WeeklyFollowUpStudentTable,
+} from '../../shared/WeeklyFollowUpSheet'
+import { useAuth } from '../../lib/auth'
+import { todayDateStr } from '../../api/teacher'
+import { weekStartSunday } from '../../lib/weeklyFollowUp'
 
 const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_OFF: CalendarOff,
@@ -56,6 +64,7 @@ const DATE_FILTER_TYPES: ReportType[] = [
   'EARLY_LEAVE',
   'HOMEWORK_LOG',
   'WEEKLY_PLAN',
+  'WEEKLY_FOLLOW_UP',
 ]
 
 /** Homework + weekly plan are generated as one sheet per class. */
@@ -95,6 +104,8 @@ export function ReportsHub({
   earlyLeaveDetail,
   homeworkLogDetail,
   weeklyPlanDetail,
+  weeklyFollowUpDetail,
+  weeklyFollowUpOptions,
   studentHistoryDetail,
   absenceDaysDetail,
   studentSearchResults = [],
@@ -111,7 +122,9 @@ export function ReportsHub({
   onSearchStudent,
   onSelectStudent,
   onFilterAbsenceDays,
+  onFilterWeeklyFollowUp,
 }: ReportsProps) {
+  const { user } = useAuth()
   const [activeReport, setActiveReport] = useState<ReportType | null>(
     controlledActiveReport ?? null
   )
@@ -120,6 +133,9 @@ export function ReportsHub({
   )
   /** `ALL` or stringified classId — scopes homework / weekly sheets to one class. */
   const [classFilter, setClassFilter] = useState<string>('ALL')
+  const [fuClassId, setFuClassId] = useState<number | null>(null)
+  const [fuSubjectId, setFuSubjectId] = useState<number | null>(null)
+  const fuReqKeyRef = useRef('')
   const [absenceFrom, setAbsenceFrom] = useState(absenceDaysDetail?.from ?? '')
   const [absenceTo, setAbsenceTo] = useState(absenceDaysDetail?.to ?? '')
   const [absenceMinDays, setAbsenceMinDays] = useState(String(absenceDaysDetail?.minDays ?? 0))
@@ -131,6 +147,19 @@ export function ReportsHub({
 
   const currentActive = controlledActiveReport ?? activeReport
   const activeSummary = reports.find((r) => r.type === currentActive) ?? null
+
+  const fuSubjects = useMemo(
+    () => weeklyFollowUpOptions?.classes.find((c) => c.id === fuClassId)?.subjects ?? [],
+    [weeklyFollowUpOptions, fuClassId]
+  )
+  const fuWeek = weekStartSunday(
+    dateFilter || selectedDate || weeklyFollowUpOptions?.currentWeekStart || todayDateStr()
+  )
+  const fuDetailReady =
+    !!weeklyFollowUpDetail &&
+    weeklyFollowUpDetail.classId === fuClassId &&
+    weeklyFollowUpDetail.subjectId === fuSubjectId &&
+    weeklyFollowUpDetail.weekStart === fuWeek
 
   const classOptions = useMemo(() => {
     if (currentActive === 'HOMEWORK_LOG' && homeworkLogDetail) {
@@ -178,6 +207,37 @@ export function ReportsHub({
   useEffect(() => {
     setClassFilter('ALL')
   }, [currentActive, homeworkLogDetail?.date, weeklyPlanDetail?.weekStart])
+
+  useEffect(() => {
+    if (currentActive !== 'WEEKLY_FOLLOW_UP' || !weeklyFollowUpOptions) return
+    const classes = weeklyFollowUpOptions.classes
+    const nextClass =
+      (fuClassId != null && classes.some((c) => c.id === fuClassId) ? fuClassId : null) ??
+      classes.find((c) => c.subjects.length > 0)?.id ??
+      classes[0]?.id ??
+      null
+    if (nextClass !== fuClassId) {
+      setFuClassId(nextClass)
+      return
+    }
+    const subjects = classes.find((c) => c.id === nextClass)?.subjects ?? []
+    const nextSubject = subjects.some((s) => s.id === fuSubjectId)
+      ? fuSubjectId
+      : (subjects[0]?.id ?? null)
+    if (nextSubject !== fuSubjectId) {
+      setFuSubjectId(nextSubject)
+      return
+    }
+    const week = weekStartSunday(
+      dateFilter || selectedDate || weeklyFollowUpOptions.currentWeekStart
+    )
+    if (!nextClass || !nextSubject) return
+    const key = `${nextClass}:${nextSubject}:${week}`
+    if (fuReqKeyRef.current === key) return
+    fuReqKeyRef.current = key
+    onFilterWeeklyFollowUp?.({ classId: nextClass, subjectId: nextSubject, weekStart: week })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentActive, weeklyFollowUpOptions, fuClassId, fuSubjectId, dateFilter, selectedDate])
 
   useEffect(() => {
     if (!absenceDaysDetail) return
@@ -391,8 +451,10 @@ export function ReportsHub({
                 {DATE_FILTER_TYPES.includes(currentActive) && (
                   <ReportDateNavigator
                     value={dateFilter || selectedDate || todayDateOnly()}
-                    stepDays={currentActive === 'WEEKLY_PLAN' ? 7 : 1}
-                    weekMode={currentActive === 'WEEKLY_PLAN'}
+                    stepDays={
+                      currentActive === 'WEEKLY_PLAN' || currentActive === 'WEEKLY_FOLLOW_UP' ? 7 : 1
+                    }
+                    weekMode={currentActive === 'WEEKLY_PLAN' || currentActive === 'WEEKLY_FOLLOW_UP'}
                     disabled={reportsLoading}
                     onChange={(next) => {
                       setDateFilter(next)
@@ -417,6 +479,40 @@ export function ReportsHub({
                       ))}
                     </select>
                   </label>
+                )}
+                {currentActive === 'WEEKLY_FOLLOW_UP' && weeklyFollowUpOptions && (
+                  <>
+                    <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <span className="shrink-0">الفصل</span>
+                      <select
+                        value={fuClassId ?? ''}
+                        disabled={reportsLoading}
+                        onChange={(e) => setFuClassId(Number(e.target.value))}
+                        className="h-10 min-w-[8rem] rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      >
+                        {weeklyFollowUpOptions.classes.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <span className="shrink-0">المادة</span>
+                      <select
+                        value={fuSubjectId ?? ''}
+                        disabled={reportsLoading}
+                        onChange={(e) => setFuSubjectId(Number(e.target.value))}
+                        className="h-10 min-w-[8rem] rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      >
+                        {fuSubjects.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.nameAr}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
                 )}
                 {currentActive === 'ABSENCE_DAYS' && (
                   <>
@@ -481,6 +577,30 @@ export function ReportsHub({
               <HomeworkLogDetailView detail={homeworkLogDetail} classFilter={classFilter} />
             ) : currentActive === 'WEEKLY_PLAN' && weeklyPlanDetail ? (
               <WeeklyPlanDetailView detail={weeklyPlanDetail} classFilter={classFilter} />
+            ) : currentActive === 'WEEKLY_FOLLOW_UP' && fuDetailReady && weeklyFollowUpDetail ? (
+              <WeeklyFollowUpPrintChrome
+                brand={{
+                  schoolName: weeklyFollowUpDetail.schoolName,
+                  educationAdminName: weeklyFollowUpDetail.educationAdminName,
+                  logoUrl: weeklyFollowUpDetail.logoUrl,
+                  principalName: weeklyFollowUpDetail.principalName,
+                }}
+                title={`مدرسة ${weeklyFollowUpDetail.schoolName}`}
+                metaLines={[
+                  `${weeklyFollowUpDetail.subjectNameAr} — ${weeklyFollowUpDetail.className}`,
+                  `الأسبوع ${weeklyFollowUpDetail.weekStart} إلى ${weeklyFollowUpDetail.weekEnd}`,
+                  weeklyFollowUpDetail.academicYear
+                    ? `العام الدراسي ${weeklyFollowUpDetail.academicYear}`
+                    : '',
+                ].filter(Boolean)}
+                teacherName={user?.name ?? ''}
+                dateLabel={todayDateStr()}
+              >
+                <WeeklyFollowUpStudentTable rows={weeklyFollowUpDetail.rows} />
+                <div className="mt-3">
+                  <WeeklyFollowUpLegend />
+                </div>
+              </WeeklyFollowUpPrintChrome>
             ) : currentActive === 'ABSENCE_DAYS' && absenceDaysDetail ? (
               <AbsenceDaysDetailView detail={absenceDaysDetail} />
             ) : currentActive === 'STUDENT_HISTORY' ? (

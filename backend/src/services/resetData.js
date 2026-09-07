@@ -81,6 +81,7 @@ export async function createDataBackup(prisma) {
     lateReports,
     homework,
     weeklyPlans,
+    weeklyFollowUps,
     notifications,
     importBatches,
     parentAccounts,
@@ -111,6 +112,7 @@ export async function createDataBackup(prisma) {
     prisma.lateReport.findMany(),
     prisma.homework.findMany(),
     prisma.weeklyPlan.findMany(),
+    prisma.weeklyFollowUp.findMany(),
     prisma.notification.findMany(),
     prisma.studentImportBatch.findMany(),
     prisma.parentAccount.findMany({
@@ -148,6 +150,7 @@ export async function createDataBackup(prisma) {
     lateReports,
     homework,
     weeklyPlans,
+    weeklyFollowUps,
     notifications,
     studentProfileCampaigns,
     studentProfileSubmissions,
@@ -170,6 +173,7 @@ export async function createDataBackup(prisma) {
       lateReports: lateReports.length,
       homework: homework.length,
       weeklyPlans: weeklyPlans.length,
+      weeklyFollowUps: weeklyFollowUps.length,
       notifications: notifications.length,
       studentProfileCampaigns: studentProfileCampaigns.length,
       studentProfileSubmissions: studentProfileSubmissions.length,
@@ -298,6 +302,7 @@ export async function resetDataKeepAdmin(db) {
   await wipe('lateReports', async () => (await db.lateReport.deleteMany()).count);
   await wipe('homework', async () => (await db.homework.deleteMany()).count);
   await wipe('weeklyPlans', async () => (await db.weeklyPlan.deleteMany()).count);
+  await wipe('weeklyFollowUps', async () => (await db.weeklyFollowUp.deleteMany()).count);
   await wipe('timetableSlots', async () => (await db.timetableSlot.deleteMany()).count);
   await wipe(
     'studentProfileChangeRequests',
@@ -432,6 +437,7 @@ export async function restoreFromBackup(prisma, backup) {
           classEnrollments: 0,
           homework: 0,
           weeklyPlans: 0,
+          weeklyFollowUps: 0,
           lateReports: 0,
           attendance: 0,
           notifications: 0,
@@ -886,6 +892,44 @@ export async function restoreFromBackup(prisma, backup) {
             counts.weeklyPlans += 1;
           } catch (err) {
             counts.skipped.push(`weekly:${w.id}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const f of backup.weeklyFollowUps || []) {
+          const classId = classIdMap.get(f.classId);
+          const subjectId = subjectIdMap.get(f.subjectId);
+          const weekStart = asDate(f.weekStart);
+          if (!classId || !subjectId || !weekStart || !f.studentId) {
+            counts.skipped.push(`weeklyFollowUp:${f.id}:missing-fields`);
+            continue;
+          }
+          if (!restoredStudentIds.has(f.studentId)) {
+            counts.skipped.push(`weeklyFollowUp:${f.id}:missing-student`);
+            continue;
+          }
+          try {
+            await tx.weeklyFollowUp.create({
+              data: {
+                studentId: f.studentId,
+                classId,
+                subjectId,
+                academicYear: f.academicYear || '',
+                weekStart,
+                participation: f.participation ?? null,
+                homeworkScore: f.homeworkScore ?? null,
+                understanding: f.understanding ?? null,
+                discipline: f.discipline ?? null,
+                interaction: f.interaction ?? null,
+                progress: f.progress ?? null,
+                notes: f.notes ?? null,
+                recordedById: mapUser(f.recordedById),
+                createdAt: asDate(f.createdAt) ?? undefined,
+                updatedAt: asDate(f.updatedAt) ?? undefined,
+              },
+            });
+            counts.weeklyFollowUps += 1;
+          } catch (err) {
+            counts.skipped.push(`weeklyFollowUp:${f.id}:${err?.code || err?.message || 'error'}`);
           }
         }
 

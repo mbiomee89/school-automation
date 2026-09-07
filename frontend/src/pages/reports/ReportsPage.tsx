@@ -11,6 +11,7 @@ import {
   getWeeklyPlanReport,
   searchStudentsForReport,
 } from '../../api/counselor'
+import { getAdminFollowUpOptions, getAdminFollowUpReport } from '../../api/weeklyFollowUp'
 import { todayDateStr } from '../../api/teacher'
 import { ApiError } from '../../api/client'
 import { ReportsHub } from '../../sections/reports/ReportsHub'
@@ -25,6 +26,8 @@ import type {
   StudentHistoryReportDetail,
   StudentSearchOption,
   WeeklyPlanReportDetail,
+  WeeklyFollowUpReportDetail,
+  WeeklyFollowUpReportOptions,
 } from '../../sections/reports/types'
 import { EmptyState } from '../../shared/EmptyState'
 import { SPINNER_CLASS } from '../../shared/buttonVariants'
@@ -43,6 +46,7 @@ function detailMatchesDate(
   if (type === 'EARLY_LEAVE') return earlyLeave?.date === date
   if (type === 'HOMEWORK_LOG') return homework?.date === date
   if (type === 'WEEKLY_PLAN') return weekly?.date === date
+  if (type === 'WEEKLY_FOLLOW_UP') return true
   if (type === 'ABSENCE_DAYS') return true
   return true
 }
@@ -59,6 +63,11 @@ export function ReportsPage() {
   const [earlyLeaveDetail, setEarlyLeaveDetail] = useState<EarlyLeaveReportDetail | null>(null)
   const [homeworkLogDetail, setHomeworkLogDetail] = useState<HomeworkLogReportDetail | null>(null)
   const [weeklyPlanDetail, setWeeklyPlanDetail] = useState<WeeklyPlanReportDetail | null>(null)
+  const [weeklyFollowUpDetail, setWeeklyFollowUpDetail] = useState<WeeklyFollowUpReportDetail | null>(
+    null
+  )
+  const [weeklyFollowUpOptions, setWeeklyFollowUpOptions] =
+    useState<WeeklyFollowUpReportOptions | null>(null)
   const [studentHistoryDetail, setStudentHistoryDetail] =
     useState<StudentHistoryReportDetail | null>(null)
   const [absenceDaysDetail, setAbsenceDaysDetail] = useState<AbsenceDaysReportDetail | null>(null)
@@ -103,10 +112,27 @@ export function ReportsPage() {
     setEarlyLeaveDetail(null)
     setHomeworkLogDetail(null)
     setWeeklyPlanDetail(null)
+    setWeeklyFollowUpDetail(null)
   }, [])
 
   const loadDetail = useCallback(async (type: ReportType, forDate: string) => {
     if (type === 'STUDENT_HISTORY') return
+    if (type === 'WEEKLY_FOLLOW_UP') {
+      const gen = ++detailGen.current
+      setDetailLoading(true)
+      setActionError(null)
+      try {
+        const opts = weeklyFollowUpOptions ?? (await getAdminFollowUpOptions())
+        if (gen !== detailGen.current) return
+        setWeeklyFollowUpOptions(opts)
+      } catch (err) {
+        if (gen !== detailGen.current) return
+        setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل خيارات المتابعة')
+      } finally {
+        if (gen === detailGen.current) setDetailLoading(false)
+      }
+      return
+    }
     const gen = ++detailGen.current
     setDetailLoading(true)
     setActionError(null)
@@ -143,7 +169,7 @@ export function ReportsPage() {
     } finally {
       if (gen === detailGen.current) setDetailLoading(false)
     }
-  }, [absenceDaysOpts])
+  }, [absenceDaysOpts, weeklyFollowUpOptions])
 
   useEffect(() => {
     let cancelled = false
@@ -171,9 +197,9 @@ export function ReportsPage() {
 
   useEffect(() => {
     if (!activeReport || activeReport === 'STUDENT_HISTORY') return
-    if (activeReport === 'ABSENCE_DAYS') {
-      if (absenceDaysDetail) return
-      void loadDetail('ABSENCE_DAYS', date)
+    if (activeReport === 'WEEKLY_FOLLOW_UP') {
+      if (weeklyFollowUpOptions) return
+      void loadDetail('WEEKLY_FOLLOW_UP', date)
       return
     }
     if (
@@ -259,6 +285,26 @@ export function ReportsPage() {
     }
   }
 
+  const handleFilterWeeklyFollowUp = useCallback(
+    async (opts: { classId: number; subjectId: number; weekStart: string }) => {
+      const gen = ++detailGen.current
+      setDetailLoading(true)
+      setActionError(null)
+      try {
+        const detail = await getAdminFollowUpReport(opts)
+        if (gen !== detailGen.current) return
+        setWeeklyFollowUpDetail(detail)
+      } catch (err) {
+        if (gen !== detailGen.current) return
+        setWeeklyFollowUpDetail(null)
+        setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل المتابعة الأسبوعية')
+      } finally {
+        if (gen === detailGen.current) setDetailLoading(false)
+      }
+    },
+    []
+  )
+
   async function handleFilterAbsenceDays(opts: {
     from?: string
     to?: string
@@ -337,6 +383,9 @@ export function ReportsPage() {
       onSearchStudent={handleSearchStudent}
       onSelectStudent={handleSelectStudent}
       onFilterAbsenceDays={handleFilterAbsenceDays}
+      weeklyFollowUpDetail={weeklyFollowUpDetail}
+      weeklyFollowUpOptions={weeklyFollowUpOptions}
+      onFilterWeeklyFollowUp={handleFilterWeeklyFollowUp}
     />
   )
 }

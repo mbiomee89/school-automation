@@ -237,6 +237,24 @@ export interface ParentPortalProps {
   /** Anchor date for weekly plan week (YYYY-MM-DD). */
   weeklyPlanAnchorDate?: string
   onWeeklyPlanAnchorDateChange?: (date: string) => void
+  weeklyFollowUp?: {
+    weekStart: string
+    weekEnd: string
+    className: string
+    studentNameAr: string
+    subjects: Array<{
+      subjectNameAr: string
+      participation: number | null
+      homeworkScore: number | null
+      understanding: number | null
+      discipline: number | null
+      interaction: number | null
+      progress: number | null
+      notes: string | null
+    }>
+  } | null
+  weeklyFollowUpLoading?: boolean
+  weeklyFollowUpError?: string | null
 }
 
 export type ParentLoginMode = 'login' | 'register' | 'reset'

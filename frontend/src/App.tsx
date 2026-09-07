@@ -15,6 +15,7 @@ import { ParentPortalPage } from './pages/parent/ParentPortalPage'
 import { TeacherDocumentsPage } from './pages/teacher/TeacherDocumentsPage'
 import { TeacherFilesAdminPage } from './pages/admin/TeacherFilesAdminPage'
 import { TeacherGradebookPage } from './pages/teacher/TeacherGradebookPage'
+import { TeacherWeeklyFollowUpPage } from './pages/teacher/TeacherWeeklyFollowUpPage'
 import { GradebookAdminPage } from './pages/admin/GradebookAdminPage'
 import { LateReportsPage } from './pages/affairs/LateReportsPage'
 import { EarlyLeavePage } from './pages/affairs/EarlyLeavePage'
@@ -45,6 +46,7 @@ export default function App() {
                 <Route path="teacher-documents" element={<TeacherDocumentsPage />} />
                 <Route path="teacher-files" element={<TeacherFilesAdminPage />} />
                 <Route path="gradebook" element={<TeacherGradebookPage />} />
+                <Route path="weekly-follow-up" element={<TeacherWeeklyFollowUpPage />} />
                 <Route path="gradebook-reports" element={<GradebookAdminPage />} />
                 <Route path="late-reports" element={<LateReportsPage />} />
                 <Route path="early-leave" element={<EarlyLeavePage />} />
