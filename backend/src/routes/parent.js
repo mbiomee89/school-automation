@@ -909,7 +909,7 @@ router.get(
       where: { studentId: student.id },
       include: parentContactInclude,
       orderBy: { createdAt: 'desc' },
-      take: 40,
+      take: 1,
     });
     res.json({ items: rows.map(serializeParentContactForParent) });
   })

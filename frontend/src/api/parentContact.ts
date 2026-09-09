@@ -1,8 +1,17 @@
 import { apiRequest } from './client'
 import type { ParentContactAdminItem } from '../sections/parent-portal/types'
 
-export async function listParentContactMessages(status: 'OPEN' | 'CLOSED' | 'all' = 'OPEN') {
-  const qs = status === 'OPEN' ? '' : `?status=${status}`
+export async function listParentContactMessages(opts?: {
+  status?: 'OPEN' | 'CLOSED' | 'all'
+  from?: string
+  to?: string
+}) {
+  const status = opts?.status ?? 'OPEN'
+  const search = new URLSearchParams()
+  if (status !== 'OPEN') search.set('status', status)
+  if (opts?.from) search.set('from', opts.from)
+  if (opts?.to) search.set('to', opts.to)
+  const qs = search.toString() ? `?${search}` : ''
   const data = await apiRequest<{ items: ParentContactAdminItem[] }>(`/parent-contact${qs}`)
   return data.items
 }

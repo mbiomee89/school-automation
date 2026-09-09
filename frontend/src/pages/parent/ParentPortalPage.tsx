@@ -476,7 +476,7 @@ export function ParentPortalPage() {
         try {
           setContactMessages(await getParentContactMessages(childId))
         } catch {
-          setContactMessages((prev) => [item, ...prev.filter((m) => m.id !== item.id)])
+          setContactMessages([item])
         }
       }}
       onCancelContactMessage={async (messageId) => {

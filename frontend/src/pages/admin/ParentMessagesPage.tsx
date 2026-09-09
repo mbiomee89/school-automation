@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, MessageSquareText } from 'lucide-react'
+import { AlertTriangle, MessageSquareText, Printer } from 'lucide-react'
 import {
   getParentContactPendingCount,
   listParentContactMessages,
@@ -8,10 +8,12 @@ import {
 import { ApiError } from '../../api/client'
 import type { ParentContactAdminItem, ParentContactKind } from '../../sections/parent-portal/types'
 import { EmptyState } from '../../shared/EmptyState'
+import { GregorianDateField } from '../../shared/GregorianDateField'
 import { buttonVariants, SPINNER_CLASS } from '../../shared/buttonVariants'
 import { fontArabic, fontMono } from '../../shared/fonts'
 import { useStaffToast } from '../../shared/StaffToast'
 import { cn } from '../../shared/utils'
+import { addDaysIso, schoolTodayIso } from '../../sections/parent-portal/theme'
 
 type StatusFilter = 'OPEN' | 'CLOSED' | 'all'
 
@@ -19,6 +21,12 @@ const KIND_AR: Record<ParentContactKind, string> = {
   SUGGESTION: 'اقتراح',
   COMPLAINT: 'شكوى',
   OTHER: 'أخرى',
+}
+
+function statusLabel(status: ParentContactAdminItem['status']) {
+  if (status === 'OPEN') return 'مفتوحة'
+  if (status === 'CLOSED') return 'مغلقة'
+  return 'ملغاة'
 }
 
 function formatWhen(iso: string) {
@@ -32,9 +40,22 @@ function formatWhen(iso: string) {
   }
 }
 
+function formatDay(isoOrDay: string) {
+  const day = isoOrDay.slice(0, 10)
+  try {
+    return new Intl.DateTimeFormat('ar-SA', { dateStyle: 'medium' }).format(
+      new Date(`${day}T12:00:00`)
+    )
+  } catch {
+    return day
+  }
+}
+
 export function ParentMessagesPage() {
   const showToast = useStaffToast()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('OPEN')
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
   const [items, setItems] = useState<ParentContactAdminItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -48,7 +69,11 @@ export function ParentMessagesPage() {
     setError(null)
     try {
       const [list, count] = await Promise.all([
-        listParentContactMessages(statusFilter),
+        listParentContactMessages({
+          status: statusFilter,
+          from: fromDate || undefined,
+          to: toDate || undefined,
+        }),
         getParentContactPendingCount(),
       ])
       setItems(list)
@@ -62,7 +87,7 @@ export function ParentMessagesPage() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter])
+  }, [statusFilter, fromDate, toDate])
 
   useEffect(() => {
     void load()
@@ -73,6 +98,17 @@ export function ParentMessagesPage() {
   useEffect(() => {
     setReplyBody('')
   }, [selectedId])
+
+  function applyLast30Days() {
+    const today = schoolTodayIso()
+    setFromDate(addDaysIso(today, -29))
+    setToDate(today)
+  }
+
+  function clearDates() {
+    setFromDate('')
+    setToDate('')
+  }
 
   async function submitReply() {
     if (!selected || selected.status !== 'OPEN') return
@@ -104,6 +140,11 @@ export function ParentMessagesPage() {
     }
   }
 
+  const periodLabel =
+    fromDate || toDate
+      ? `من ${fromDate ? formatDay(fromDate) : '—'} إلى ${toDate ? formatDay(toDate) : '—'}`
+      : 'كل التواريخ'
+
   if (loading && items.length === 0) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -123,7 +164,7 @@ export function ParentMessagesPage() {
       className="min-h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50"
       style={fontArabic}
     >
-      <div className="border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-sky-50 px-4 py-6 sm:px-6 dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-sky-950/30">
+      <div className="border-b border-slate-200 bg-gradient-to-bl from-slate-100 via-white to-sky-50 px-4 py-6 sm:px-6 print:hidden dark:border-slate-800 dark:from-slate-900 dark:via-slate-950 dark:to-sky-950/30">
         <p className="text-sm font-medium text-slate-500">الإدارة المدرسية</p>
         <div className="mt-1 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">رسائل أولياء الأمور</h1>
@@ -134,11 +175,11 @@ export function ParentMessagesPage() {
           ) : null}
         </div>
         <p className="mt-2 max-w-2xl text-sm text-slate-600 dark:text-slate-300">
-          ردّ الإدارة يغلق الحالة. الرسائل الملغاة من ولي الأمر لا تظهر هنا.
+          ردّ الإدارة يغلق الحالة. الرسائل الملغاة من ولي الأمر لا تظهر هنا. التاريخ يصفّي يوم إرسال الرسالة.
         </p>
       </div>
 
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] sm:px-6">
+      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)] sm:px-6 print:hidden">
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2">
             {(
@@ -162,14 +203,51 @@ export function ParentMessagesPage() {
                 {f.label}
               </button>
             ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-900">
+            <GregorianDateField label="من" value={fromDate} onChange={setFromDate} />
+            <GregorianDateField label="إلى" value={toDate} onChange={setToDate} />
+            <button
+              type="button"
+              onClick={applyLast30Days}
+              className="min-h-9 rounded-md border border-slate-300 px-3 text-sm dark:border-slate-600"
+            >
+              آخر 30 يوماً
+            </button>
+            <button
+              type="button"
+              onClick={clearDates}
+              className="min-h-9 rounded-md border border-slate-300 px-3 text-sm dark:border-slate-600"
+            >
+              مسح التواريخ
+            </button>
             <button
               type="button"
               onClick={() => void load()}
-              className="min-h-10 rounded-full border border-slate-300 px-3 text-sm dark:border-slate-600"
+              className="min-h-9 rounded-md border border-slate-300 px-3 text-sm dark:border-slate-600"
             >
               تحديث
             </button>
+            <button
+              type="button"
+              onClick={() => window.print()}
+              className={buttonVariants({
+                variant: 'secondary',
+                className: 'min-h-9 gap-1.5',
+              })}
+            >
+              <Printer className="size-4" strokeWidth={1.75} />
+              طباعة التقرير
+            </button>
           </div>
+
+          <p className="text-xs text-slate-500">
+            {items.length} رسالة
+            {items.length === 500 ? ' — النتائج محدودة بـ 500 رسالة' : ''}
+            {' · '}
+            {periodLabel}
+          </p>
 
           {error ? (
             <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm" role="alert">
@@ -183,8 +261,8 @@ export function ParentMessagesPage() {
               title="لا رسائل في هذا العرض"
               description={
                 statusFilter === 'OPEN'
-                  ? 'لا توجد حالات مفتوحة حالياً.'
-                  : 'جرّب فلترًا آخر.'
+                  ? 'لا توجد حالات مفتوحة مطابقة للفلتر.'
+                  : 'جرّب فلترًا أو نطاقاً زمنياً آخر.'
               }
             />
           ) : (
@@ -211,11 +289,7 @@ export function ParentMessagesPage() {
                       {' · '}
                       {KIND_AR[item.kind]}
                       {' · '}
-                      {item.status === 'OPEN'
-                        ? 'مفتوحة'
-                        : item.status === 'CLOSED'
-                          ? 'مغلقة'
-                          : 'ملغاة'}
+                      {statusLabel(item.status)}
                     </p>
                     <p className="mt-1 line-clamp-2 text-sm text-slate-700 dark:text-slate-300">
                       {item.body}
@@ -242,12 +316,7 @@ export function ParentMessagesPage() {
                   {selected.className ? ` · ${selected.className}` : ''}
                 </p>
                 <p className="mt-2 text-xs font-medium text-sky-800 dark:text-sky-200">
-                  {KIND_AR[selected.kind]} ·{' '}
-                  {selected.status === 'OPEN'
-                    ? 'مفتوحة'
-                    : selected.status === 'CLOSED'
-                      ? 'مغلقة'
-                      : 'ملغاة'}
+                  {KIND_AR[selected.kind]} · {statusLabel(selected.status)}
                 </p>
               </div>
               <div>
@@ -293,6 +362,59 @@ export function ParentMessagesPage() {
             </div>
           )}
         </aside>
+      </div>
+
+      {/* Print report */}
+      <div className="hidden print:block print:bg-white print:p-6 print:text-black" style={fontArabic}>
+        <h1 className="text-xl font-bold">تقرير رسائل أولياء الأمور</h1>
+        <p className="mt-1 text-sm text-slate-700">
+          الفترة: {periodLabel}
+          {' · '}
+          الحالة:{' '}
+          {statusFilter === 'OPEN' ? 'مفتوحة' : statusFilter === 'CLOSED' ? 'مغلقة' : 'الكل'}
+          {' · '}
+          العدد: {items.length}
+          {items.length === 500 ? ' (محدود بـ 500)' : ''}
+        </p>
+        <div className="mt-6 space-y-5">
+          {items.map((item, idx) => (
+            <article
+              key={item.id}
+              className="break-inside-avoid border-b border-slate-300 pb-4 text-sm"
+            >
+              <p className="font-bold">
+                {idx + 1}. {item.studentNameAr ?? item.studentId}
+              </p>
+              <p className="mt-0.5 text-xs text-slate-600" style={fontMono}>
+                {item.studentId}
+              </p>
+              <p className="mt-1 text-xs text-slate-700">
+                {item.gradeLevel ? `صف ${item.gradeLevel}` : 'بدون فصل'}
+                {item.className ? ` · ${item.className}` : ''}
+                {' · '}
+                {KIND_AR[item.kind]}
+                {' · '}
+                {statusLabel(item.status)}
+                {' · '}
+                {formatWhen(item.createdAt)}
+              </p>
+              <p className="mt-2 whitespace-pre-wrap">
+                <span className="font-semibold">الرسالة: </span>
+                {item.body}
+              </p>
+              {item.status === 'CLOSED' && item.replyBody ? (
+                <p className="mt-2 whitespace-pre-wrap">
+                  <span className="font-semibold">رد الإدارة</span>
+                  {item.repliedByName ? ` (${item.repliedByName})` : ''}
+                  {item.repliedAt ? ` — ${formatWhen(item.repliedAt)}` : ''}: {item.replyBody}
+                </p>
+              ) : item.status === 'OPEN' ? (
+                <p className="mt-2 font-semibold text-slate-700">بانتظار الرد</p>
+              ) : null}
+            </article>
+          ))}
+          {items.length === 0 ? <p className="text-sm">لا رسائل في هذا النطاق.</p> : null}
+        </div>
       </div>
     </div>
   )

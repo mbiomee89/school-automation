@@ -262,6 +262,47 @@ async function main() {
         closed?.replyBody === 'تم الاطلاع والرد',
       `status=${parentList.status}`
     );
+
+    const closedId = messageId;
+    const created3 = await req('POST', `/api/parent/students/${student.id}/contact-messages`, {
+      headers: auth(parentToken),
+      body: { kind: 'SUGGESTION', body: 'رسالة جديدة بعد الإغلاق' },
+    });
+    ok('create after close', created3.status === 201, `status=${created3.status}`);
+    const newestId = created3.json?.item?.id;
+
+    const parentLatest = await req('GET', `/api/parent/students/${student.id}/contact-messages`, {
+      headers: auth(parentToken),
+    });
+    ok(
+      'parent latest-only after new message',
+      parentLatest.status === 200 &&
+        Array.isArray(parentLatest.json?.items) &&
+        parentLatest.json.items.length === 1 &&
+        parentLatest.json.items[0]?.id === newestId &&
+        parentLatest.json.items[0]?.status === 'OPEN',
+      `len=${parentLatest.json?.items?.length} id=${parentLatest.json?.items?.[0]?.id}`
+    );
+
+    const today = new Date().toISOString().slice(0, 10);
+    const adminRange = await req(
+      'GET',
+      `/api/parent-contact?status=CLOSED&from=2000-01-01&to=${today}`,
+      { headers: auth(adminToken) }
+    );
+    const oldStillThere = Array.isArray(adminRange.json?.items)
+      ? adminRange.json.items.some((i) => i.id === closedId)
+      : false;
+    ok(
+      'admin range still returns older CLOSED',
+      adminRange.status === 200 && oldStillThere,
+      `status=${adminRange.status} found=${oldStillThere}`
+    );
+
+    const badRange = await req('GET', '/api/parent-contact?from=2026-12-31&to=2026-01-01', {
+      headers: auth(adminToken),
+    });
+    ok('from>to rejected 400', badRange.status === 400, `status=${badRange.status}`);
   } finally {
     await prisma.parentContactMessage.deleteMany({
       where: { studentId: { in: [student.id, studentB.id] } },

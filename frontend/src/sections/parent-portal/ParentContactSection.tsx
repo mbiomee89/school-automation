@@ -130,7 +130,7 @@ export function ParentContactSection({
         <div className="space-y-2">
           <h2 className="text-sm font-bold text-[color:var(--pp-ink)]">رسائلي</h2>
           <ul className="space-y-2">
-            {messages.slice(0, 8).map((m) => (
+            {messages.map((m) => (
               <li
                 key={m.id}
                 className="rounded-xl border border-slate-200/80 bg-white px-3 py-3 text-sm shadow-sm"
