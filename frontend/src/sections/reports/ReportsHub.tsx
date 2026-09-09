@@ -525,38 +525,67 @@ export function ReportsHub({
                   </>
                 )}
                 {currentActive === 'PARENT_ACTIVATION' && (
-                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="حالة التفعيل">
-                    {(
-                      [
-                        { id: 'all', label: 'الكل' },
-                        { id: 'ACTIVATED', label: 'مفعّل' },
-                        { id: 'NOT_ACTIVATED', label: 'غير مفعّل' },
-                        { id: 'NO_PHONE', label: 'بدون جوال' },
-                      ] as const satisfies ReadonlyArray<{
-                        id: ParentActivationStatusFilter
-                        label: string
-                      }>
-                    ).map((opt) => {
-                      const selected =
-                        (parentActivationDetail?.status ?? 'all') === opt.id
-                      return (
-                        <button
-                          key={opt.id}
-                          type="button"
-                          disabled={reportsLoading}
-                          onClick={() => onFilterParentActivation?.(opt.id)}
-                          className={cn(
-                            'h-9 rounded-lg px-3 text-sm font-medium transition-colors disabled:opacity-50',
-                            selected
-                              ? 'bg-blue-600 text-white'
-                              : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800'
-                          )}
-                        >
-                          {opt.label}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <>
+                    <label className="flex h-10 items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+                      <span className="shrink-0">الفصل</span>
+                      <select
+                        value={parentActivationDetail?.classId ?? ''}
+                        disabled={reportsLoading}
+                        onChange={(e) => {
+                          const raw = e.target.value
+                          onFilterParentActivation?.({
+                            classId: raw === '' ? null : Number(raw),
+                          })
+                        }}
+                        className="h-10 min-w-[8rem] rounded-lg border border-slate-300 bg-white px-2.5 text-sm disabled:opacity-50 dark:border-slate-600 dark:bg-slate-950"
+                      >
+                        <option value="">كل الفصول</option>
+                        {(parentActivationDetail?.classes ?? []).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div
+                      className="flex flex-wrap items-center gap-1.5"
+                      role="group"
+                      aria-label="حالة التفعيل"
+                    >
+                      {(
+                        [
+                          { id: 'all', label: 'الكل' },
+                          { id: 'ACTIVATED', label: 'مفعّل' },
+                          { id: 'NOT_ACTIVATED', label: 'غير مفعّل' },
+                          { id: 'NO_PHONE', label: 'بدون جوال' },
+                        ] as const satisfies ReadonlyArray<{
+                          id: ParentActivationStatusFilter
+                          label: string
+                        }>
+                      ).map((opt) => {
+                        const selected =
+                          (parentActivationDetail?.status ?? 'all') === opt.id
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            disabled={reportsLoading}
+                            onClick={() =>
+                              onFilterParentActivation?.({ status: opt.id })
+                            }
+                            className={cn(
+                              'h-9 rounded-lg px-3 text-sm font-medium transition-colors disabled:opacity-50',
+                              selected
+                                ? 'bg-blue-600 text-white'
+                                : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800'
+                            )}
+                          >
+                            {opt.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </>
                 )}
                 {currentActive === 'ABSENCE_DAYS' && (
                   <>
@@ -725,6 +754,10 @@ function AbsenceDaysDetailView({ detail }: { detail: AbsenceDaysReportDetail }) 
 
 function ParentActivationDetailView({ detail }: { detail: ParentActivationReportDetail }) {
   const { summary } = detail
+  const classLabel =
+    detail.classId == null
+      ? 'كل الفصول'
+      : (detail.classes.find((c) => c.id === detail.classId)?.name ?? 'فصل محدد')
   const chips = [
     { label: 'مفعّل', value: summary.activated, tone: 'ok' as const },
     { label: 'غير مفعّل', value: summary.notActivated, tone: 'warn' as const },
@@ -740,7 +773,7 @@ function ParentActivationDetailView({ detail }: { detail: ParentActivationReport
         educationAdminName={detail.educationAdminName}
         logoUrl={detail.logoUrl}
         subtitle="تفعيل بوابة أولياء الأمور"
-        dateLabel="لقطة حالية"
+        dateLabel={classLabel}
         generatedAt={detail.generatedAt}
       />
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 print:grid-cols-4">

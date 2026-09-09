@@ -682,9 +682,12 @@ function summarizeActivationBuckets(groups, byPhone) {
 }
 
 /** Hub card counts only — no student name payloads. */
-async function computeParentActivationSummary() {
+async function computeParentActivationSummary(classId) {
   const students = await prisma.student.findMany({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...(classId != null ? { classId } : {}),
+    },
     select: { parentPhone: true },
   });
 
@@ -709,11 +712,14 @@ async function computeParentActivationSummary() {
 
 /**
  * Unique parent phones among active students, with ParentAccount activation status.
- * Detail endpoint only — summary uses computeParentActivationSummary().
+ * Optional classId scopes to students in that class only.
  */
-async function computeParentActivation() {
+async function computeParentActivation(classId) {
   const students = await prisma.student.findMany({
-    where: { isActive: true },
+    where: {
+      isActive: true,
+      ...(classId != null ? { classId } : {}),
+    },
     select: {
       id: true,
       nameAr: true,
@@ -780,16 +786,25 @@ async function computeParentActivation() {
 
 const parentActivationQuery = z.object({
   status: z.enum(['ACTIVATED', 'NOT_ACTIVATED', 'NO_PHONE', 'all']).default('all'),
+  classId: z.coerce.number().int().positive().optional(),
 });
 
-/** GET /reports/parent-activation?status= — portal registration outreach list */
+/** GET /reports/parent-activation?status=&classId= — portal registration outreach list */
 router.get(
   '/parent-activation',
   validateQuery(parentActivationQuery),
   asyncHandler(async (req, res) => {
     const status = req.query.status ?? 'all';
+    const classId = req.query.classId ?? null;
     const header = await schoolHeader();
-    const { summary, parents: allParents } = await computeParentActivation();
+    const [{ summary, parents: allParents }, classes] = await Promise.all([
+      computeParentActivation(classId),
+      prisma.class.findMany({
+        where: ACTIVE_CLASS,
+        select: { id: true, name: true },
+        orderBy: [{ gradeLevel: 'asc' }, { name: 'asc' }],
+      }),
+    ]);
 
     let parents = allParents;
     if (status === 'ACTIVATED') {
@@ -804,6 +819,8 @@ router.get(
       ...header,
       generatedAt: new Date().toISOString(),
       status,
+      classId,
+      classes,
       summary,
       parents,
     });

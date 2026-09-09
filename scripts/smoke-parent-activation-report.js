@@ -205,6 +205,46 @@ async function main() {
         (activated.json?.parents ?? []).some((p) => p.phone === phoneActive)
     );
 
+    const byClass = await req(
+      'GET',
+      `/api/reports/parent-activation?classId=${cls.id}`,
+      { headers: auth(token) }
+    );
+    ok('class filter 200', byClass.status === 200, `status=${byClass.status}`);
+    ok('classId echoed', byClass.json?.classId === cls.id);
+    ok(
+      'class filter scopes students',
+      (byClass.json?.parents ?? []).every((p) =>
+        p.students.every((s) => s.id === sActive.id || s.id === sSibling.id || s.id === sNotAct.id || s.id === sDisabled.id || s.id === sNoPhone.id)
+      ) &&
+        (byClass.json?.summary?.totalPhones ?? 0) >= 1
+    );
+    ok(
+      'classes list present',
+      Array.isArray(byClass.json?.classes) &&
+        byClass.json.classes.some((c) => c.id === cls.id)
+    );
+
+    const otherClass = await prisma.class.create({
+      data: {
+        name: `parent-act-other-${stamp}`,
+        gradeLevel: '4',
+        section: `O${String(stamp).slice(-3)}`,
+        academicYear: '2097-2098',
+      },
+    });
+    const emptyClass = await req(
+      'GET',
+      `/api/reports/parent-activation?classId=${otherClass.id}`,
+      { headers: auth(token) }
+    );
+    ok(
+      'empty class has zero parents',
+      emptyClass.json?.summary?.totalPhones === 0 &&
+        (emptyClass.json?.parents ?? []).length === 0
+    );
+    await prisma.class.delete({ where: { id: otherClass.id } }).catch(() => {});
+
     const teacher = await prisma.user.create({
       data: {
         name: `Smoke ParentAct Teacher ${stamp}`,

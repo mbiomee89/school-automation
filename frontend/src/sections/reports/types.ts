@@ -54,6 +54,9 @@ export interface ParentActivationReportDetail {
   principalName?: string | null
   generatedAt: string
   status: ParentActivationStatusFilter
+  /** null = كل الفصول */
+  classId: number | null
+  classes: Array<{ id: number; name: string }>
   summary: {
     totalPhones: number
     activated: number
@@ -61,6 +64,11 @@ export interface ParentActivationReportDetail {
     noPhone: number
   }
   parents: ParentActivationRow[]
+}
+
+export type ParentActivationFilterOpts = {
+  status?: ParentActivationStatusFilter
+  classId?: number | null
 }
 
 export interface ReportSummary {
@@ -332,6 +340,6 @@ export interface ReportsProps {
   /** Reload absence-days report with threshold / date range */
   onFilterAbsenceDays?: (opts: { from?: string; to?: string; minDays?: number }) => void
   onFilterWeeklyFollowUp?: (opts: { classId: number; subjectId: number; weekStart: string }) => void
-  /** Reload parent-activation report with status filter */
-  onFilterParentActivation?: (status: ParentActivationStatusFilter) => void
+  /** Reload parent-activation report with status / class filters */
+  onFilterParentActivation?: (opts: ParentActivationFilterOpts) => void
 }

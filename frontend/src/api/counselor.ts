@@ -96,10 +96,15 @@ export async function getStudentHistoryReport(
 }
 
 export async function getParentActivationReport(
-  status: ParentActivationStatusFilter = 'all'
+  opts: {
+    status?: ParentActivationStatusFilter
+    classId?: number | null
+  } = {}
 ): Promise<ParentActivationReportDetail> {
   const params = new URLSearchParams()
+  const status = opts.status ?? 'all'
   if (status && status !== 'all') params.set('status', status)
+  if (opts.classId != null) params.set('classId', String(opts.classId))
   const q = params.toString()
   return apiRequest(`/reports/parent-activation${q ? `?${q}` : ''}`)
 }

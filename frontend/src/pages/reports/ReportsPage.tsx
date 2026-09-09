@@ -24,6 +24,7 @@ import type {
   LateArrivalsReportDetail,
   ParentActivationReportDetail,
   ParentActivationStatusFilter,
+  ParentActivationFilterOpts,
   ReportSummary,
   ReportType,
   StudentHistoryReportDetail,
@@ -79,6 +80,7 @@ export function ReportsPage() {
     useState<ParentActivationReportDetail | null>(null)
   const [parentActivationStatus, setParentActivationStatus] =
     useState<ParentActivationStatusFilter>('all')
+  const [parentActivationClassId, setParentActivationClassId] = useState<number | null>(null)
   const [absenceDaysOpts, setAbsenceDaysOpts] = useState<{
     from?: string
     to?: string
@@ -131,7 +133,10 @@ export function ReportsPage() {
       setDetailLoading(true)
       setActionError(null)
       try {
-        const detail = await getParentActivationReport(parentActivationStatus)
+        const detail = await getParentActivationReport({
+          status: parentActivationStatus,
+          classId: parentActivationClassId,
+        })
         if (gen !== detailGen.current) return
         setParentActivationDetail(detail)
       } catch (err) {
@@ -194,7 +199,7 @@ export function ReportsPage() {
     } finally {
       if (gen === detailGen.current) setDetailLoading(false)
     }
-  }, [absenceDaysOpts, weeklyFollowUpOptions, parentActivationStatus])
+  }, [absenceDaysOpts, weeklyFollowUpOptions, parentActivationStatus, parentActivationClassId])
 
   useEffect(() => {
     let cancelled = false
@@ -367,14 +372,21 @@ export function ReportsPage() {
     }
   }
 
-  async function handleFilterParentActivation(status: ParentActivationStatusFilter) {
+  async function handleFilterParentActivation(opts: ParentActivationFilterOpts) {
+    const nextStatus = opts.status ?? parentActivationStatus
+    const nextClassId =
+      opts.classId !== undefined ? opts.classId : parentActivationClassId
     const gen = ++detailGen.current
     setDetailLoading(true)
     setActionError(null)
     try {
-      const detail = await getParentActivationReport(status)
+      const detail = await getParentActivationReport({
+        status: nextStatus,
+        classId: nextClassId,
+      })
       if (gen !== detailGen.current) return
-      setParentActivationStatus(status)
+      setParentActivationStatus(nextStatus)
+      setParentActivationClassId(nextClassId)
       setParentActivationDetail(detail)
       setReports((prev) =>
         prev.map((r) =>
@@ -440,12 +452,16 @@ export function ReportsPage() {
         if (type === 'PARENT_ACTIVATION') {
           // Force a fresh snapshot each open (avoid stale outreach lists).
           setParentActivationDetail(null)
+          setParentActivationClassId(null)
+          setParentActivationStatus('all')
         }
         setActiveReport(type)
       }}
       onCloseReport={() => {
         setActiveReport(null)
         setParentActivationDetail(null)
+        setParentActivationClassId(null)
+        setParentActivationStatus('all')
       }}
       onFilterByDate={(_type, nextDate) => {
         if (!nextDate) return
