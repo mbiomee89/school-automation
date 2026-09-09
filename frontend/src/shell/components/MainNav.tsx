@@ -4,6 +4,7 @@ import {
   ShieldCheck,
   FileBarChart2,
   DoorOpen,
+  MessageSquareText,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '../../shared/utils'
@@ -34,6 +35,7 @@ const iconMap: Record<string, LucideIcon> = {
   reports: FileBarChart2,
   'التقارير': FileBarChart2,
   'طلبات الاستئذان': DoorOpen,
+  'رسائل أولياء الأمور': MessageSquareText,
 }
 
 function iconFor(label: string): LucideIcon {

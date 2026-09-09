@@ -9,6 +9,34 @@ export type NotificationEventType = 'ABSENCE' | 'LATE' | 'HOMEWORK_DIGEST' | 'WE
 export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'
 export type EarlyLeaveStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'
 
+export type ParentContactKind = 'SUGGESTION' | 'COMPLAINT' | 'OTHER'
+export type ParentContactStatus = 'OPEN' | 'CLOSED' | 'CANCELLED'
+
+export interface ParentContactMessage {
+  id: number
+  studentId: string
+  kind: ParentContactKind
+  body: string
+  status: ParentContactStatus
+  createdAt: string
+  replyBody: string | null
+  repliedAt: string | null
+}
+
+export interface ParentContactSubmitInput {
+  kind: ParentContactKind
+  body: string
+}
+
+/** Staff inbox row (admin). */
+export interface ParentContactAdminItem extends ParentContactMessage {
+  studentNameAr: string | null
+  studentNameEn: string | null
+  gradeLevel: string | null
+  className: string | null
+  repliedByName: string | null
+}
+
 export type ParentTab = 'home' | 'attendance' | 'homework' | 'early-leave' | 'notifications' | 'settings'
 
 export interface Child {
@@ -212,6 +240,7 @@ export interface ParentPortalProps {
   notifications?: NotificationItem[]
   excuseSubmissions: ExcuseSubmission[]
   earlyLeaveRequests?: EarlyLeaveRequest[]
+  contactMessages?: ParentContactMessage[]
   /** WhatsApp opt-in — hidden in UI for now. */
   waOptedIn?: boolean
   /** Active bottom-nav tab for controlled preview */
@@ -229,6 +258,10 @@ export interface ParentPortalProps {
   onSubmitEarlyLeave?: (input: EarlyLeaveSubmitInput) => void | Promise<void>
   /** Cancel a pending or approved early-leave request. */
   onCancelEarlyLeave?: (requestId: number) => void | Promise<void>
+  /** Submit contact message to principal. */
+  onSubmitContactMessage?: (input: ParentContactSubmitInput) => void | Promise<void>
+  /** Cancel an OPEN contact message. */
+  onCancelContactMessage?: (messageId: number) => void | Promise<void>
   /** Toggle WhatsApp notifications — unused while messaging is manual. */
   onToggleWaOptIn?: (optedIn: boolean) => void
   /** Log out of the parent portal */

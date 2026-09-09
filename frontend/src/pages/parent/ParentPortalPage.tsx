@@ -2,9 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { AlertTriangle } from 'lucide-react'
 import {
+  cancelParentContactMessage,
   cancelParentEarlyLeave,
+  createParentContactMessage,
   createParentEarlyLeave,
   getParentAttendance,
+  getParentContactMessages,
   getParentEarlyLeave,
   getParentExcuses,
   getParentHomework,
@@ -25,6 +28,7 @@ import type {
   EarlyLeaveRequest,
   ExcuseSubmission,
   HomeworkItem,
+  ParentContactMessage,
   ReportBrand,
   TodaySummary,
   WeeklyPlanFormalRow,
@@ -77,6 +81,7 @@ export function ParentPortalPage() {
   const [reportClassName, setReportClassName] = useState('بدون فصل')
   const [excuseSubmissions, setExcuseSubmissions] = useState<ExcuseSubmission[]>([])
   const [earlyLeaveRequests, setEarlyLeaveRequests] = useState<EarlyLeaveRequest[]>([])
+  const [contactMessages, setContactMessages] = useState<ParentContactMessage[]>([])
   const [homeworkBrowseDate, setHomeworkBrowseDate] = useState(() => schoolTodayIso())
   const [classTimetable, setClassTimetable] = useState<ClassTimetable | null>(null)
   const [classTimetableError, setClassTimetableError] = useState<string | null>(null)
@@ -84,6 +89,9 @@ export function ParentPortalPage() {
   const [weeklyFollowUp, setWeeklyFollowUp] = useState<ParentFollowUpSheet | null>(null)
   const [weeklyFollowUpError, setWeeklyFollowUpError] = useState<string | null>(null)
   const [weeklyFollowUpLoading, setWeeklyFollowUpLoading] = useState(false)
+
+  const activeChildIdRef = useRef(activeChildId)
+  activeChildIdRef.current = activeChildId
 
   useEffect(() => {
     if (students.length === 0) return
@@ -104,14 +112,24 @@ export function ParentPortalPage() {
     setWeeklyFollowUpError(null)
 
     try {
-      const [summary, attendance, homeworkRes, plansRes, excuses, earlyLeave, timetableResult, followUpResult] =
-        await Promise.all([
+      const [
+        summary,
+        attendance,
+        homeworkRes,
+        plansRes,
+        excuses,
+        earlyLeave,
+        contactMsgs,
+        timetableResult,
+        followUpResult,
+      ] = await Promise.all([
           getParentSummary(studentId),
           getParentAttendance(studentId),
           getParentHomework(studentId, { date: browseDate }),
           getParentWeeklyPlans(studentId, { date: planAnchor }),
           getParentExcuses(studentId),
           getParentEarlyLeave(studentId),
+          getParentContactMessages(studentId),
           getParentTimetable(studentId).then(
             (data) => ({ ok: true as const, data }),
             (err) => ({ ok: false as const, err })
@@ -153,6 +171,7 @@ export function ParentPortalPage() {
       setReportClassName(homeworkRes.className || plansRes.className || 'بدون فصل')
       setExcuseSubmissions(excuses)
       setEarlyLeaveRequests(earlyLeave)
+      setContactMessages(contactMsgs)
 
       if (timetableResult.ok) {
         const t = timetableResult.data
@@ -300,6 +319,7 @@ export function ParentPortalPage() {
     setWeeklyPlanRows([])
     setExcuseSubmissions([])
     setEarlyLeaveRequests([])
+    setContactMessages([])
     setTodaySummary(emptySummary(schoolTodayIso()))
     setHomeworkBrowseDate(schoolTodayIso())
     setWeeklyPlanAnchorDate(schoolTodayIso())
@@ -402,6 +422,7 @@ export function ParentPortalPage() {
       classTimetableLoading={classTimetableLoading}
       excuseSubmissions={excuseSubmissions}
       earlyLeaveRequests={earlyLeaveRequests}
+      contactMessages={contactMessages}
       homeworkBrowseDate={homeworkBrowseDate}
       onHomeworkBrowseDateChange={setHomeworkBrowseDate}
       weeklyPlanAnchorDate={weeklyPlanAnchorDate}
@@ -445,6 +466,28 @@ export function ParentPortalPage() {
                 ? { ...r, status: 'CANCELLED', cancelledAt: new Date().toISOString() }
                 : r
             )
+          )
+        }
+      }}
+      onSubmitContactMessage={async (input) => {
+        const childId = activeChildId
+        const item = await createParentContactMessage(childId, input)
+        if (childId !== activeChildIdRef.current) return
+        try {
+          setContactMessages(await getParentContactMessages(childId))
+        } catch {
+          setContactMessages((prev) => [item, ...prev.filter((m) => m.id !== item.id)])
+        }
+      }}
+      onCancelContactMessage={async (messageId) => {
+        const childId = activeChildId
+        const item = await cancelParentContactMessage(messageId)
+        if (childId !== activeChildIdRef.current) return
+        try {
+          setContactMessages(await getParentContactMessages(childId))
+        } catch {
+          setContactMessages((prev) =>
+            prev.map((m) => (m.id === messageId ? { ...m, ...item, status: 'CANCELLED' } : m))
           )
         }
       }}

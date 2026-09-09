@@ -26,6 +26,7 @@ import { ParentClassTimetable } from './ParentClassTimetable'
 import { SegmentedTabs } from './SegmentedTabs'
 import { DayChipStrip } from './DayChipStrip'
 import { EarlyLeavePanel } from './EarlyLeavePanel'
+import { ParentContactSection } from './ParentContactSection'
 import { WeeklyFollowUpLegend, WeeklyFollowUpSubjectTable } from '../../shared/WeeklyFollowUpSheet'
 import { ATTENDANCE_STATUS_META, formatLongDate, formatShortDate } from './statusMeta'
 import { PARENT_PORTAL_THEME, addDaysIso, weekStartSundayIso } from './theme'
@@ -66,6 +67,7 @@ export function ParentPortal({
   classTimetableLoading = false,
   excuseSubmissions,
   earlyLeaveRequests = [],
+  contactMessages = [],
   activeTab: controlledTab,
   onTabChange,
   onSelectChild,
@@ -73,6 +75,8 @@ export function ParentPortal({
   onSubmitExcuse,
   onSubmitEarlyLeave,
   onCancelEarlyLeave,
+  onSubmitContactMessage,
+  onCancelContactMessage,
   onLogout,
   homeworkBrowseDate,
   onHomeworkBrowseDateChange,
@@ -87,6 +91,7 @@ export function ParentPortal({
   const [homeworkView, setHomeworkView] = useState<HomeworkView>('homework')
   const [excuseTarget, setExcuseTarget] = useState<AttendanceDay | null>(null)
   const [submittingExcuse, setSubmittingExcuse] = useState(false)
+  const [submittingContact, setSubmittingContact] = useState(false)
   const [confirmingLogout, setConfirmingLogout] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -203,6 +208,24 @@ export function ParentPortal({
                 timetable={classTimetable}
                 loading={classTimetableLoading}
                 error={classTimetableError}
+              />
+
+              <ParentContactSection
+                messages={contactMessages}
+                submitting={submittingContact}
+                showToast={showToast}
+                onSubmit={async (input) => {
+                  if (!onSubmitContactMessage) return
+                  setSubmittingContact(true)
+                  try {
+                    await onSubmitContactMessage(input)
+                  } finally {
+                    setSubmittingContact(false)
+                  }
+                }}
+                onCancel={async (id) => {
+                  await onCancelContactMessage?.(id)
+                }}
               />
 
               <section className="print:hidden">

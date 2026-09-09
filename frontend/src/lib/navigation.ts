@@ -16,6 +16,7 @@ export const STAFF_NAV_ITEMS: Omit<NavItem, 'isActive'>[] = [
   { label: 'طلبات الاستئذان', href: '/early-leave' },
   { label: 'مراجعة الأعذار', href: '/counselor-review' },
   { label: 'شؤون الطلاب', href: '/student-affairs' },
+  { label: 'رسائل أولياء الأمور', href: '/parent-messages' },
   { label: 'الطلاب', href: '/accountant/students' },
   { label: 'التقارير', href: '/reports' },
 ]
@@ -32,6 +33,7 @@ export const SECTION_BY_HREF: Record<string, string> = {
   '/early-leave': 'early-leave',
   '/counselor-review': 'counselor-review',
   '/student-affairs': 'student-affairs',
+  '/parent-messages': 'parent-messages',
   '/accountant/students': 'accountant-students',
   '/reports': 'reports',
 }

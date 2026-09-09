@@ -6,6 +6,7 @@ import { STAFF_NAV_ITEMS, SECTION_BY_HREF, isStaffNavActive } from '../lib/navig
 import { roleLabelAr, useAuth } from '../lib/auth'
 import { changeStaffPassword } from '../api/auth'
 import { getEarlyLeavePendingCount } from '../api/earlyLeave'
+import { getParentContactPendingCount } from '../api/parentContact'
 import { ApiError } from '../api/client'
 import { SPINNER_CLASS, buttonVariants } from '../shared/buttonVariants'
 import { StaffToastProvider } from '../shared/StaffToast'
@@ -41,6 +42,7 @@ export function StaffLayout() {
   const [pwError, setPwError] = useState<string | null>(null)
   const [pwBusy, setPwBusy] = useState(false)
   const [earlyLeavePending, setEarlyLeavePending] = useState(0)
+  const [parentContactPending, setParentContactPending] = useState(0)
 
   const refreshEarlyLeaveBadge = useCallback(async () => {
     if (!role || !EARLY_LEAVE_ROLES.has(role)) {
@@ -55,6 +57,19 @@ export function StaffLayout() {
     }
   }, [role])
 
+  const refreshParentContactBadge = useCallback(async () => {
+    if (role !== 'ADMIN') {
+      setParentContactPending(0)
+      return
+    }
+    try {
+      const count = await getParentContactPendingCount()
+      setParentContactPending(count)
+    } catch {
+      /* keep last known count */
+    }
+  }, [role])
+
   useEffect(() => {
     void refreshEarlyLeaveBadge()
     if (!role || !EARLY_LEAVE_ROLES.has(role)) return
@@ -63,6 +78,22 @@ export function StaffLayout() {
     }, 60_000)
     return () => window.clearInterval(id)
   }, [role, refreshEarlyLeaveBadge, location.pathname])
+
+  useEffect(() => {
+    void refreshParentContactBadge()
+    if (role !== 'ADMIN') return
+    const onChanged = () => {
+      void refreshParentContactBadge()
+    }
+    window.addEventListener('parent-contact-pending-changed', onChanged)
+    const id = window.setInterval(() => {
+      void refreshParentContactBadge()
+    }, 60_000)
+    return () => {
+      window.removeEventListener('parent-contact-pending-changed', onChanged)
+      window.clearInterval(id)
+    }
+  }, [role, refreshParentContactBadge, location.pathname])
 
   if (!user || !role) {
     return <Navigate to="/login" replace />
@@ -78,7 +109,12 @@ export function StaffLayout() {
   const navigationItems = STAFF_NAV_ITEMS.map((item) => ({
     ...item,
     isActive: isStaffNavActive(item.href, location.pathname, location.search),
-    badgeCount: item.href === '/early-leave' ? earlyLeavePending : undefined,
+    badgeCount:
+      item.href === '/early-leave'
+        ? earlyLeavePending
+        : item.href === '/parent-messages'
+          ? parentContactPending
+          : undefined,
   }))
 
   async function submitPasswordChange() {

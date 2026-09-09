@@ -90,6 +90,7 @@ export async function createDataBackup(prisma) {
     studentProfileSubmissions,
     studentProfileChangeRequests,
     noorParentPhoneDecisions,
+    parentContactMessages,
   ] = await Promise.all([
     prisma.schoolSettings.findMany(),
     prisma.user.findMany({
@@ -129,6 +130,7 @@ export async function createDataBackup(prisma) {
     prisma.studentProfileSubmission.findMany(),
     prisma.studentProfileChangeRequest.findMany(),
     prisma.noorParentPhoneDecision.findMany(),
+    prisma.parentContactMessage.findMany(),
   ]);
 
   const attendanceSafe = attendance.map(stripAttendanceForBackup);
@@ -157,6 +159,7 @@ export async function createDataBackup(prisma) {
     studentProfileSubmissions,
     studentProfileChangeRequests,
     noorParentPhoneDecisions,
+    parentContactMessages,
     reports: {
       dailyAbsence: attendanceSafe.filter((r) => r.status === 'ABSENT' || r.status === 'EXCUSED'),
       attendance: attendanceSafe,
@@ -179,6 +182,7 @@ export async function createDataBackup(prisma) {
       studentProfileCampaigns: studentProfileCampaigns.length,
       studentProfileSubmissions: studentProfileSubmissions.length,
       studentProfileChangeRequests: studentProfileChangeRequests.length,
+      parentContactMessages: parentContactMessages.length,
     },
   };
 }
@@ -305,6 +309,14 @@ export async function resetDataKeepAdmin(db) {
   await wipe('weeklyPlans', async () => (await db.weeklyPlan.deleteMany()).count);
   await wipe('weeklyFollowUps', async () => (await db.weeklyFollowUp.deleteMany()).count);
   await wipe('timetableSlots', async () => (await db.timetableSlot.deleteMany()).count);
+  await wipe(
+    'parentContactMessages',
+    async () => (await db.parentContactMessage.deleteMany()).count
+  );
+  await wipe(
+    'earlyLeaveRequests',
+    async () => (await db.earlyLeaveRequest.deleteMany()).count
+  );
   await wipe(
     'studentProfileChangeRequests',
     async () => (await db.studentProfileChangeRequest.deleteMany()).count
@@ -447,6 +459,7 @@ export async function restoreFromBackup(prisma, backup) {
           studentProfileSubmissions: 0,
           studentProfileChangeRequests: 0,
           noorParentPhoneDecisions: 0,
+          parentContactMessages: 0,
           skipped: [],
         };
 
@@ -1044,6 +1057,40 @@ export async function restoreFromBackup(prisma, backup) {
             counts.parentAccounts += 1;
           } catch (err) {
             counts.skipped.push(`parent:${p.phone}:${err?.code || err?.message || 'error'}`);
+          }
+        }
+
+        for (const m of backup.parentContactMessages || []) {
+          if (!m.studentId || !m.parentPhone || !m.kind || !m.body) {
+            counts.skipped.push(`parentContact:${m.id}:missing-fields`);
+            continue;
+          }
+          if (!restoredStudentIds.has(m.studentId)) {
+            counts.skipped.push(`parentContact:${m.id}:missing-student`);
+            continue;
+          }
+          const status =
+            m.status === 'CLOSED' || m.status === 'CANCELLED' || m.status === 'OPEN'
+              ? m.status
+              : 'CLOSED';
+          try {
+            await tx.parentContactMessage.create({
+              data: {
+                studentId: m.studentId,
+                parentPhone: m.parentPhone,
+                kind: m.kind,
+                body: m.body,
+                status,
+                createdAt: asDate(m.createdAt) ?? undefined,
+                replyBody: m.replyBody ?? null,
+                repliedAt: asDate(m.repliedAt),
+                repliedById: mapUser(m.repliedById),
+                openMarker: status === 'OPEN' ? m.studentId : null,
+              },
+            });
+            counts.parentContactMessages += 1;
+          } catch (err) {
+            counts.skipped.push(`parentContact:${m.id}:${err?.code || err?.message || 'error'}`);
           }
         }
 

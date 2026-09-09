@@ -7,6 +7,8 @@ import type {
   ExcuseSubmission,
   HomeworkItem,
   NotificationItem,
+  ParentContactMessage,
+  ParentContactSubmitInput,
   TodaySummary,
   WeeklyPlanItem,
 } from '../sections/parent-portal/types'
@@ -249,4 +251,35 @@ export async function cancelParentEarlyLeave(requestId: number) {
     { method: 'POST', auth: 'parent' }
   )
   return data.earlyLeaveRequest
+}
+
+export async function getParentContactMessages(studentId: string) {
+  const data = await apiRequest<{ items: ParentContactMessage[] }>(
+    `/parent/students/${studentId}/contact-messages`,
+    { auth: 'parent' }
+  )
+  return data.items
+}
+
+export async function createParentContactMessage(
+  studentId: string,
+  input: ParentContactSubmitInput
+) {
+  const data = await apiRequest<{ item: ParentContactMessage }>(
+    `/parent/students/${studentId}/contact-messages`,
+    {
+      method: 'POST',
+      auth: 'parent',
+      body: { kind: input.kind, body: input.body },
+    }
+  )
+  return data.item
+}
+
+export async function cancelParentContactMessage(messageId: number) {
+  const data = await apiRequest<{ item: ParentContactMessage }>(
+    `/parent/contact-messages/${messageId}/cancel`,
+    { method: 'POST', auth: 'parent' }
+  )
+  return data.item
 }

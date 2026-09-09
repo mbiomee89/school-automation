@@ -19,6 +19,12 @@ import {
   schoolDateOnlyStr,
 } from '../utils/dates.js';
 import { createEarlyLeaveRecord, parseEarlyLeaveFields } from '../services/earlyLeave.js';
+import {
+  cancelParentContact,
+  createParentContact,
+  parentContactInclude,
+  serializeParentContactForParent,
+} from '../services/parentContact.js';
 import { schoolLogoUrl } from '../services/schoolLogo.js';
 import { getClassWeekSchedule } from '../services/timetableImport.js';
 import {
@@ -885,6 +891,57 @@ router.get(
         ...serializeFollowUpScores(bySubject.get(sub.id)),
       })),
     });
+  })
+);
+
+const contactCreateSchema = z.object({
+  kind: z.enum(['SUGGESTION', 'COMPLAINT', 'OTHER']),
+  body: z.string().trim().min(1).max(2000),
+});
+
+/** GET /parent/students/:id/contact-messages */
+router.get(
+  '/students/:id/contact-messages',
+  validateParams(studentIdParam),
+  asyncHandler(async (req, res) => {
+    const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const rows = await prisma.parentContactMessage.findMany({
+      where: { studentId: student.id },
+      include: parentContactInclude,
+      orderBy: { createdAt: 'desc' },
+      take: 40,
+    });
+    res.json({ items: rows.map(serializeParentContactForParent) });
+  })
+);
+
+/** POST /parent/students/:id/contact-messages */
+router.post(
+  '/students/:id/contact-messages',
+  validateParams(studentIdParam),
+  validateBody(contactCreateSchema),
+  asyncHandler(async (req, res) => {
+    const student = await assertOwnsStudent(req.parentPhone, req.params.id);
+    const row = await createParentContact(prisma, {
+      studentId: student.id,
+      parentPhone: req.parentPhone,
+      kind: req.body.kind,
+      body: req.body.body,
+    });
+    res.status(201).json({ item: serializeParentContactForParent(row) });
+  })
+);
+
+/** POST /parent/contact-messages/:id/cancel */
+router.post(
+  '/contact-messages/:id/cancel',
+  validateParams(idParam),
+  asyncHandler(async (req, res) => {
+    const row = await cancelParentContact(prisma, {
+      id: req.params.id,
+      parentPhone: req.parentPhone,
+    });
+    res.json({ item: serializeParentContactForParent(row) });
   })
 );
 

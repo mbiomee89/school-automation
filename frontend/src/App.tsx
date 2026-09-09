@@ -20,6 +20,7 @@ import { GradebookAdminPage } from './pages/admin/GradebookAdminPage'
 import { LateReportsPage } from './pages/affairs/LateReportsPage'
 import { EarlyLeavePage } from './pages/affairs/EarlyLeavePage'
 import { AccountantStudentsPage } from './pages/accountant/AccountantStudentsPage'
+import { ParentMessagesPage } from './pages/admin/ParentMessagesPage'
 import { ROLE_HOME } from './shared/accessControl'
 
 function HomeRedirect() {
@@ -52,6 +53,7 @@ export default function App() {
                 <Route path="late-reports" element={<LateReportsPage />} />
                 <Route path="early-leave" element={<EarlyLeavePage />} />
                 <Route path="accountant/students" element={<AccountantStudentsPage />} />
+                <Route path="parent-messages" element={<ParentMessagesPage />} />
                 <Route path="counselor-review" element={<CounselorReviewPage />} />
                 <Route path="student-affairs" element={<StudentAffairsPage />} />
                 <Route path="reports" element={<ReportsPage />} />

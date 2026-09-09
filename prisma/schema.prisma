@@ -66,6 +66,7 @@ model User {
   reasonsReviewed Attendance[]         @relation("AbsenceReasonReviewedBy")
   earlyLeaveReviews EarlyLeaveRequest[] @relation("EarlyLeaveReviewedBy")
   earlyLeaveCreated EarlyLeaveRequest[] @relation("EarlyLeaveCreatedBy")
+  parentContactReplies ParentContactMessage[] @relation("ParentContactRepliedBy")
   teacherDocuments TeacherDocument[]
   gradePeriodScores GradePeriodScore[] @relation("GradePeriodRecordedBy")
   gradeTermFinals   GradeTermFinal[]   @relation("GradeTermFinalRecordedBy")
@@ -173,6 +174,7 @@ model Student {
   attendance    Attendance[]
   lateReports   LateReport[]
   earlyLeaveRequests EarlyLeaveRequest[]
+  parentContactMessages ParentContactMessage[]
   notifications Notification[]
   enrollments   ClassEnrollment[]
   profileSubmissions StudentProfileSubmission[]
@@ -430,6 +432,41 @@ model EarlyLeaveRequest {
   @@index([studentId, date])
   @@index([status, date])
   @@index([classId, date])
+}
+
+enum ParentContactKind {
+  SUGGESTION
+  COMPLAINT
+  OTHER
+}
+
+enum ParentContactStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+}
+
+/// Parent → principal message (تواصل مع الإدارة). One OPEN per student at a time.
+model ParentContactMessage {
+  id          Int                 @id @default(autoincrement())
+  studentId   String
+  student     Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  /// Snapshot of parent phone at create time (audit); ownership checks use Student.parentPhone.
+  parentPhone String
+  kind        ParentContactKind
+  body        String
+  status      ParentContactStatus @default(OPEN)
+  createdAt   DateTime            @default(now())
+  replyBody   String?
+  repliedAt   DateTime?
+  repliedById Int?
+  repliedBy   User?               @relation("ParentContactRepliedBy", fields: [repliedById], references: [id], onDelete: SetNull)
+  /// Set to studentId while OPEN so at most one open case per student (cleared on close/cancel).
+  openMarker  String?             @unique
+
+  @@index([status, createdAt])
+  @@index([studentId, createdAt])
+  @@index([parentPhone, createdAt])
 }
 
 model WeeklyPlan {
