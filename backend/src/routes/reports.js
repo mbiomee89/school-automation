@@ -652,6 +652,164 @@ router.get(
   })
 );
 
+const NO_PHONE_KEY = '__NO_PHONE__';
+
+function phoneKeyFromStudent(parentPhone) {
+  const trimmed = (parentPhone ?? '').trim();
+  if (!trimmed) return { key: NO_PHONE_KEY, phone: null, noPhone: true };
+  return { key: trimmed, phone: trimmed, noPhone: false };
+}
+
+function summarizeActivationBuckets(groups, byPhone) {
+  let activated = 0;
+  let notActivated = 0;
+  let noPhone = 0;
+  for (const g of groups.values()) {
+    if (g.noPhone) {
+      noPhone += 1;
+      continue;
+    }
+    const account = byPhone.get(g.phone);
+    if (account && account.isActive) activated += 1;
+    else notActivated += 1;
+  }
+  return {
+    totalPhones: activated + notActivated + noPhone,
+    activated,
+    notActivated,
+    noPhone,
+  };
+}
+
+/** Hub card counts only — no student name payloads. */
+async function computeParentActivationSummary() {
+  const students = await prisma.student.findMany({
+    where: { isActive: true },
+    select: { parentPhone: true },
+  });
+
+  /** @type {Map<string, { phone: string | null, noPhone: boolean }>} */
+  const groups = new Map();
+  for (const s of students) {
+    const { key, phone, noPhone } = phoneKeyFromStudent(s.parentPhone);
+    if (!groups.has(key)) groups.set(key, { phone, noPhone });
+  }
+
+  const phones = [...groups.keys()].filter((k) => k !== NO_PHONE_KEY);
+  const accounts =
+    phones.length > 0
+      ? await prisma.parentAccount.findMany({
+          where: { phone: { in: phones } },
+          select: { phone: true, isActive: true },
+        })
+      : [];
+  const byPhone = new Map(accounts.map((a) => [a.phone, a]));
+  return summarizeActivationBuckets(groups, byPhone);
+}
+
+/**
+ * Unique parent phones among active students, with ParentAccount activation status.
+ * Detail endpoint only — summary uses computeParentActivationSummary().
+ */
+async function computeParentActivation() {
+  const students = await prisma.student.findMany({
+    where: { isActive: true },
+    select: {
+      id: true,
+      nameAr: true,
+      parentPhone: true,
+      class: { select: { name: true } },
+    },
+  });
+
+  /** @type {Map<string, { phone: string | null, noPhone: boolean, students: Array<{ id: string, nameAr: string, className: string | null }> }>} */
+  const groups = new Map();
+  for (const s of students) {
+    const { key, phone, noPhone } = phoneKeyFromStudent(s.parentPhone);
+    let g = groups.get(key);
+    if (!g) {
+      g = { phone, noPhone, students: [] };
+      groups.set(key, g);
+    }
+    g.students.push({
+      id: s.id,
+      nameAr: s.nameAr,
+      className: s.class?.name ?? null,
+    });
+  }
+
+  const phones = [...groups.keys()].filter((k) => k !== NO_PHONE_KEY);
+  const accounts =
+    phones.length > 0
+      ? await prisma.parentAccount.findMany({
+          where: { phone: { in: phones } },
+          select: { phone: true, isActive: true, createdAt: true },
+        })
+      : [];
+  const byPhone = new Map(accounts.map((a) => [a.phone, a]));
+
+  const parents = [];
+  for (const g of groups.values()) {
+    const account = g.noPhone ? null : byPhone.get(g.phone);
+    const activated = !!(account && account.isActive);
+    const accountDisabled = !!(account && !account.isActive);
+    g.students.sort((a, b) => a.nameAr.localeCompare(b.nameAr, 'ar'));
+    parents.push({
+      phone: g.phone,
+      noPhone: g.noPhone,
+      activated,
+      accountDisabled,
+      accountCreatedAt: account ? account.createdAt.toISOString() : null,
+      studentCount: g.students.length,
+      students: g.students,
+    });
+  }
+
+  parents.sort((a, b) => {
+    const rank = (p) => (p.noPhone ? 2 : p.activated ? 1 : 0);
+    const d = rank(a) - rank(b);
+    if (d !== 0) return d;
+    return (a.phone || '').localeCompare(b.phone || '', 'ar');
+  });
+
+  return {
+    summary: summarizeActivationBuckets(groups, byPhone),
+    parents,
+  };
+}
+
+const parentActivationQuery = z.object({
+  status: z.enum(['ACTIVATED', 'NOT_ACTIVATED', 'NO_PHONE', 'all']).default('all'),
+});
+
+/** GET /reports/parent-activation?status= — portal registration outreach list */
+router.get(
+  '/parent-activation',
+  validateQuery(parentActivationQuery),
+  asyncHandler(async (req, res) => {
+    const status = req.query.status ?? 'all';
+    const header = await schoolHeader();
+    const { summary, parents: allParents } = await computeParentActivation();
+
+    let parents = allParents;
+    if (status === 'ACTIVATED') {
+      parents = allParents.filter((p) => p.activated && !p.noPhone);
+    } else if (status === 'NOT_ACTIVATED') {
+      parents = allParents.filter((p) => !p.activated && !p.noPhone);
+    } else if (status === 'NO_PHONE') {
+      parents = allParents.filter((p) => p.noPhone);
+    }
+
+    res.json({
+      ...header,
+      generatedAt: new Date().toISOString(),
+      status,
+      summary,
+      parents,
+    });
+  })
+);
+
 /** GET /reports/summary?date= — hub card counts for today */
 router.get(
   '/summary',
@@ -662,8 +820,15 @@ router.get(
     const weekStart = weekStartSaturdayUtc(date);
     const followWeekStart = toUtcMidnight(weekStartSundayStr(dateStr));
 
-    const [absenceCount, lateCount, homeworkCount, weeklyPlans, earlyLeaveCount, followUpCount] =
-      await Promise.all([
+    const [
+      absenceCount,
+      lateCount,
+      homeworkCount,
+      weeklyPlans,
+      earlyLeaveCount,
+      followUpCount,
+      parentActivationSummary,
+    ] = await Promise.all([
       prisma.attendance.count({
         where: { date, status: { in: ['ABSENT', 'EXCUSED'] } },
       }),
@@ -685,6 +850,7 @@ router.get(
       }),
       prisma.earlyLeaveRequest.count({ where: { date } }),
       prisma.weeklyFollowUp.count({ where: { weekStart: followWeekStart } }),
+      computeParentActivationSummary(),
     ]);
 
     const weeklyLessonCount = weeklyPlans.flatMap((p) =>
@@ -695,6 +861,9 @@ router.get(
         teacher: p.teacher,
       })
     ).length;
+
+    const { activated, notActivated } = parentActivationSummary;
+    const canActivate = activated + notActivated;
 
     res.json({
       date: dateStr,
@@ -769,6 +938,15 @@ router.get(
           iconHint: 'HISTORY',
           context: 'اختر طالبًا',
           count: null,
+          lastGeneratedAt: null,
+        },
+        {
+          type: 'PARENT_ACTIVATION',
+          title: 'تفعيل بوابة أولياء الأمور',
+          description: 'حسابات مفعّلة وغير مفعّلة لمتابعة تسجيل أولياء الأمور',
+          iconHint: 'USERS',
+          context: `مفعّل ${activated} من ${canActivate}`,
+          count: notActivated,
           lastGeneratedAt: null,
         },
       ],

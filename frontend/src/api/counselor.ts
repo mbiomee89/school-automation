@@ -10,6 +10,8 @@ import type {
   EarlyLeaveReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
+  ParentActivationReportDetail,
+  ParentActivationStatusFilter,
   ReportSummary,
   StudentHistoryReportDetail,
   WeeklyPlanReportDetail,
@@ -91,6 +93,15 @@ export async function getStudentHistoryReport(
   if (range?.from) params.set('from', range.from)
   if (range?.to) params.set('to', range.to)
   return apiRequest(`/reports/student-history?${params}`)
+}
+
+export async function getParentActivationReport(
+  status: ParentActivationStatusFilter = 'all'
+): Promise<ParentActivationReportDetail> {
+  const params = new URLSearchParams()
+  if (status && status !== 'all') params.set('status', status)
+  const q = params.toString()
+  return apiRequest(`/reports/parent-activation${q ? `?${q}` : ''}`)
 }
 
 export async function searchStudentsForReport(q: string) {

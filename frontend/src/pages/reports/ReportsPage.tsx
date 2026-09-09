@@ -6,6 +6,7 @@ import {
   getEarlyLeaveReport,
   getHomeworkLogReport,
   getLateArrivalsReport,
+  getParentActivationReport,
   getReportsSummary,
   getStudentHistoryReport,
   getWeeklyPlanReport,
@@ -21,6 +22,8 @@ import type {
   EarlyLeaveReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
+  ParentActivationReportDetail,
+  ParentActivationStatusFilter,
   ReportSummary,
   ReportType,
   StudentHistoryReportDetail,
@@ -48,6 +51,7 @@ function detailMatchesDate(
   if (type === 'WEEKLY_PLAN') return weekly?.date === date
   if (type === 'WEEKLY_FOLLOW_UP') return true
   if (type === 'ABSENCE_DAYS') return true
+  if (type === 'PARENT_ACTIVATION') return true
   return true
 }
 
@@ -71,6 +75,10 @@ export function ReportsPage() {
   const [studentHistoryDetail, setStudentHistoryDetail] =
     useState<StudentHistoryReportDetail | null>(null)
   const [absenceDaysDetail, setAbsenceDaysDetail] = useState<AbsenceDaysReportDetail | null>(null)
+  const [parentActivationDetail, setParentActivationDetail] =
+    useState<ParentActivationReportDetail | null>(null)
+  const [parentActivationStatus, setParentActivationStatus] =
+    useState<ParentActivationStatusFilter>('all')
   const [absenceDaysOpts, setAbsenceDaysOpts] = useState<{
     from?: string
     to?: string
@@ -113,10 +121,27 @@ export function ReportsPage() {
     setHomeworkLogDetail(null)
     setWeeklyPlanDetail(null)
     setWeeklyFollowUpDetail(null)
+    setParentActivationDetail(null)
   }, [])
 
   const loadDetail = useCallback(async (type: ReportType, forDate: string) => {
     if (type === 'STUDENT_HISTORY') return
+    if (type === 'PARENT_ACTIVATION') {
+      const gen = ++detailGen.current
+      setDetailLoading(true)
+      setActionError(null)
+      try {
+        const detail = await getParentActivationReport(parentActivationStatus)
+        if (gen !== detailGen.current) return
+        setParentActivationDetail(detail)
+      } catch (err) {
+        if (gen !== detailGen.current) return
+        setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل تقرير التفعيل')
+      } finally {
+        if (gen === detailGen.current) setDetailLoading(false)
+      }
+      return
+    }
     if (type === 'WEEKLY_FOLLOW_UP') {
       const gen = ++detailGen.current
       setDetailLoading(true)
@@ -169,7 +194,7 @@ export function ReportsPage() {
     } finally {
       if (gen === detailGen.current) setDetailLoading(false)
     }
-  }, [absenceDaysOpts, weeklyFollowUpOptions])
+  }, [absenceDaysOpts, weeklyFollowUpOptions, parentActivationStatus])
 
   useEffect(() => {
     let cancelled = false
@@ -197,6 +222,11 @@ export function ReportsPage() {
 
   useEffect(() => {
     if (!activeReport || activeReport === 'STUDENT_HISTORY') return
+    if (activeReport === 'PARENT_ACTIVATION') {
+      if (parentActivationDetail) return
+      void loadDetail('PARENT_ACTIVATION', date)
+      return
+    }
     if (activeReport === 'WEEKLY_FOLLOW_UP') {
       if (weeklyFollowUpOptions) return
       void loadDetail('WEEKLY_FOLLOW_UP', date)
@@ -225,7 +255,9 @@ export function ReportsPage() {
     homeworkLogDetail,
     weeklyPlanDetail,
     absenceDaysDetail,
+    parentActivationDetail,
     loadDetail,
+    weeklyFollowUpOptions,
   ])
 
   useEffect(() => {
@@ -335,6 +367,35 @@ export function ReportsPage() {
     }
   }
 
+  async function handleFilterParentActivation(status: ParentActivationStatusFilter) {
+    const gen = ++detailGen.current
+    setDetailLoading(true)
+    setActionError(null)
+    try {
+      const detail = await getParentActivationReport(status)
+      if (gen !== detailGen.current) return
+      setParentActivationStatus(status)
+      setParentActivationDetail(detail)
+      setReports((prev) =>
+        prev.map((r) =>
+          r.type === 'PARENT_ACTIVATION'
+            ? {
+                ...r,
+                count: detail.summary.notActivated,
+                context: `مفعّل ${detail.summary.activated} من ${detail.summary.activated + detail.summary.notActivated}`,
+                lastGeneratedAt: detail.generatedAt,
+              }
+            : r
+        )
+      )
+    } catch (err) {
+      if (gen !== detailGen.current) return
+      setActionError(err instanceof ApiError ? err.message : 'تعذّر تحميل تقرير التفعيل')
+    } finally {
+      if (gen === detailGen.current) setDetailLoading(false)
+    }
+  }
+
   if (loading && reports.length === 0 && !fatalError) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -366,6 +427,7 @@ export function ReportsPage() {
       weeklyPlanDetail={weeklyPlanDetail}
       studentHistoryDetail={studentHistoryDetail}
       absenceDaysDetail={absenceDaysDetail}
+      parentActivationDetail={parentActivationDetail}
       studentSearchQuery={studentSearchQuery}
       studentSearchResults={studentSearchResults}
       studentSearchLoading={studentSearchLoading}
@@ -374,8 +436,17 @@ export function ReportsPage() {
       actionError={actionError}
       onDismissActionError={() => setActionError(null)}
       activeReport={activeReport}
-      onSelectReport={setActiveReport}
-      onCloseReport={() => setActiveReport(null)}
+      onSelectReport={(type) => {
+        if (type === 'PARENT_ACTIVATION') {
+          // Force a fresh snapshot each open (avoid stale outreach lists).
+          setParentActivationDetail(null)
+        }
+        setActiveReport(type)
+      }}
+      onCloseReport={() => {
+        setActiveReport(null)
+        setParentActivationDetail(null)
+      }}
       onFilterByDate={(_type, nextDate) => {
         if (!nextDate) return
         setDate(nextDate)
@@ -383,6 +454,7 @@ export function ReportsPage() {
       onSearchStudent={handleSearchStudent}
       onSelectStudent={handleSelectStudent}
       onFilterAbsenceDays={handleFilterAbsenceDays}
+      onFilterParentActivation={handleFilterParentActivation}
       weeklyFollowUpDetail={weeklyFollowUpDetail}
       weeklyFollowUpOptions={weeklyFollowUpOptions}
       onFilterWeeklyFollowUp={handleFilterWeeklyFollowUp}

@@ -12,6 +12,7 @@ export type ReportType =
   | 'WEEKLY_FOLLOW_UP'
   | 'STUDENT_HISTORY'
   | 'ABSENCE_DAYS'
+  | 'PARENT_ACTIVATION'
 
 /** Maps to a lucide-react icon chosen in the component layer. */
 export type ReportIconHint =
@@ -21,6 +22,46 @@ export type ReportIconHint =
   | 'CALENDAR_RANGE'
   | 'HISTORY'
   | 'LOG_OUT'
+  | 'USERS'
+
+export type ParentActivationStatusFilter =
+  | 'all'
+  | 'ACTIVATED'
+  | 'NOT_ACTIVATED'
+  | 'NO_PHONE'
+
+export interface ParentActivationStudent {
+  id: string
+  nameAr: string
+  className: string | null
+}
+
+export interface ParentActivationRow {
+  phone: string | null
+  noPhone: boolean
+  activated: boolean
+  accountDisabled: boolean
+  accountCreatedAt: string | null
+  studentCount: number
+  students: ParentActivationStudent[]
+}
+
+export interface ParentActivationReportDetail {
+  schoolName: string
+  academicYear: string
+  educationAdminName?: string | null
+  logoUrl?: string | null
+  principalName?: string | null
+  generatedAt: string
+  status: ParentActivationStatusFilter
+  summary: {
+    totalPhones: number
+    activated: number
+    notActivated: number
+    noPhone: number
+  }
+  parents: ParentActivationRow[]
+}
 
 export interface ReportSummary {
   type: ReportType
@@ -261,6 +302,7 @@ export interface ReportsProps {
   weeklyFollowUpOptions?: WeeklyFollowUpReportOptions | null
   studentHistoryDetail?: StudentHistoryReportDetail | null
   absenceDaysDetail?: AbsenceDaysReportDetail | null
+  parentActivationDetail?: ParentActivationReportDetail | null
   studentSearchResults?: StudentSearchOption[]
   studentSearchQuery?: string
   studentSearchLoading?: boolean
@@ -290,4 +332,6 @@ export interface ReportsProps {
   /** Reload absence-days report with threshold / date range */
   onFilterAbsenceDays?: (opts: { from?: string; to?: string; minDays?: number }) => void
   onFilterWeeklyFollowUp?: (opts: { classId: number; subjectId: number; weekStart: string }) => void
+  /** Reload parent-activation report with status filter */
+  onFilterParentActivation?: (status: ParentActivationStatusFilter) => void
 }

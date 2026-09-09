@@ -8,6 +8,7 @@ import {
   CalendarRange,
   History,
   LogOut,
+  Users,
   ChevronLeft,
   ChevronRight,
   type LucideIcon,
@@ -18,6 +19,8 @@ import type {
   EarlyLeaveReportDetail,
   HomeworkLogReportDetail,
   LateArrivalsReportDetail,
+  ParentActivationReportDetail,
+  ParentActivationStatusFilter,
   ReportsProps,
   ReportSummary,
   ReportType,
@@ -50,6 +53,7 @@ const ICON_MAP: Record<ReportSummary['iconHint'], LucideIcon> = {
   CALENDAR_RANGE: CalendarRange,
   HISTORY: History,
   LOG_OUT: LogOut,
+  USERS: Users,
 }
 
 const STATUS_AR: Record<'PRESENT' | 'ABSENT' | 'EXCUSED', string> = {
@@ -108,6 +112,7 @@ export function ReportsHub({
   weeklyFollowUpOptions,
   studentHistoryDetail,
   absenceDaysDetail,
+  parentActivationDetail,
   studentSearchResults = [],
   studentSearchQuery = '',
   studentSearchLoading = false,
@@ -123,6 +128,7 @@ export function ReportsHub({
   onSelectStudent,
   onFilterAbsenceDays,
   onFilterWeeklyFollowUp,
+  onFilterParentActivation,
 }: ReportsProps) {
   const { user } = useAuth()
   const [activeReport, setActiveReport] = useState<ReportType | null>(
@@ -271,6 +277,9 @@ export function ReportsHub({
       setPrintHint('طبّق الفلتر أولًا ثم اضغط طباعة.')
       return
     }
+    if (pendingPrint === 'PARENT_ACTIVATION' && !parentActivationDetail) {
+      return
+    }
     if (printStartedFor.current === pendingPrint) return
 
     const timer = window.setTimeout(() => {
@@ -292,7 +301,7 @@ export function ReportsHub({
     }, 250)
 
     return () => window.clearTimeout(timer)
-  }, [pendingPrint, currentActive, studentHistoryDetail, reportsLoading])
+  }, [pendingPrint, currentActive, studentHistoryDetail, absenceDaysDetail, parentActivationDetail, reportsLoading])
 
   function openReport(type: ReportType) {
     setPrintHint(null)
@@ -446,7 +455,8 @@ export function ReportsHub({
 
             {(DATE_FILTER_TYPES.includes(currentActive) ||
               (CLASS_FILTER_TYPES.includes(currentActive) && classOptions.length > 0) ||
-              currentActive === 'ABSENCE_DAYS') && (
+              currentActive === 'ABSENCE_DAYS' ||
+              currentActive === 'PARENT_ACTIVATION') && (
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 print:hidden dark:border-slate-700 dark:bg-slate-900">
                 {DATE_FILTER_TYPES.includes(currentActive) && (
                   <ReportDateNavigator
@@ -513,6 +523,40 @@ export function ReportsHub({
                       </select>
                     </label>
                   </>
+                )}
+                {currentActive === 'PARENT_ACTIVATION' && (
+                  <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="حالة التفعيل">
+                    {(
+                      [
+                        { id: 'all', label: 'الكل' },
+                        { id: 'ACTIVATED', label: 'مفعّل' },
+                        { id: 'NOT_ACTIVATED', label: 'غير مفعّل' },
+                        { id: 'NO_PHONE', label: 'بدون جوال' },
+                      ] as const satisfies ReadonlyArray<{
+                        id: ParentActivationStatusFilter
+                        label: string
+                      }>
+                    ).map((opt) => {
+                      const selected =
+                        (parentActivationDetail?.status ?? 'all') === opt.id
+                      return (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          disabled={reportsLoading}
+                          onClick={() => onFilterParentActivation?.(opt.id)}
+                          className={cn(
+                            'h-9 rounded-lg px-3 text-sm font-medium transition-colors disabled:opacity-50',
+                            selected
+                              ? 'bg-blue-600 text-white'
+                              : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-950 dark:text-slate-200 dark:hover:bg-slate-800'
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
                 {currentActive === 'ABSENCE_DAYS' && (
                   <>
@@ -603,6 +647,8 @@ export function ReportsHub({
               </WeeklyFollowUpPrintChrome>
             ) : currentActive === 'ABSENCE_DAYS' && absenceDaysDetail ? (
               <AbsenceDaysDetailView detail={absenceDaysDetail} />
+            ) : currentActive === 'PARENT_ACTIVATION' && parentActivationDetail ? (
+              <ParentActivationDetailView detail={parentActivationDetail} />
             ) : currentActive === 'STUDENT_HISTORY' ? (
               <StudentHistoryDetailView
                 detail={studentHistoryDetail}
@@ -673,6 +719,108 @@ function AbsenceDaysDetailView({ detail }: { detail: AbsenceDaysReportDetail }) 
         ])}
         colWidths={['30%', '25%', '15%', '30%']}
       />
+    </div>
+  )
+}
+
+function ParentActivationDetailView({ detail }: { detail: ParentActivationReportDetail }) {
+  const { summary } = detail
+  const chips = [
+    { label: 'مفعّل', value: summary.activated, tone: 'ok' as const },
+    { label: 'غير مفعّل', value: summary.notActivated, tone: 'warn' as const },
+    { label: 'بدون جوال', value: summary.noPhone, tone: 'muted' as const },
+    { label: 'الإجمالي', value: summary.totalPhones, tone: 'neutral' as const },
+  ]
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 sm:p-6 dark:border-slate-800 dark:bg-slate-900">
+      <ReportHeader
+        schoolName={detail.schoolName}
+        academicYear={detail.academicYear}
+        educationAdminName={detail.educationAdminName}
+        logoUrl={detail.logoUrl}
+        subtitle="تفعيل بوابة أولياء الأمور"
+        dateLabel="لقطة حالية"
+        generatedAt={detail.generatedAt}
+      />
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 print:grid-cols-4">
+        {chips.map((c) => (
+          <div
+            key={c.label}
+            className={cn(
+              'rounded-lg border px-3 py-2 text-center',
+              c.tone === 'ok' && 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/40',
+              c.tone === 'warn' && 'border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/40',
+              c.tone === 'muted' && 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50',
+              c.tone === 'neutral' && 'border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950/40'
+            )}
+          >
+            <p className="text-xs text-slate-600 dark:text-slate-400">{c.label}</p>
+            <p className="text-lg font-bold tabular-nums text-slate-900 dark:text-slate-50">{c.value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="overflow-hidden rounded-xl border border-teal-600/40">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[42rem] border-collapse text-sm">
+            <thead>
+              <tr className="bg-teal-600 text-white">
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">الجوال</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">الحالة</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">ملاحظة</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">الأبناء</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">الأسماء والفصول</th>
+                <th className="border border-teal-700 px-2 py-2.5 font-bold">تاريخ التسجيل</th>
+              </tr>
+            </thead>
+            <tbody>
+              {detail.parents.map((p, i) => {
+                const rowKey = p.noPhone
+                  ? `nophone-${p.students.map((s) => s.id).join('-') || i}`
+                  : (p.phone ?? `row-${i}`)
+                return (
+                  <tr key={rowKey} className="bg-white dark:bg-slate-950">
+                    <td className="border border-slate-200 px-2 py-2 align-top dark:border-slate-700">
+                      {p.noPhone || !p.phone ? (
+                        <span className="text-slate-500">بدون جوال</span>
+                      ) : (
+                        <PhoneText value={p.phone} />
+                      )}
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 align-top dark:border-slate-700">
+                      {p.noPhone ? 'بدون جوال' : p.activated ? 'مفعّل' : 'غير مفعّل'}
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 align-top text-amber-800 dark:border-slate-700 dark:text-amber-300">
+                      {p.accountDisabled ? 'حساب معطّل' : '—'}
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 align-top tabular-nums dark:border-slate-700">
+                      {p.studentCount}
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 align-top dark:border-slate-700">
+                      <ul className="space-y-0.5">
+                        {p.students.map((s) => (
+                          <li key={s.id}>
+                            {s.nameAr}
+                            {s.className ? (
+                              <span className="text-slate-500"> — {s.className}</span>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </td>
+                    <td className="border border-slate-200 px-2 py-2 align-top dark:border-slate-700">
+                      {p.accountCreatedAt ? formatReportDate(p.accountCreatedAt) : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        {detail.parents.length === 0 && (
+          <p className="p-6 text-center text-sm text-slate-500">لا توجد نتائج لهذا الفلتر.</p>
+        )}
+      </div>
     </div>
   )
 }
