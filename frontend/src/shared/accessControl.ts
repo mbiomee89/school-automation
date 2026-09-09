@@ -10,6 +10,7 @@ export type AppRole =
   | 'COUNSELOR'
   | 'STUDENT_AFFAIRS'
   | 'SECURITY_GUARD'
+  | 'ACCOUNTANT'
   | 'PARENT'
 
 export type StaffAppRole = Exclude<AppRole, 'PARENT'>
@@ -49,6 +50,11 @@ export const ROLE_HOME: Record<AppRole, RoleHome> = {
     homeHref: '/late-reports',
     homeLabelAr: 'التأخير',
   },
+  ACCOUNTANT: {
+    role: 'ACCOUNTANT',
+    homeHref: '/accountant/students',
+    homeLabelAr: 'الطلاب',
+  },
   PARENT: {
     role: 'PARENT',
     homeHref: '/parent-portal',
@@ -73,7 +79,8 @@ export const STAFF_NAV_BY_ROLE: Record<StaffAppRole, string[]> = {
   TEACHER: ['الحضور', 'الواجبات', 'الخطة الأسبوعية', 'سجل المتابعة', 'المتابعة الأسبوعية', 'مستندات التوظيف'],
   COUNSELOR: ['مراجعة الأعذار', 'التقارير', 'طلبات الاستئذان'],
   STUDENT_AFFAIRS: ['شؤون الطلاب', 'التأخير', 'التقارير', 'طلبات الاستئذان'],
-  SECURITY_GUARD: ['التأخير'],
+  SECURITY_GUARD: ['التأخير', 'استئذان طالب'],
+  ACCOUNTANT: ['الطلاب'],
 }
 
 export function filterStaffNavByRole<T extends { label: string }>(
@@ -94,12 +101,21 @@ export const SECTION_ALLOWED_ROLES: Record<string, AppRole[]> = {
   'weekly-follow-up': ['TEACHER', 'ADMIN'],
   'gradebook-reports': ['ADMIN'],
   'late-reports': ['ADMIN', 'STUDENT_AFFAIRS', 'SECURITY_GUARD'],
-  'early-leave': ['ADMIN', 'STUDENT_AFFAIRS', 'COUNSELOR'],
+  'early-leave': ['ADMIN', 'STUDENT_AFFAIRS', 'COUNSELOR', 'SECURITY_GUARD'],
   'counselor-review': ['COUNSELOR'],
   'student-affairs': ['ADMIN', 'STUDENT_AFFAIRS'],
+  'accountant-students': ['ACCOUNTANT', 'ADMIN'],
   reports: ['ADMIN', 'COUNSELOR', 'STUDENT_AFFAIRS'],
   'parent-portal': ['PARENT'],
-  'staff-login': ['ADMIN', 'TEACHER', 'COUNSELOR', 'STUDENT_AFFAIRS', 'SECURITY_GUARD', 'PARENT'],
+  'staff-login': [
+    'ADMIN',
+    'TEACHER',
+    'COUNSELOR',
+    'STUDENT_AFFAIRS',
+    'SECURITY_GUARD',
+    'ACCOUNTANT',
+    'PARENT',
+  ],
 }
 
 export function roleMayAccessSection(role: AppRole, sectionId: string): boolean {

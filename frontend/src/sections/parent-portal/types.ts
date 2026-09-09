@@ -175,6 +175,8 @@ export interface EarlyLeaveRequest {
   reviewedAt: string | null
   reviewNote: string | null
   cancelledAt: string | null
+  /** True when registered at school (not parent portal). */
+  createdByStaff?: boolean
 }
 
 export interface EarlyLeaveSubmitInput {

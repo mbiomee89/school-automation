@@ -2,7 +2,13 @@
  * Types and props for the School Administration section screen designs.
  */
 
-export type StaffRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'SECURITY_GUARD'
+export type StaffRole =
+  | 'ADMIN'
+  | 'TEACHER'
+  | 'COUNSELOR'
+  | 'STUDENT_AFFAIRS'
+  | 'SECURITY_GUARD'
+  | 'ACCOUNTANT'
 export type LangPref = 'AR' | 'EN'
 export type NotificationEventType = 'ABSENCE' | 'LATE' | 'HOMEWORK_DIGEST' | 'WEEKLY_PLAN'
 export type NotificationStatus = 'QUEUED' | 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'
@@ -86,6 +92,8 @@ export interface Student {
    * assigned or removed via unassign / remove-all-students, pending re-assignment. */
   classId: number | null
   className: string | null
+  /** Grade level from current class, if assigned. */
+  gradeLevel: string | null
   parentPhone: string
   parentEmail: string | null
   waOptedIn: boolean

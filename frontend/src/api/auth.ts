@@ -1,6 +1,12 @@
 import { apiRequest } from './client'
 
-export type StaffRole = 'ADMIN' | 'TEACHER' | 'COUNSELOR' | 'STUDENT_AFFAIRS' | 'SECURITY_GUARD'
+export type StaffRole =
+  | 'ADMIN'
+  | 'TEACHER'
+  | 'COUNSELOR'
+  | 'STUDENT_AFFAIRS'
+  | 'SECURITY_GUARD'
+  | 'ACCOUNTANT'
 
 export interface StaffUser {
   id: number

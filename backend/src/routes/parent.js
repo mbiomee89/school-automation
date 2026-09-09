@@ -15,12 +15,10 @@ import { badRequest, conflict, forbidden, notFound } from '../utils/errors.js';
 import {
   toUtcMidnight,
   schoolTodayUtcMidnight,
-  addDaysToDateOnlyStr,
-  weekdayUtcFromDateOnly,
   weekStartSaturdayUtc,
   schoolDateOnlyStr,
 } from '../utils/dates.js';
-import { normalizePhone } from '../utils/phone.js';
+import { createEarlyLeaveRecord, parseEarlyLeaveFields } from '../services/earlyLeave.js';
 import { schoolLogoUrl } from '../services/schoolLogo.js';
 import { getClassWeekSchedule } from '../services/timetableImport.js';
 import {
@@ -714,9 +712,6 @@ router.patch(
   })
 );
 
-const SCHOOL_DAYS = new Set([0, 1, 2, 3, 4]); // Sun–Thu
-const EARLY_LEAVE_MAX_DAYS_AHEAD = 7;
-
 const earlyLeaveCreateSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   leaveTime: z.string().min(1),
@@ -747,46 +742,8 @@ function serializeEarlyLeave(row) {
     reviewedAt: row.reviewedAt?.toISOString() ?? null,
     reviewNote: row.reviewNote ?? null,
     cancelledAt: row.cancelledAt?.toISOString() ?? null,
+    createdByStaff: row.createdById != null,
   };
-}
-
-/** Combine YYYY-MM-DD + HH:mm (or ISO) into a DateTime. HH:mm uses calendar-day UTC components. */
-function parseLeaveDateTime(dateStr, leaveTimeRaw) {
-  const raw = String(leaveTimeRaw).trim();
-  const hm = /^(\d{1,2}):(\d{2})$/.exec(raw);
-  if (hm) {
-    const hour = Number(hm[1]);
-    const minute = Number(hm[2]);
-    if (hour > 23 || minute > 59) throw badRequest('وقت غير صالح');
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(Date.UTC(y, m - 1, d, hour, minute, 0));
-  }
-  const dt = new Date(raw);
-  if (Number.isNaN(dt.getTime())) throw badRequest('وقت غير صالح');
-  return dt;
-}
-
-function assertValidEarlyLeaveDate(dateStr) {
-  const today = schoolTodayUtcMidnight();
-  const todayStr = today.toISOString().slice(0, 10);
-  const date = toUtcMidnight(dateStr);
-  const dateOnly = date.toISOString().slice(0, 10);
-
-  if (dateOnly < todayStr) {
-    throw badRequest('لا يمكن طلب استئذان لتاريخ ماضٍ');
-  }
-
-  const maxStr = addDaysToDateOnlyStr(todayStr, EARLY_LEAVE_MAX_DAYS_AHEAD);
-  if (dateOnly > maxStr) {
-    throw badRequest('يمكن طلب الاستئذان خلال 7 أيام فقط');
-  }
-
-  const dow = weekdayUtcFromDateOnly(dateOnly);
-  if (!SCHOOL_DAYS.has(dow)) {
-    throw badRequest('الاستئذان متاح لأيام الدوام فقط (الأحد–الخميس)');
-  }
-
-  return date;
 }
 
 /** GET /parent/students/:id/early-leave */
@@ -812,65 +769,13 @@ router.post(
   validateBody(earlyLeaveCreateSchema),
   asyncHandler(async (req, res) => {
     const student = await assertOwnsStudent(req.parentPhone, req.params.id);
-    if (student.classId == null) {
-      throw badRequest('الطالب غير مسجّل في فصل حالياً');
-    }
-
-    const date = assertValidEarlyLeaveDate(req.body.date);
-    const dateStr = date.toISOString().slice(0, 10);
-    const leaveTime = parseLeaveDateTime(dateStr, req.body.leaveTime);
-
-    const reason = req.body.reason.trim();
-    const pickupName = req.body.pickupName.trim();
-    const pickupRelation = req.body.pickupRelation.trim();
-    if (!reason) throw badRequest('سبب الاستئذان مطلوب');
-    if (!pickupName) throw badRequest('اسم المستلم مطلوب');
-    if (!pickupRelation) throw badRequest('صلة القرابة مطلوبة');
-
-    let pickupPhone;
-    try {
-      pickupPhone = normalizePhone(req.body.pickupPhone);
-    } catch {
-      throw badRequest('رقم جوال المستلم غير صالح');
-    }
-
-    const activeSlotKey = `${student.id}|${dateStr}`
-
-    let row
-    try {
-      row = await prisma.$transaction(async (tx) => {
-        const active = await tx.earlyLeaveRequest.findFirst({
-          where: {
-            studentId: student.id,
-            date,
-            status: { in: ['PENDING', 'APPROVED'] },
-          },
-        })
-        if (active) {
-          throw conflict('يوجد طلب استئذان معلّق أو معتمد لهذا اليوم')
-        }
-
-        return tx.earlyLeaveRequest.create({
-          data: {
-            studentId: student.id,
-            classId: student.classId,
-            date,
-            leaveTime,
-            reason,
-            pickupName,
-            pickupRelation,
-            pickupPhone,
-            activeSlotKey,
-          },
-          include: { class: { select: { id: true, name: true } } },
-        })
-      })
-    } catch (err) {
-      if (err && typeof err === 'object' && 'code' in err && err.code === 'P2002') {
-        throw conflict('يوجد طلب استئذان معلّق أو معتمد لهذا اليوم')
-      }
-      throw err
-    }
+    const fields = parseEarlyLeaveFields(req.body);
+    const row = await createEarlyLeaveRecord({
+      studentId: student.id,
+      dateStr: req.body.date,
+      leaveTimeRaw: req.body.leaveTime,
+      ...fields,
+    });
 
     res.status(201).json({ earlyLeaveRequest: serializeEarlyLeave(row) });
   })
@@ -892,6 +797,9 @@ router.post(
     if (existing.student.parentPhone !== req.parentPhone || !existing.student.isActive) {
       throw forbidden('غير مصرح');
     }
+    if (existing.createdById != null) {
+      throw forbidden('لا يمكن إلغاء استئذان مسجّل من المدرسة');
+    }
     if (existing.status !== 'PENDING' && existing.status !== 'APPROVED') {
       throw conflict('لا يمكن إلغاء هذا الطلب');
     }
@@ -900,6 +808,7 @@ router.post(
       const result = await tx.earlyLeaveRequest.updateMany({
         where: {
           id: existing.id,
+          createdById: null,
           status: { in: ['PENDING', 'APPROVED'] },
         },
         data: {

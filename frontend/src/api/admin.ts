@@ -28,7 +28,13 @@ type ApiStudent = {
   parentEmail: string | null
   waOptedIn: boolean
   isActive: boolean
-  class: { id: number; name: string; academicYear: string } | null
+  class: {
+    id: number
+    name: string
+    academicYear: string
+    gradeLevel?: string
+    section?: string | null
+  } | null
 }
 
 type ApiClass = {
@@ -94,6 +100,7 @@ function mapStudent(s: ApiStudent): Student {
     nameEn: s.nameEn,
     classId: s.classId,
     className: s.class?.name ?? null,
+    gradeLevel: s.class?.gradeLevel ?? null,
     parentPhone: s.parentPhone,
     parentEmail: s.parentEmail,
     waOptedIn: s.waOptedIn,

@@ -4,7 +4,7 @@ import { prisma } from '../utils/prisma.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { validateBody, validateParams, validateQuery, idParam } from '../middleware/validate.js';
 import { requireStaff, requireRole } from '../middleware/auth.js';
-import { badRequest, notFound } from '../utils/errors.js';
+import { badRequest, forbidden, notFound } from '../utils/errors.js';
 import { uploadTimetableFile } from '../middleware/upload.js';
 import { parseTimetableUpload } from '../services/timetablePdfParse.js';
 import { schoolDateOnlyStr } from '../utils/dates.js';
@@ -250,6 +250,10 @@ router.get(
   '/',
   validateQuery(listQuery),
   asyncHandler(async (req, res) => {
+    if (req.user.role === 'ACCOUNTANT') {
+      throw forbidden('غير مصرح');
+    }
+
     const where = {};
     if (req.query.teacherId) where.teacherId = req.query.teacherId;
     if (req.query.classId) where.classId = req.query.classId;

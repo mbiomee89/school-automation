@@ -59,6 +59,7 @@ function mapRestoredStaffRole(role) {
   if (role === 'COUNSELOR') return 'COUNSELOR';
   if (role === 'STUDENT_AFFAIRS') return 'STUDENT_AFFAIRS';
   if (role === 'SECURITY_GUARD') return 'SECURITY_GUARD';
+  if (role === 'ACCOUNTANT') return 'ACCOUNTANT';
   return 'TEACHER';
 }
 

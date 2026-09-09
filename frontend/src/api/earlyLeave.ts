@@ -4,6 +4,18 @@ import type { EarlyLeaveRequest, EarlyLeaveStatus } from '../sections/parent-por
 export type StaffEarlyLeaveItem = EarlyLeaveRequest & {
   studentName: string | null
   reviewerName: string | null
+  /** True when registered at school (not parent portal). */
+  createdByStaff?: boolean
+  createdByName?: string | null
+}
+
+export type StaffEarlyLeaveCreateInput = {
+  studentId: string
+  leaveTime: string
+  reason: string
+  pickupName: string
+  pickupRelation: string
+  pickupPhone: string
 }
 
 export async function listEarlyLeave(params: { date: string; status?: EarlyLeaveStatus }) {
@@ -18,6 +30,14 @@ export async function listEarlyLeave(params: { date: string; status?: EarlyLeave
 export async function getEarlyLeavePendingCount() {
   const data = await apiRequest<{ count: number }>('/early-leave/pending-count')
   return data.count
+}
+
+export async function createStaffEarlyLeave(body: StaffEarlyLeaveCreateInput) {
+  const data = await apiRequest<{ item: StaffEarlyLeaveItem }>('/early-leave', {
+    method: 'POST',
+    body,
+  })
+  return data.item
 }
 
 export async function reviewEarlyLeave(

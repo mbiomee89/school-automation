@@ -12,9 +12,11 @@ export const STAFF_NAV_ITEMS: Omit<NavItem, 'isActive'>[] = [
   { label: 'ملفات المعلمين', href: '/teacher-files' },
   { label: 'تقارير الدرجات', href: '/gradebook-reports' },
   { label: 'التأخير', href: '/late-reports' },
+  { label: 'استئذان طالب', href: '/early-leave' },
   { label: 'طلبات الاستئذان', href: '/early-leave' },
   { label: 'مراجعة الأعذار', href: '/counselor-review' },
   { label: 'شؤون الطلاب', href: '/student-affairs' },
+  { label: 'الطلاب', href: '/accountant/students' },
   { label: 'التقارير', href: '/reports' },
 ]
 
@@ -30,6 +32,7 @@ export const SECTION_BY_HREF: Record<string, string> = {
   '/early-leave': 'early-leave',
   '/counselor-review': 'counselor-review',
   '/student-affairs': 'student-affairs',
+  '/accountant/students': 'accountant-students',
   '/reports': 'reports',
 }
 

@@ -409,7 +409,9 @@ export function EarlyLeavePanel({
 
               const meta = EARLY_LEAVE_STATUS_META[req.status]
 
-              const canCancel = req.status === 'PENDING' || req.status === 'APPROVED'
+              const canCancel =
+                !req.createdByStaff &&
+                (req.status === 'PENDING' || req.status === 'APPROVED')
 
               return (
 
@@ -491,6 +493,7 @@ export function EarlyLeavePanel({
 
                     <p className="text-xs text-[color:var(--pp-ink)]/40">
 
+                      {req.createdByStaff ? 'مسجّل من المدرسة · ' : ''}
                       أُرسل {formatDateTime(req.requestedAt)}
 
                     </p>

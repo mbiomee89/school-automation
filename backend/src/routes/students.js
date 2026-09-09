@@ -49,14 +49,18 @@ async function teacherAssignedClassIds(teacherId) {
   return [...new Set(rows.map((r) => r.classId))];
 }
 
-/** Teachers only see students in their assigned classes; admin/counselor/affairs/guard see all. */
+/** School-wide student roster/detail (not limited to teacher assignments). */
+const SCHOOL_WIDE_STUDENT_ROLES = new Set([
+  'ADMIN',
+  'COUNSELOR',
+  'STUDENT_AFFAIRS',
+  'SECURITY_GUARD',
+  'ACCOUNTANT',
+]);
+
+/** Teachers only see students in their assigned classes; school-wide roles see all. */
 async function applyStaffStudentScope(user, where) {
-  if (
-    user.role === 'ADMIN' ||
-    user.role === 'COUNSELOR' ||
-    user.role === 'STUDENT_AFFAIRS' ||
-    user.role === 'SECURITY_GUARD'
-  ) {
+  if (SCHOOL_WIDE_STUDENT_ROLES.has(user.role)) {
     return where;
   }
   if (user.role !== 'TEACHER') throw forbidden('غير مصرح');
@@ -77,12 +81,7 @@ async function applyStaffStudentScope(user, where) {
 }
 
 async function assertStaffCanViewStudent(user, student) {
-  if (
-    user.role === 'ADMIN' ||
-    user.role === 'COUNSELOR' ||
-    user.role === 'STUDENT_AFFAIRS' ||
-    user.role === 'SECURITY_GUARD'
-  ) {
+  if (SCHOOL_WIDE_STUDENT_ROLES.has(user.role)) {
     return;
   }
   if (user.role !== 'TEACHER') throw forbidden('غير مصرح');

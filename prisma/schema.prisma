@@ -34,6 +34,7 @@ enum Role {
   COUNSELOR  // reviews and approves/rejects parent-submitted absence reasons; not tied to specific classes like a teacher
   STUDENT_AFFAIRS // وكيل شؤون طلاب — reports + student profile forms
   SECURITY_GUARD // حارس الأمن — late arrival recording at the gate
+  ACCOUNTANT // محاسب — view-only student id/phone directory
 }
 
 enum Language {
@@ -64,6 +65,7 @@ model User {
   classChanges   ClassEnrollment[]     @relation("ClassEnrollmentChangedBy")
   reasonsReviewed Attendance[]         @relation("AbsenceReasonReviewedBy")
   earlyLeaveReviews EarlyLeaveRequest[] @relation("EarlyLeaveReviewedBy")
+  earlyLeaveCreated EarlyLeaveRequest[] @relation("EarlyLeaveCreatedBy")
   teacherDocuments TeacherDocument[]
   gradePeriodScores GradePeriodScore[] @relation("GradePeriodRecordedBy")
   gradeTermFinals   GradeTermFinal[]   @relation("GradeTermFinalRecordedBy")
@@ -396,7 +398,7 @@ enum EarlyLeaveStatus {
   CANCELLED
 }
 
-/// Parent-submitted early leave / permission-to-exit request (طلب استئذان).
+/// Early leave / permission-to-exit (طلب استئذان). Parent or staff-created.
 model EarlyLeaveRequest {
   id             Int              @id @default(autoincrement())
   studentId      String
@@ -417,6 +419,9 @@ model EarlyLeaveRequest {
   reviewer       User?            @relation("EarlyLeaveReviewedBy", fields: [reviewedBy], references: [id])
   reviewedAt     DateTime?
   reviewNote     String?
+  /// Staff who registered the request at school (null = parent portal).
+  createdById    Int?
+  createdBy      User?            @relation("EarlyLeaveCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   cancelledAt    DateTime?
   /// Set while PENDING/APPROVED to `${studentId}|YYYY-MM-DD` so only one active request per student/day.
   /// Cleared on REJECTED/CANCELLED so a new request can be filed.
