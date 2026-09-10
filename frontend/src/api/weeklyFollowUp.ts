@@ -52,10 +52,12 @@ export async function saveFollowUpMe(body: {
     Omit<FollowUpRow, 'studentNameAr' | 'total'> & { total?: number | null }
   >
 }) {
-  return apiRequest<{ ok: boolean; saved: number; deleted: number; rows: FollowUpRow[] }>(
-    '/weekly-follow-up/me',
-    { method: 'PUT', body }
-  )
+  return apiRequest<{
+    ok: boolean
+    saved: number
+    deleted: number
+    rows: FollowUpRow[]
+  }>('/weekly-follow-up/me', { method: 'PUT', body })
 }
 
 export type ParentFollowUpSubject = {

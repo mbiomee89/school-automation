@@ -267,6 +267,20 @@ async function runApi() {
       `status=${saveStr.status} p=${row1?.participation} total=${row1?.total}`
     );
 
+    const reloadAfterSave = await req(
+      'GET',
+      `/api/weekly-follow-up/me?assignmentId=${asgA.id}&weekStart=${week}`,
+      { headers: auth(tokenA) }
+    );
+    const reloaded = reloadAfterSave.json?.rows?.find((r) => r.studentId === student1.id);
+    ok(
+      'GET after PUT keeps scores',
+      reloadAfterSave.status === 200 &&
+        reloaded?.participation === 5 &&
+        reloaded?.homeworkScore === 4,
+      `status=${reloadAfterSave.status} p=${reloaded?.participation} hw=${reloaded?.homeworkScore}`
+    );
+
     const clear = await req('PUT', '/api/weekly-follow-up/me', {
       headers: auth(tokenA),
       body: {

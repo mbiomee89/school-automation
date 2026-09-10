@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   FOLLOW_UP_SCALE,
   SCORE_FIELDS,
@@ -111,14 +111,23 @@ export function WeeklyFollowUpPrintChrome({
 export function WeeklyFollowUpStudentTable({
   rows,
   editable,
+  disabled,
   onChangeScore,
   onChangeNotes,
+  onFillColumn,
 }: {
   rows: FollowUpTableRow[]
   editable?: boolean
+  /** Keep selects visible but non-interactive (e.g. while saving). */
+  disabled?: boolean
   onChangeScore?: (studentId: string, field: ScoreField, value: number | null) => void
   onChangeNotes?: (studentId: string, notes: string) => void
+  onFillColumn?: (field: ScoreField, value: number | null) => void
 }) {
+  const [fillEpoch, setFillEpoch] = useState(0)
+  const inputsDisabled = Boolean(disabled)
+  const canFill = Boolean(editable && onFillColumn && rows.length > 0 && !inputsDisabled)
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[48rem] border-collapse text-xs sm:text-sm">
@@ -127,8 +136,36 @@ export function WeeklyFollowUpStudentTable({
             <th className="border border-slate-400 px-1.5 py-2 w-10">م</th>
             <th className="border border-slate-400 px-1.5 py-2 text-start">اسم الطالب</th>
             {SCORE_FIELDS.map((f) => (
-              <th key={f} className="border border-slate-400 px-1 py-2">
-                {SCORE_LABELS[f]}
+              <th key={f} className="border border-slate-400 px-1 py-2 align-bottom">
+                <div className="flex flex-col items-center gap-1">
+                  <span>{SCORE_LABELS[f]}</span>
+                  {editable ? (
+                    <select
+                      key={`${f}-${fillEpoch}`}
+                      className="h-8 w-full min-w-[3.5rem] rounded border border-white/40 bg-white px-1 text-slate-900 print:hidden"
+                      defaultValue=""
+                      disabled={!canFill}
+                      aria-label={`تعبئة كل الطلاب — ${SCORE_LABELS[f]}`}
+                      title="تعبئة العمود لكل الطلاب"
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        if (raw === '') return
+                        onFillColumn?.(f, raw === 'clear' ? null : Number(raw))
+                        setFillEpoch((n) => n + 1)
+                      }}
+                    >
+                      <option value="" disabled>
+                        الكل
+                      </option>
+                      <option value="clear">—</option>
+                      {FOLLOW_UP_SCALE.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.value}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
               </th>
             ))}
             <th className="border border-slate-400 px-1.5 py-2">المجموع</th>
@@ -146,8 +183,9 @@ export function WeeklyFollowUpStudentTable({
                   <td key={f} className="border border-slate-300 px-1 py-1 text-center">
                     {editable ? (
                       <select
-                        className="h-8 w-full min-w-[3.5rem] rounded border border-slate-300 bg-white px-1 print:border-0"
+                        className="h-8 w-full min-w-[3.5rem] rounded border border-slate-300 bg-white px-1 print:border-0 disabled:opacity-60"
                         value={row[f] == null ? '' : String(row[f])}
+                        disabled={inputsDisabled}
                         onChange={(e) => {
                           const raw = e.target.value
                           onChangeScore?.(row.studentId, f, raw === '' ? null : Number(raw))
@@ -172,9 +210,10 @@ export function WeeklyFollowUpStudentTable({
                 <td className="border border-slate-300 px-1 py-1">
                   {editable ? (
                     <input
-                      className="h-8 w-full min-w-[8rem] rounded border border-slate-300 px-2 print:border-0"
+                      className="h-8 w-full min-w-[8rem] rounded border border-slate-300 px-2 print:border-0 disabled:opacity-60"
                       value={row.notes ?? ''}
                       maxLength={500}
+                      disabled={inputsDisabled}
                       onChange={(e) => onChangeNotes?.(row.studentId, e.target.value)}
                       aria-label={`ملاحظات — ${row.studentNameAr}`}
                     />
